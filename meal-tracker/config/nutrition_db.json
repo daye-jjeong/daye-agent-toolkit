@@ -1,0 +1,55 @@
+{
+  "주식": {
+    "밥": {"serving": "1공기(210g)", "calories": 310, "protein": 5, "carbs": 68, "fat": 0.5},
+    "현미밥": {"serving": "1공기(210g)", "calories": 330, "protein": 7, "carbs": 70, "fat": 1.5},
+    "잡곡밥": {"serving": "1공기(210g)", "calories": 320, "protein": 6, "carbs": 69, "fat": 1},
+    "국수": {"serving": "1인분(200g)", "calories": 280, "protein": 8, "carbs": 58, "fat": 1},
+    "라면": {"serving": "1봉지", "calories": 500, "protein": 10, "carbs": 80, "fat": 16},
+    "식빵": {"serving": "1조각", "calories": 80, "protein": 2.5, "carbs": 15, "fat": 1},
+    "토스트": {"serving": "1개", "calories": 150, "protein": 4, "carbs": 20, "fat": 5}
+  },
+  "육류": {
+    "삼겹살": {"serving": "100g", "calories": 330, "protein": 17, "carbs": 0, "fat": 30},
+    "목살": {"serving": "100g", "calories": 250, "protein": 20, "carbs": 0, "fat": 18},
+    "소고기": {"serving": "100g", "calories": 250, "protein": 26, "carbs": 0, "fat": 15},
+    "닭가슴살": {"serving": "100g", "calories": 165, "protein": 31, "carbs": 0, "fat": 3.6},
+    "닭다리": {"serving": "100g", "calories": 200, "protein": 25, "carbs": 0, "fat": 11}
+  },
+  "해산물": {
+    "고등어": {"serving": "1토막(100g)", "calories": 200, "protein": 20, "carbs": 0, "fat": 13},
+    "연어": {"serving": "1토막(100g)", "calories": 180, "protein": 20, "carbs": 0, "fat": 11},
+    "참치캔": {"serving": "1캔(100g)", "calories": 120, "protein": 26, "carbs": 0, "fat": 1},
+    "새우": {"serving": "100g", "calories": 100, "protein": 24, "carbs": 0, "fat": 0.3}
+  },
+  "채소": {
+    "쌈채소": {"serving": "1접시", "calories": 20, "protein": 2, "carbs": 4, "fat": 0},
+    "샐러드": {"serving": "1접시", "calories": 50, "protein": 2, "carbs": 10, "fat": 0.5},
+    "김치": {"serving": "100g", "calories": 30, "protein": 2, "carbs": 6, "fat": 0.5},
+    "나물": {"serving": "1접시", "calories": 40, "protein": 2, "carbs": 8, "fat": 0.5}
+  },
+  "국/찌개": {
+    "된장찌개": {"serving": "1인분", "calories": 150, "protein": 10, "carbs": 10, "fat": 8},
+    "김치찌개": {"serving": "1인분", "calories": 200, "protein": 15, "carbs": 12, "fat": 10},
+    "미역국": {"serving": "1그릇", "calories": 80, "protein": 5, "carbs": 8, "fat": 3},
+    "콩나물국": {"serving": "1그릇", "calories": 60, "protein": 4, "carbs": 8, "fat": 2}
+  },
+  "달걀/유제품": {
+    "달걀": {"serving": "1개", "calories": 70, "protein": 6, "carbs": 0.5, "fat": 5},
+    "우유": {"serving": "200ml", "calories": 120, "protein": 6, "carbs": 10, "fat": 6},
+    "요거트": {"serving": "1개(80g)", "calories": 80, "protein": 3, "carbs": 15, "fat": 1},
+    "치즈": {"serving": "1장", "calories": 70, "protein": 4, "carbs": 1, "fat": 6}
+  },
+  "간식": {
+    "바나나": {"serving": "1개", "calories": 90, "protein": 1, "carbs": 23, "fat": 0.3},
+    "사과": {"serving": "1개", "calories": 95, "protein": 0.5, "carbs": 25, "fat": 0.3},
+    "아몬드": {"serving": "10알", "calories": 70, "protein": 2.5, "carbs": 2.5, "fat": 6},
+    "땅콩": {"serving": "10알", "calories": 60, "protein": 2.5, "carbs": 2, "fat": 5},
+    "프로틴바": {"serving": "1개", "calories": 200, "protein": 20, "carbs": 20, "fat": 6}
+  },
+  "음료": {
+    "커피": {"serving": "1잔", "calories": 5, "protein": 0.3, "carbs": 1, "fat": 0},
+    "라떼": {"serving": "1잔", "calories": 150, "protein": 6, "carbs": 15, "fat": 7},
+    "주스": {"serving": "200ml", "calories": 100, "protein": 0.5, "carbs": 25, "fat": 0},
+    "프로틴쉐이크": {"serving": "1잔", "calories": 120, "protein": 25, "carbs": 3, "fat": 2}
+  }
+}

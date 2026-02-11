@@ -1,0 +1,6 @@
+{
+  "name": "orchestrator",
+  "version": "1.0.0",
+  "description": "다단계 작업 분해 + 서브에이전트 조율 메타-에이전트",
+  "entrypoint": "SKILL.md"
+}

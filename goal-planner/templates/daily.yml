@@ -1,0 +1,49 @@
+# 일간 목표 템플릿
+# 파일명: YYYY-MM-DD.yml (예: 2026-02-10.yml)
+# 위치: projects/_goals/
+
+date: "YYYY-MM-DD"
+day_of_week: "월"                  # 월~일
+energy_level: medium               # high | medium | low
+status: active
+
+top3:                              # 오늘의 핵심 목표 3개
+  - title: 핵심 목표 1
+    project: work--project-name
+    status: todo                   # todo | in_progress | done
+  - title: 핵심 목표 2
+    project: work--project-name
+    status: todo
+  - title: 핵심 목표 3
+    project: personal--health
+    status: todo
+
+time_blocks:                       # 시간대별 계획
+  - time: "09:00-10:00"
+    task: 아침 루틴 + 체크인
+    category: personal             # work | personal | calendar
+  - time: "10:00-12:00"
+    task: 딥워크 (핵심 업무)
+    category: work
+  - time: "13:00-15:00"
+    task: 프로젝트 작업
+    category: work
+  - time: "15:00-16:30"
+    task: 미팅/협업
+    category: work
+  - time: "19:00-20:00"
+    task: 운동/PT
+    category: personal
+
+checklist:                         # 할일 체크리스트
+  - task: 할일 항목 1
+    done: false
+  - task: 할일 항목 2
+    done: false
+  - task: 할일 항목 3
+    done: false
+
+retrospective:                     # 저녁에 작성
+  completed_ratio: null            # 자동 계산 (완료 체크리스트 / 전체)
+  mood: null                       # 1-5
+  notes: ""

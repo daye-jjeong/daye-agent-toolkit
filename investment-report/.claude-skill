@@ -1,0 +1,6 @@
+{
+  "name": "investment-report",
+  "version": "1.0.0",
+  "description": "일일 KR/US 포트폴리오 리포트 생성 — Excel 스냅샷 기반 PnL/수익률 계산",
+  "entrypoint": "SKILL.md"
+}

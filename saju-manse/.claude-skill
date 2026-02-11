@@ -1,0 +1,6 @@
+{
+  "name": "saju-manse",
+  "version": "1.0.0",
+  "description": "사주/만세력 계산 및 해석 — 오행, 용신, 대운, 실생활 가이드",
+  "entrypoint": "SKILL.md"
+}

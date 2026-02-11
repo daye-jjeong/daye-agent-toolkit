@@ -1,0 +1,6 @@
+{
+  "name": "notion",
+  "version": "1.0.0",
+  "description": "Unified Notion API client — retry, connection reuse, modern API (2025-09-03)",
+  "entrypoint": "SKILL.md"
+}

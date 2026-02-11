@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./setup.sh                # Claude Code 환경 설치
-#   ./setup.sh --openclaw     # OpenClaw extraDirs 설정 안내
+#   ./setup.sh --openclaw     # OpenClaw PC: 기존 skills 제거 → git clone
 #   ./setup.sh --clean        # symlink 제거
 #   ./setup.sh --status       # 현재 설치 상태 확인
 
@@ -45,21 +45,86 @@ fi
 
 # ── --openclaw ───────────────────────────────────
 if [ "${1:-}" = "--openclaw" ]; then
-  echo "OpenClaw 설정 안내:"
+  REPO_URL="https://github.com/daye-jjeong/daye-agent-toolkit.git"
+  SKILLS_TARGET="$HOME/clawd/skills"
+
+  echo "=== daye-agent-toolkit OpenClaw setup ==="
   echo ""
-  echo "~/.openclaw/openclaw.json에 다음을 추가하세요:"
+
+  # 1. 기존 skills 디렉토리 처리
+  echo "── skills 디렉토리 ──"
+  if [ -d "$SKILLS_TARGET" ]; then
+    if [ -d "$SKILLS_TARGET/.git" ]; then
+      # 이미 git repo — remote 확인
+      current_remote=$(git -C "$SKILLS_TARGET" remote get-url origin 2>/dev/null || echo "")
+      if echo "$current_remote" | grep -q "daye-agent-toolkit"; then
+        echo "✓ 이미 daye-agent-toolkit clone"
+        echo "  pulling latest..."
+        git -C "$SKILLS_TARGET" pull --rebase origin main
+        echo ""
+      else
+        # 다른 repo — 백업 후 재clone
+        backup="$SKILLS_TARGET.bak.$(date +%Y%m%d%H%M%S)"
+        echo "⚠ 다른 repo 감지: $current_remote"
+        echo "  백업: $backup"
+        mv "$SKILLS_TARGET" "$backup"
+        git clone "$REPO_URL" "$SKILLS_TARGET"
+        echo "✓ clone 완료"
+      fi
+    else
+      # git repo가 아닌 일반 디렉토리 — 백업 후 clone
+      backup="$SKILLS_TARGET.bak.$(date +%Y%m%d%H%M%S)"
+      echo "기존 skills 백업: $backup"
+      mv "$SKILLS_TARGET" "$backup"
+      git clone "$REPO_URL" "$SKILLS_TARGET"
+      echo "✓ clone 완료"
+    fi
+  else
+    # skills 디렉토리 없음 — 새로 clone
+    mkdir -p "$(dirname "$SKILLS_TARGET")"
+    git clone "$REPO_URL" "$SKILLS_TARGET"
+    echo "✓ clone 완료"
+  fi
   echo ""
-  echo '  {'
-  echo '    "skills": {'
-  echo '      "load": {'
-  echo "        \"extraDirs\": [\"$REPO_DIR\"],"
-  echo '        "watch": true'
-  echo '      }'
-  echo '    }'
-  echo '  }'
+
+  # 2. ~/clawd/.gitignore에 skills/ 추가
+  echo "── .gitignore ──"
+  CLAWD_GITIGNORE="$HOME/clawd/.gitignore"
+  if [ -f "$CLAWD_GITIGNORE" ]; then
+    if grep -qF "skills/" "$CLAWD_GITIGNORE"; then
+      echo "✓ skills/ 이미 제외됨"
+    else
+      echo "skills/" >> "$CLAWD_GITIGNORE"
+      echo "✓ skills/ 추가"
+    fi
+  else
+    echo "skills/" > "$CLAWD_GITIGNORE"
+    echo "✓ .gitignore 생성 + skills/ 추가"
+  fi
   echo ""
-  echo "자동 동기화 (cron):"
-  echo "  */30 * * * * cd $REPO_DIR && git pull --ff-only"
+
+  # 3. cron 자동 pull 설정 (선택)
+  CRON_CMD="*/30 * * * * cd $SKILLS_TARGET && python3 scripts/sync.py pull >> /tmp/skill-sync.log 2>&1"
+
+  echo "── 자동 동기화 ──"
+  if crontab -l 2>/dev/null | grep -qF "scripts/sync.py"; then
+    echo "✓ cron 이미 설정됨"
+  else
+    echo "30분마다 auto-pull cron을 추가할까요? (y/N)"
+    read -r answer
+    if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
+      (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
+      echo "✓ cron 등록"
+    else
+      echo "→ 건너뜀. 수동 추가:"
+      echo "  $CRON_CMD"
+    fi
+  fi
+
+  echo ""
+  echo "=== Done! ==="
+  echo "  동기화: cd $SKILLS_TARGET && python3 scripts/sync.py"
+  echo "  상태:   cd $SKILLS_TARGET && python3 scripts/sync.py status"
   exit 0
 fi
 

@@ -1,0 +1,187 @@
+{
+  "core_stability": [
+    {
+      "name": "플랭크 (Plank)",
+      "level": "beginner",
+      "target": "복부, 코어 전체",
+      "sets_reps": "3세트 × 20-30초",
+      "description": "팔꿈치를 어깨 아래 두고 몸을 일직선으로 유지. 배에 힘을 주고 골반을 살짝 말아 중립척추 유지.",
+      "breathing": "자연스럽게 호흡, 숨 참지 않기",
+      "caution": "엉덩이가 처지거나 올라가지 않도록 주의. 허리가 꺾이면 즉시 중단.",
+      "progression": "무릎 플랭크 → 일반 플랭크 → 한 발 들기",
+      "common_mistakes": ["엉덩이 처짐", "허리 과신전", "숨 참기", "어깨 긴장"]
+    },
+    {
+      "name": "데드버그 (Dead Bug)",
+      "level": "beginner",
+      "target": "복부, 척추 안정화",
+      "sets_reps": "3세트 × 각 8-10회",
+      "description": "등을 바닥에 붙이고 누워 팔다리를 번갈아 뻗기. 허리와 바닥 사이 공간 유지.",
+      "breathing": "팔다리 뻗을 때 날숨, 돌아올 때 들숨",
+      "caution": "허리가 바닥에서 떨어지지 않도록. 움직임은 천천히 컨트롤.",
+      "progression": "한쪽만 움직이기 → 양쪽 동시 → 무게 추가",
+      "common_mistakes": ["허리 뜸", "빠른 동작", "호흡 불규칙"]
+    },
+    {
+      "name": "버드독 (Bird Dog)",
+      "level": "intermediate",
+      "target": "코어, 척추기립근, 둔근",
+      "sets_reps": "3세트 × 각 10회",
+      "description": "네발 자세에서 반대쪽 팔과 다리를 동시에 뻗어 일직선 유지. 골반 회전 최소화.",
+      "breathing": "팔다리 뻗을 때 날숨, 돌아올 때 들숨",
+      "caution": "골반이 틀어지지 않도록 중립 유지. 허리 과신전 주의.",
+      "progression": "팔만/다리만 → 동시에 → 정지 시간 늘리기",
+      "common_mistakes": ["골반 회전", "허리 꺾임", "너무 높이 들기"]
+    },
+    {
+      "name": "사이드 플랭크 (Side Plank)",
+      "level": "intermediate",
+      "target": "복사근, 옆구리",
+      "sets_reps": "3세트 × 각 20-30초",
+      "description": "옆으로 누워 팔꿈치로 지탱하고 몸을 일직선으로. 골반이 떨어지지 않도록 유지.",
+      "breathing": "자연스럽게 호흡",
+      "caution": "몸이 앞뒤로 기울지 않도록. 목 긴장 주의.",
+      "progression": "무릎 대고 → 다리 펴고 → 위쪽 다리 들기",
+      "common_mistakes": ["골반 처짐", "몸 기울어짐", "목 긴장"]
+    },
+    {
+      "name": "팔로우 브리지 (Glute Bridge)",
+      "level": "beginner",
+      "target": "둔근, 햄스트링",
+      "sets_reps": "3세트 × 12-15회",
+      "description": "누워서 무릎 굽히고 엉덩이를 들어 올리기. 어깨-엉덩이-무릎 일직선.",
+      "breathing": "올릴 때 날숨, 내릴 때 들숨",
+      "caution": "허리로 밀지 말고 엉덩이로 올리기. 과신전 주의.",
+      "progression": "양발 → 한 발 → 정지 시간 늘리기",
+      "common_mistakes": ["허리로 밀기", "과도하게 높이 올리기", "빠른 동작"]
+    }
+  ],
+  "lower_body": [
+    {
+      "name": "스쿼트 (Squat)",
+      "level": "beginner",
+      "target": "대퇴사두근, 둔근",
+      "sets_reps": "3세트 × 10-15회",
+      "description": "발을 어깨너비로 벌리고 앉기. 무릎이 발끝을 넘지 않도록. 허리 중립 유지.",
+      "breathing": "내려갈 때 들숨, 올라올 때 날숨",
+      "caution": "무릎이 안쪽으로 모이지 않도록. 허리 굽히지 말기.",
+      "progression": "의자 스쿼트 → 일반 스쿼트 → 무게 추가",
+      "common_mistakes": ["무릎 안쪽 모임", "허리 굽힘", "뒤꿈치 들림"]
+    },
+    {
+      "name": "런지 (Lunge)",
+      "level": "intermediate",
+      "target": "대퇴사두근, 둔근, 균형",
+      "sets_reps": "3세트 × 각 10회",
+      "description": "한 발씩 앞으로 내디뎌 무릎 굽히기. 몸통은 수직 유지.",
+      "breathing": "내려갈 때 들숨, 올라올 때 날숨",
+      "caution": "앞 무릎이 발끝을 넘지 않도록. 상체 중립.",
+      "progression": "제자리 런지 → 워킹 런지 → 무게 추가",
+      "common_mistakes": ["상체 앞으로 기울임", "무릎 과도 앞으로", "균형 잃음"]
+    },
+    {
+      "name": "클램쉘 (Clamshell)",
+      "level": "beginner",
+      "target": "중둔근, 고관절 외전근",
+      "sets_reps": "3세트 × 15-20회",
+      "description": "옆으로 누워 무릎 굽히고 발 붙인 상태로 무릎만 벌리기.",
+      "breathing": "벌릴 때 날숨, 닫을 때 들숨",
+      "caution": "골반이 뒤로 기울지 않도록. 천천히 컨트롤.",
+      "progression": "저항 없이 → 밴드 추가 → 횟수 증가",
+      "common_mistakes": ["골반 회전", "빠른 동작", "발 떨어짐"]
+    }
+  ],
+  "flexibility": [
+    {
+      "name": "캣-카우 (Cat-Cow)",
+      "level": "beginner",
+      "target": "척추 가동성",
+      "sets_reps": "2세트 × 10회",
+      "description": "네발 자세에서 등을 둥글게/평평하게 번갈아 움직이기.",
+      "breathing": "등 둥글게 할 때 날숨, 평평하게 할 때 들숨",
+      "caution": "통증 범위 내에서만. 과도한 움직임 주의.",
+      "progression": "작은 범위 → 전체 범위 → 속도 조절",
+      "common_mistakes": ["과도한 움직임", "호흡 불일치", "팔 굽힘"]
+    },
+    {
+      "name": "차일드 포즈 (Child's Pose)",
+      "level": "beginner",
+      "target": "허리, 엉덩이 이완",
+      "sets_reps": "30-60초 유지",
+      "description": "무릎 꿇고 앉아 상체를 앞으로 숙여 휴식.",
+      "breathing": "깊고 천천히 호흡",
+      "caution": "무릎에 불편하면 쿠션 사용. 편안한 자세 유지.",
+      "progression": "팔 앞으로 → 팔 옆으로 → 깊게 숙이기",
+      "common_mistakes": ["긴장 유지", "얕은 호흡"]
+    },
+    {
+      "name": "무릎 가슴 당기기 (Knee to Chest)",
+      "level": "beginner",
+      "target": "허리, 둔근 이완",
+      "sets_reps": "각 30초씩 유지",
+      "description": "누워서 무릎을 가슴 쪽으로 당기기. 한쪽씩 또는 양쪽.",
+      "breathing": "자연스럽게 호흡",
+      "caution": "부드럽게 당기기. 통증 없는 범위에서.",
+      "progression": "한쪽씩 → 양쪽 동시 → 시간 늘리기",
+      "common_mistakes": ["과도하게 당기기", "목 긴장"]
+    }
+  ],
+  "cardio_low_impact": [
+    {
+      "name": "수영 (자유형/배영)",
+      "level": "all",
+      "target": "전신 유산소",
+      "duration": "20-40분",
+      "description": "허리에 부담 없는 저충격 유산소. 배영 추천.",
+      "breathing": "리드미컬하게",
+      "caution": "평영은 허리 회전 있어 주의. 무리하지 않기.",
+      "benefits": "심폐 강화, 근력, 유연성"
+    },
+    {
+      "name": "걷기 (빠르게)",
+      "level": "all",
+      "target": "유산소, 하체",
+      "duration": "30-60분",
+      "description": "자연스러운 보폭으로 빠르게 걷기. 팔 흔들며.",
+      "breathing": "자연스럽게",
+      "caution": "너무 빠르거나 오래 걸으면 피로. 신발 중요.",
+      "benefits": "심폐 강화, 체중 관리, 스트레스 해소"
+    },
+    {
+      "name": "실내 자전거 (고정)",
+      "level": "all",
+      "target": "유산소, 하체",
+      "duration": "20-40분",
+      "description": "앉은 자세 유지, 저항 조절하며 페달링.",
+      "breathing": "리드미컬하게",
+      "caution": "허리 굽히지 않도록 자세 조정. 저항 적절히.",
+      "benefits": "관절 부담 적음, 심폐 강화"
+    }
+  ],
+  "avoid": [
+    {
+      "name": "백 익스텐션 (Back Extension)",
+      "reason": "허리 과신전, 디스크 압박"
+    },
+    {
+      "name": "싯업 (Sit-up)",
+      "reason": "허리 굴곡 과다, 디스크 부담"
+    },
+    {
+      "name": "레그 레이즈 (Leg Raise, 바닥)",
+      "reason": "허리 아치, 과신전 위험"
+    },
+    {
+      "name": "러시안 트위스트 (Russian Twist)",
+      "reason": "척추 회전, 디스크 부담"
+    },
+    {
+      "name": "토 터치 (Toe Touch)",
+      "reason": "과도한 굴곡, 디스크 압박"
+    },
+    {
+      "name": "슈퍼맨 (Superman)",
+      "reason": "과신전, 디스크 후방 압박"
+    }
+  ]
+}

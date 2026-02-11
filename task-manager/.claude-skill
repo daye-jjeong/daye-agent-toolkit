@@ -1,0 +1,6 @@
+{
+  "name": "task-manager",
+  "version": "1.0.0",
+  "description": "실패/중단 태스크 자동 재시도 — adaptive model selection + VIP Lane",
+  "entrypoint": "SKILL.md"
+}

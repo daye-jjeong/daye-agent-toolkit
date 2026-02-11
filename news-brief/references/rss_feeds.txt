@@ -1,0 +1,12 @@
+# Add/adjust feeds as needed. One URL per line.
+# Robotics / automation
+https://www.therobotreport.com/feed/
+https://spectrum.ieee.org/feed
+https://techcrunch.com/tag/robotics/feed/
+
+# Food / restaurant / retail automation (broad)
+https://www.qsrmagazine.com/rss.xml
+https://www.restaurantbusinessonline.com/rss
+
+# General tech/business (sparingly)
+https://www.reutersagency.com/feed/?best-topics=technology

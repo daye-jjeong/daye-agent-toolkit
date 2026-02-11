@@ -1,0 +1,24 @@
+[
+  {
+    "date_time": "2026-02-01T23:38:06.135951",
+    "meal_type": "점심",
+    "food_items": "닭가슴살, 샐러드, 현미밥",
+    "portion": "보통",
+    "skipped": false,
+    "notes": "테스트 기록",
+    "calories": 525,
+    "protein": 38.0,
+    "carbs": 78.0,
+    "fat": 4.6
+  },
+  {
+    "date_time": "2026-02-01T23:38:06.219548",
+    "meal_type": "저녁",
+    "skipped": true,
+    "notes": "입맛 없어서 거름 (테스트)",
+    "calories": 0,
+    "protein": 0,
+    "carbs": 0,
+    "fat": 0
+  }
+]

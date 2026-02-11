@@ -1,0 +1,6 @@
+{
+  "name": "check-integrations",
+  "version": "1.0.0",
+  "description": "Enhanced integration health checker — AI APIs, Notion, Google, GitHub OAuth 진단",
+  "entrypoint": "SKILL.md"
+}

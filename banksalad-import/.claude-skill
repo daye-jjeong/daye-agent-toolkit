@@ -1,0 +1,6 @@
+{
+  "name": "banksalad-import",
+  "version": "0.2.0",
+  "description": "뱅크샐러드 CSV → Obsidian vault import (거래내역, 투자, 대출). Dataview 쿼리 가능한 frontmatter 생성.",
+  "entrypoint": "SKILL.md"
+}

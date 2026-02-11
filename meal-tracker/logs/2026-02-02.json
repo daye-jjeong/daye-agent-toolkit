@@ -1,0 +1,26 @@
+[
+  {
+    "date_time": "2026-02-02T12:11:39.327605",
+    "meal_type": "점심",
+    "food_items": "위너 샌드위치 (소시지 플랫브레드), 아이스 아메리카노",
+    "portion": "보통",
+    "skipped": false,
+    "notes": "Total ~550kcal (Sandwich ~540, Coffee ~10).",
+    "calories": 0,
+    "protein": 0,
+    "carbs": 0,
+    "fat": 0
+  },
+  {
+    "date_time": "2026-02-02T12:28:16.393627",
+    "meal_type": "간식",
+    "food_items": "사과, 아몬드",
+    "portion": "적음",
+    "skipped": false,
+    "notes": "Integration test",
+    "calories": 116,
+    "protein": 2.1,
+    "carbs": 19.2,
+    "fat": 4.4
+  }
+]

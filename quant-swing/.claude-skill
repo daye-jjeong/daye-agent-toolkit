@@ -1,0 +1,6 @@
+{
+  "name": "quant-swing",
+  "version": "1.0.0",
+  "description": "Growth Breakout Momentum 스윙 전략 백테스트 — QQQ 레짐 + ATR stop",
+  "entrypoint": "SKILL.md"
+}

@@ -1,0 +1,6 @@
+Rewrite the following deduped headlines into Korean for Ronik (food ingredient dispensing / kitchen automation startup).
+Constraints:
+- 12–18 lines total.
+- For each headline: include 1 line each for (기회/리스크/액션).
+- Add a final '오늘의 베팅(1개)' actionable suggestion.
+- Tone: factual, no hype; if unsure say '확인 필요'.

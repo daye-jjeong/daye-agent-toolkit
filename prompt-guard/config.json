@@ -1,0 +1,77 @@
+{
+  "enabled": true,
+  "dry_run": false,
+  "severity_threshold": "HIGH",
+  "log_path": "~/.clawdbot/agents/main/logs/prompt-guard.log",
+  "notify_critical": true,
+  "telegram_group_id": "-1003242721592",
+  "telegram_thread_id": null,
+  "owner_whitelist": [
+    "daye",
+    "dayejeong"
+  ],
+  "safe_command_prefixes": [
+    "/status",
+    "/help",
+    "/heartbeat",
+    "clawdbot",
+    "ls",
+    "pwd",
+    "date"
+  ],
+  "detection_rules": {
+    "jailbreak_patterns": [
+      "ignore.*previous.*instructions",
+      "ignore.*all.*instructions",
+      "disregard.*(instructions|rules)",
+      "forget.*(rules|instructions)",
+      "you are now",
+      "new instructions",
+      "system prompt",
+      "bypass.*(restrictions|safety)"
+    ],
+    "prompt_injection_patterns": [
+      "\\[\\s*SYSTEM\\s*\\]",
+      "\\<\\|im_start\\|\\>",
+      "\\<\\|im_end\\|\\>",
+      "<\\s*system\\s*>",
+      "</\\s*system\\s*>",
+      "(in|now in|enable|enabled)\\s+(ADMIN|ROOT)\\s+MODE",
+      "(ADMIN|ROOT)\\s+MODE",
+      "ROOT ACCESS",
+      "OVERRIDE",
+      "sudo mode"
+    ],
+    "data_exfiltration_patterns": [
+      "send.*(all|your|the).*(credentials|api.*key|password|secret|token).*to.*https?://",
+      "send.*to.*http",
+      "curl.*(api.*key|password|credential)",
+      "wget.*http",
+      "leak.*(credentials|password|key)",
+      "dump.*(password|key|secret)",
+      "export.*api.*key"
+    ],
+    "harmful_intent_patterns": [
+      "delete.*(everything|all)",
+      "rm\\s*-rf",
+      "格式化.*(硬盘|磁盘)",
+      "format.*disk",
+      "drop.*database",
+      "shutdown.*system",
+      "destroy.*everything"
+    ]
+  },
+  "severity_weights": {
+    "jailbreak": 0.88,
+    "injection": 0.92,
+    "exfiltration": 1.0,
+    "harmful": 0.95
+  },
+  "language_support": ["en", "ko", "zh"],
+  "external_api": {
+    "enabled": false,
+    "provider": "hivefence",
+    "api_key_path": "~/.config/hivefence/api_key",
+    "timeout_seconds": 2
+  }
+}
