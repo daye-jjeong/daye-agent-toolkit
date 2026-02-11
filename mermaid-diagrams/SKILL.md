@@ -24,194 +24,45 @@ diagramType
 
 ## Diagram Type Selection Guide
 
-**Choose the right diagram type:**
-
 1. **Class Diagrams** - Domain modeling, OOP design, entity relationships
-   - Domain-driven design documentation
-   - Object-oriented class structures
-   - Entity relationships and dependencies
-
-2. **Sequence Diagrams** - Temporal interactions, message flows
-   - API request/response flows
-   - User authentication flows
-   - System component interactions
-   - Method call sequences
-
-3. **Flowcharts** - Processes, algorithms, decision trees
-   - User journeys and workflows
-   - Business processes
-   - Algorithm logic
-   - Deployment pipelines
-
-4. **Entity Relationship Diagrams (ERD)** - Database schemas
-   - Table relationships
-   - Data modeling
-   - Schema design
-
-5. **C4 Diagrams** - Software architecture at multiple levels
-   - System Context (systems and users)
-   - Container (applications, databases, services)
-   - Component (internal structure)
-   - Code (class/interface level)
-
+2. **Sequence Diagrams** - API flows, authentication, system component interactions
+3. **Flowcharts** - User journeys, business processes, algorithm logic, pipelines
+4. **ERD** - Database schemas, table relationships, data modeling
+5. **C4 Diagrams** - System context, containers, components, code-level architecture
 6. **State Diagrams** - State machines, lifecycle states
-7. **Git Graphs** - Version control branching strategies
+7. **Git Graphs** - Branching strategies
 8. **Gantt Charts** - Project timelines, scheduling
 9. **Pie/Bar Charts** - Data visualization
 
-## Quick Start Examples
+## Quick Start
 
-### Class Diagram (Domain Model)
-```mermaid
-classDiagram
-    Title -- Genre
-    Title *-- Season
-    Title *-- Review
-    User --> Review : creates
-
-    class Title {
-        +string name
-        +int releaseYear
-        +play()
-    }
-
-    class Genre {
-        +string name
-        +getTopTitles()
-    }
-```
-
-### Sequence Diagram (API Flow)
-```mermaid
-sequenceDiagram
-    participant User
-    participant API
-    participant Database
-
-    User->>API: POST /login
-    API->>Database: Query credentials
-    Database-->>API: Return user data
-    alt Valid credentials
-        API-->>User: 200 OK + JWT token
-    else Invalid credentials
-        API-->>User: 401 Unauthorized
-    end
-```
-
-### Flowchart (User Journey)
-```mermaid
-flowchart TD
-    Start([User visits site]) --> Auth{Authenticated?}
-    Auth -->|No| Login[Show login page]
-    Auth -->|Yes| Dashboard[Show dashboard]
-    Login --> Creds[Enter credentials]
-    Creds --> Validate{Valid?}
-    Validate -->|Yes| Dashboard
-    Validate -->|No| Error[Show error]
-    Error --> Login
-```
-
-### ERD (Database Schema)
-```mermaid
-erDiagram
-    USER ||--o{ ORDER : places
-    ORDER ||--|{ LINE_ITEM : contains
-    PRODUCT ||--o{ LINE_ITEM : includes
-
-    USER {
-        int id PK
-        string email UK
-        string name
-        datetime created_at
-    }
-
-    ORDER {
-        int id PK
-        int user_id FK
-        decimal total
-        datetime created_at
-    }
-```
+각 다이어그램 유형별 예시: `{baseDir}/references/quick-start.md` 참고
 
 ## Detailed References
 
-For in-depth guidance on specific diagram types, see:
-
-- **[references/class-diagrams.md](references/class-diagrams.md)** - Domain modeling, relationships (association, composition, aggregation, inheritance), multiplicity, methods/properties
-- **[references/sequence-diagrams.md](references/sequence-diagrams.md)** - Actors, participants, messages (sync/async), activations, loops, alt/opt/par blocks, notes
-- **[references/flowcharts.md](references/flowcharts.md)** - Node shapes, connections, decision logic, subgraphs, styling
-- **[references/erd-diagrams.md](references/erd-diagrams.md)** - Entities, relationships, cardinality, keys, attributes
-- **[references/c4-diagrams.md](references/c4-diagrams.md)** - System context, container, component diagrams, boundaries
-- **[references/architecture-diagrams.md](references/architecture-diagrams.md)** - Cloud services, infrastructure, CI/CD deployments
-- **[references/advanced-features.md](references/advanced-features.md)** - Themes, styling, configuration, layout options
+- **`{baseDir}/references/class-diagrams.md`** - Relationships, multiplicity, methods/properties
+- **`{baseDir}/references/sequence-diagrams.md`** - Messages, activations, loops, alt/opt/par blocks
+- **`{baseDir}/references/flowcharts.md`** - Node shapes, connections, subgraphs, styling
+- **`{baseDir}/references/erd-diagrams.md`** - Entities, cardinality, keys, attributes
+- **`{baseDir}/references/c4-diagrams.md`** - System context, container, component diagrams
+- **`{baseDir}/references/architecture-diagrams.md`** - Cloud, infrastructure, CI/CD
+- **`{baseDir}/references/advanced-features.md`** - Themes, styling, configuration, export options
 
 ## Best Practices
 
-1. **Start Simple** - Begin with core entities/components, add details incrementally
+1. **Start Simple** - Begin with core entities, add details incrementally
 2. **Use Meaningful Names** - Clear labels make diagrams self-documenting
-3. **Comment Extensively** - Use `%%` comments to explain complex relationships
-4. **Keep Focused** - One diagram per concept; split large diagrams into multiple focused views
-5. **Version Control** - Store `.mmd` files alongside code for easy updates
-6. **Add Context** - Include titles and notes to explain diagram purpose
-7. **Iterate** - Refine diagrams as understanding evolves
-
-## Configuration and Theming
-
-Configure diagrams using frontmatter:
-
-```mermaid
----
-config:
-  theme: base
-  themeVariables:
-    primaryColor: "#ff6b6b"
----
-flowchart LR
-    A --> B
-```
-
-**Available themes:** default, forest, dark, neutral, base
-
-**Layout options:**
-- `layout: dagre` (default) - Classic balanced layout
-- `layout: elk` - Advanced layout for complex diagrams (requires integration)
-
-**Look options:**
-- `look: classic` - Traditional Mermaid style
-- `look: handDrawn` - Sketch-like appearance
-
-## Exporting and Rendering
-
-**Native support in:**
-- GitHub/GitLab - Automatically renders in Markdown
-- VS Code - With Markdown Mermaid extension
-- Notion, Obsidian, Confluence - Built-in support
-
-**Export options:**
-- [Mermaid Live Editor](https://mermaid.live) - Online editor with PNG/SVG export
-- Mermaid CLI - `npm install -g @mermaid-js/mermaid-cli` then `mmdc -i input.mmd -o output.png`
-- Docker - `docker run --rm -v $(pwd):/data minlag/mermaid-cli -i /data/input.mmd -o /data/output.png`
+3. **Comment Extensively** - Use `%%` comments for complex relationships
+4. **Keep Focused** - One diagram per concept; split large diagrams
+5. **Version Control** - Store `.mmd` files alongside code
+6. **Iterate** - Refine diagrams as understanding evolves
 
 ## Common Pitfalls
 
-- **Breaking characters** - Avoid `{}` in comments, use proper escape sequences for special characters
-- **Syntax errors** - Misspellings break diagrams; validate syntax in Mermaid Live
-- **Overcomplexity** - Split complex diagrams into multiple focused views
-- **Missing relationships** - Document all important connections between entities
+- **Breaking characters** - Avoid `{}` in comments, escape special characters
+- **Syntax errors** - Validate in [Mermaid Live Editor](https://mermaid.live)
+- **Overcomplexity** - Split into multiple focused views
 
 ## When to Create Diagrams
 
-**Always diagram when:**
-- Starting new projects or features
-- Documenting complex systems
-- Explaining architecture decisions
-- Designing database schemas
-- Planning refactoring efforts
-- Onboarding new team members
-
-**Use diagrams to:**
-- Align stakeholders on technical decisions
-- Document domain models collaboratively
-- Visualize data flows and system interactions
-- Plan before coding
-- Create living documentation that evolves with code
+New projects, complex systems, architecture decisions, DB schemas, refactoring plans, onboarding — 기술적 맥락을 시각화해야 할 때마다 사용하세요.
