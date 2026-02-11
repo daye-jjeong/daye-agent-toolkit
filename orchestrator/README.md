@@ -1,6 +1,6 @@
 # Orchestrator 스킬 문서
 
-**마지막 업데이트:** 2026-02-09 | **버전:** v3.2
+**마지막 업데이트:** 2026-02-11 | **버전:** v3.3
 
 ---
 
@@ -10,10 +10,11 @@
 
 **핵심 역할:**
 - 사용자 요청을 실행 가능한 세부 작업으로 분해
-- 각 작업에 적합한 전문 서브에이전트 선택 및 스폰
+- **에이전트 템플릿**으로 역할별 프리셋 자동 적용
+- **파일 기반 워크스페이스**로 에이전트별 지시/산출물 추적
 - 작업 간 의존성 관리 및 실행 순서 결정
 - 중간 결과물 검증 및 품질 관리
-- 최종 산출물 통합 및 전달
+- **Dissolution Phase**로 실행 후 정리·아카이브·메트릭 수집
 
 ---
 
@@ -22,7 +23,7 @@
 ### 기본 사용법
 
 ```python
-from skills.orchestrator.lib import execute_orchestrator_task
+from skills.orchestrator.scripts import execute_orchestrator_task
 
 result = execute_orchestrator_task(
     request="작업 설명 (한국어)",
@@ -37,11 +38,15 @@ result = execute_orchestrator_task(
         "destination": "file"
     },
     acceptance_criteria=["성공 기준 1", "성공 기준 2"],
-    interactive=True
+    interactive=True,
+    enable_workspace=True     # 파일 기반 워크스페이스 (기본값: True)
 )
 
 if result["status"] == "completed":
     print(f"✅ 완료: {result['summary']}")
+    if "dissolution" in result:
+        d = result["dissolution"]
+        print(f"   Run: {d['run_id']} | {d['agents_successful']}/{d['agents_total']} 성공")
 else:
     print(f"❌ 실패: {result['summary']}")
 ```
@@ -92,6 +97,76 @@ ETA: ~25분 | 토큰: ~40K in / ~12K out
 
 ---
 
+## 에이전트 템플릿
+
+역할별 프리셋으로 복잡도·모델·프롬프트를 자동 할당합니다.
+
+| 역할 | 복잡도 | 모델 | 용도 |
+|------|--------|------|------|
+| **researcher** | Complex | `claude-opus-4-5` | 심층 연구, 자료 수집, 분석 보고서 |
+| **coder** | Moderate | `claude-sonnet-4-5` | 코드 작성, 리팩토링, 버그 수정 |
+| **analyst** | Moderate | `claude-sonnet-4-5` | 데이터 분석, 패턴 식별, 인사이트 |
+| **writer** | Moderate | `claude-sonnet-4-5` | 문서 작성, 가이드, 매뉴얼 |
+| **reviewer** | Simple | `gemini-3-flash` | 코드 리뷰, 문서 검증, 품질 검사 |
+| **integrator** | Moderate | `claude-sonnet-4-5` | 산출물 통합, 병합, 일관성 확보 |
+
+**사용법:**
+```python
+from skills.orchestrator.scripts import get_template, get_model_for_role
+
+# 템플릿 조회
+template = get_template("researcher")
+# → {"complexity": COMPLEX, "prompt_prefix": "...", "expected_output": "markdown"}
+
+# 역할별 모델 확인
+model = get_model_for_role("coder")
+# → "anthropic/claude-sonnet-4-5"
+
+# subtask에 템플릿 자동 적용
+subtask = {"name": "Research", "task": "시장 조사", "role": "researcher"}
+resolved = resolve_subtask_template(subtask)
+# → complexity, model, prompt_prefix 자동 채움 (기존 값은 보존)
+```
+
+---
+
+## 에이전트 워크스페이스
+
+각 에이전트 실행마다 파일 기반 워크스페이스를 생성하여 디버깅·재현성·추적성을 확보합니다.
+
+### 디렉토리 구조
+```
+~/.clawdbot/orchestrator/workspaces/{run-id}/{agent-name}/
+├── inbox/instructions.md    # 오케스트레이터 → 에이전트 (지시사항)
+├── outbox/                  # 에이전트 → 오케스트레이터 (산출물)
+├── workspace/               # 에이전트 작업 공간 (정리 대상)
+└── status.json              # pending → running → completed | failed
+```
+
+### 주요 함수
+```python
+from skills.orchestrator.scripts import (
+    generate_run_id,        # → "20260211-143022"
+    create_workspace,       # 디렉토리 구조 생성 + 초기 status.json
+    write_instructions,     # inbox/instructions.md 작성
+    update_status,          # status.json 갱신
+    read_status,            # status.json 읽기
+    collect_outbox,         # outbox 파일 목록 반환
+    list_agent_workspaces,  # run 내 모든 에이전트 목록
+    cleanup_run,            # workspace/ 정리, inbox/outbox 보존
+)
+```
+
+### 워크스페이스 비활성화
+```python
+result = execute_orchestrator_task(
+    ...,
+    enable_workspace=False  # 워크스페이스 없이 기존 방식으로 실행
+)
+```
+
+---
+
 ## 모델 선택 규칙
 
 자동 복잡도 분류 기반 모델 선택 (AGENTS.md § 2.5 gates 준수):
@@ -108,7 +183,7 @@ ETA: ~25분 | 토큰: ~40K in / ~12K out
 
 **수동 오버라이드:**
 ```python
-from skills.orchestrator.lib import select_model_for_task
+from skills.orchestrator.scripts import select_model_for_task
 
 model = select_model_for_task(
     "데이터 분석",
@@ -125,33 +200,47 @@ model = select_model_for_task(
 모든 비-Trivial 작업은 사용자 승인이 필요합니다 (AGENTS.md § 2.7):
 
 1. **Gate 1 표시:** 목표 + 3 bullets + 산출물 + ETA/토큰
-2. **사용자 응답 대기:** "진행", "OK", "Yes", 👍
+2. **사용자 응답 대기:** "진행", "OK", "Yes"
 3. **Gate 2 (Medium+):** 토큰 예산 확인 요청
 
-**승인 판단 기준:**
-- Trivial (<2분, 산출물 없음) → 게이트 생략
-- Small (2-10분) → Gate 1만 필수
-- Medium+ (10분+) → Gate 1 + Gate 2 필수
-- 긴급 지시 ("지금 바로") → 게이트 생략 가능
-
-### Phase 1: 계획 수립
+### Phase 1: 계획 수립 + 템플릿 적용
 
 - 요청을 3-10개 서브작업으로 분해
+- **에이전트 템플릿** 적용 (role 기반 complexity/model/prompt 자동 할당)
 - 각 서브작업의 복잡도 판단 및 모델 할당
 - ETA 및 토큰 예산 추정
-- Gate 2 필요시 토큰 예산 승인 요청
 
-### Phase 2: 실행
+### Phase 2: 실행 + 워크스페이스
 
-- 각 서브작업마다 서브에이전트 스폰
+- **워크스페이스 생성** → inbox에 instructions.md 작성
+- 각 서브작업마다 서브에이전트 스폰 + **status.json 추적**
 - 진행 상황 추적 및 실패 우아하게 처리 (fallback)
-- 다음 단계 전 중간 산출물 검증
 
 ### Phase 3: 통합
 
 - 중간 산출물들을 최종 산출물로 병합
 - 수용 기준에 대한 최종 검증
 - 산출물 포맷팅 및 전달 (파일 저장)
+
+### Phase 4: Dissolution (정리)
+
+실행 완료 후 자동 실행:
+
+1. **Outbox 검증** — 모든 에이전트의 산출물 존재 확인
+2. **execution_summary.json** — 총 에이전트 수, 성공/실패, 사용 모델, 시간
+3. **workspace/ 정리** — scratch 디렉토리 삭제 (inbox/outbox 보존)
+4. **아카이브 마킹**
+
+**반환값에 dissolution 키 추가:**
+```python
+result["dissolution"] = {
+    "run_id": "20260211-143022",
+    "workspace_path": "~/.clawdbot/orchestrator/workspaces/20260211-143022",
+    "archived": True,
+    "agents_total": 3,
+    "agents_successful": 3,
+}
+```
 
 ---
 
@@ -163,15 +252,6 @@ model = select_model_for_task(
 Main Agent (Depth 0)
   └─ Orchestrator (Depth 1)
        └─ Worker (Depth 2) ← MAX, cannot spawn further
-```
-
-**위반 시 ValueError 발생:**
-```python
-# ❌ 금지됨 - Depth 3
-spawn_subagent_with_retry(
-    task="...",
-    current_depth=2  # Max 2까지만 허용
-)
 ```
 
 ---
@@ -190,10 +270,6 @@ gpt-5.2 → claude-sonnet-4-5 → gemini-3-pro → claude-haiku-4-5
 - **Timeout:** 1회 재시도 후 fallback
 - **Model Unavailable:** 즉시 fallback (재시도 없음)
 
-**로그:** `~/.clawdbot/agents/main/logs/fallback_decisions.jsonl`
-
----
-
 ---
 
 ## API 명세
@@ -207,7 +283,10 @@ def execute_orchestrator_task(
     deliverable: Dict,               # type, format, destination
     acceptance_criteria: List[str],   # 성공 검증 기준
     interactive: bool = True,        # 사용자 승인 대기
-    dry_run: bool = False            # 실행 없이 계획만 표시
+    dry_run: bool = False,           # 실행 없이 계획만 표시
+    workspace_root: Optional[str] = None,   # 워크스페이스 루트 오버라이드
+    archive_workspace: bool = True,  # Dissolution 후 아카이브
+    enable_workspace: bool = True,   # 파일 기반 워크스페이스 활성화
 ) -> Dict
 ```
 
@@ -215,82 +294,20 @@ def execute_orchestrator_task(
 ```python
 {
     "status": "completed | partial | failed | cancelled",
-    "executionLog": [
-        {
-            "subtask": "서브작업 이름",
-            "agent": "사용된 모델",
-            "status": "completed | failed",
-            "duration": 분,
-            "output": "경로 또는 요약"
-        }
-    ],
-    "deliverables": [
-        {
-            "type": "primary | supporting",
-            "description": "설명",
-            "url": "접근 가능한 링크"
-        }
-    ],
-    "checkpoints": {
-        "A": {"completed": "timestamp", "artifact": "url"},
-        "B": {"completed": "timestamp", "artifact": "url"}
-    },
+    "executionLog": [...],
+    "deliverables": [...],
+    "checkpoints": {...},
     "summary": "1-2문장 결과",
-    "issuesEncountered": ["블로커, 재시도 등"],
-    "recommendations": ["향후 개선사항"]
+    "issuesEncountered": [...],
+    "recommendations": [...],
+    "dissolution": {              # enable_workspace=True일 때만
+        "run_id": str,
+        "workspace_path": str,
+        "archived": bool,
+        "agents_total": int,
+        "agents_successful": int,
+    }
 }
-```
-
-### select_model_for_task()
-
-```python
-from skills.orchestrator.lib import select_model_for_task
-
-model = select_model_for_task(
-    task_description="작업 설명",
-    complexity_override=None,        # TaskComplexity.SIMPLE/MODERATE/COMPLEX
-    custom_model=None                # 강제 모델 지정
-)
-```
-
----
-
-## 사용 예시
-
-### 예시 1: 간단한 데이터 조회
-
-```python
-result = execute_orchestrator_task(
-    request="Google Calendar에서 오늘 일정 가져오기",
-    context={"taskUrl": "projects/tasks/tasks.yml"},
-    deliverable={"type": "data", "format": "json", "destination": "file"},
-    acceptance_criteria=["JSON 파일 생성"],
-    interactive=True
-)
-# → 자동으로 Simple 분류, gemini-flash 사용, Gate 2 생략
-```
-
-### 예시 2: 복잡한 연구 작업
-
-```python
-result = execute_orchestrator_task(
-    request="멀티에이전트 시스템 설계 및 구현 방안 연구",
-    context={
-        "taskUrl": "projects/research/tasks.yml",
-        "relatedDocs": ["AGENTS.md"]
-    },
-    deliverable={
-        "type": "documentation",
-        "format": "markdown",
-        "destination": "file"
-    },
-    acceptance_criteria=[
-        "아키텍처 다이어그램 포함",
-        "구현 예시 코드 포함"
-    ],
-    interactive=True
-)
-# → 자동으로 Complex 분류, claude-opus-4-5 사용, Gate 1 + Gate 2 필수
 ```
 
 ---
@@ -298,80 +315,50 @@ result = execute_orchestrator_task(
 ## 트러블슈팅
 
 ### "Depth limit exceeded"
-**원인:** Worker가 추가 서브에이전트를 스폰하려고 함
-
 **해결:** 작업을 2단계 이내로 재구성
 
-### "Task URL required"
-**원인:** 서브에이전트 스폰 시 taskUrl 누락
-
-**해결:**
-```python
-spawn_subagent_with_retry(
-    task="...",
-    task_url="projects/folder/tasks.yml"  # 필수
-)
-```
-
 ### "All models failed"
-**증상:** Fallback chain 모든 모델 실패
-
-**조치:**
-1. 로그 확인: `~/.clawdbot/agents/main/logs/fallback_decisions.jsonl`
-2. Rate limit 쿨다운 대기 (보통 1분)
-3. 커스텀 fallback 순서 지정
+**조치:** 로그 확인 → Rate limit 쿨다운 → 커스텀 fallback
 
 ### "Gate timeout"
-**증상:** 10분 무응답으로 작업 취소
-
-**해결:**
-- `dry_run=True`로 계획 미리보기
-- `interactive=False`로 자동화 (사전 승인 필수)
-
----
-
-## 정책 & 안전 규칙
-
-### AGENTS.md 참조
-
-- **§ 2.5 Gates:** 확인 게이트 정책
-- **§ 2.6 Checkpoints:** 체크포인트 및 상태 저장
-- **§ 2.7 Reapproval:** 재승인 정책
-- **§ 6 Protocol:** 전체 프로토콜
-- **§ 7.3 SOT:** Task 저장소 (YAML)
-
-### 해야 할 것
-
-- ✅ Gate 1 형식 준수 (목표 + 3 bullets + 산출물 + ETA/토큰)
-- ✅ Gate 2 (Medium+) 토큰 예산 승인
-- ✅ 사용자 응답 대기 (타임아웃 정책 준수)
-- ✅ 10개 미만의 서브작업으로 분해
-- ✅ 각 산출물에 체크포인트 URL 포함
-
-### 하지 말아야 할 것
-
-- ❌ 게이트 생략 (예외 제외)
-- ❌ Gate 1 포맷 위반 (4개 이상 bullet)
-- ❌ Gate 2 생략 (Medium+ 작업)
-- ❌ 승인 전 서브에이전트 스폰
-- ❌ 명확하지 않은 작업 정의로 스폰
-- ❌ 검증 실패한 채로 다음 단계 진행
+**해결:** `dry_run=True`로 미리보기 또는 `interactive=False`
 
 ---
 
 ## 아키텍처
 
 ```
-lib/
-├── gates.py          # Gate 1/2 형식 및 승인 로직
-├── model_selector.py # 복잡도 분류 및 모델 선택
-├── orchestrator.py   # 메인 실행 엔진
-└── __init__.py       # 공개 API
+scripts/
+├── gates.py            # Gate 1/2 형식 및 승인 로직
+├── model_selector.py   # 복잡도 분류 및 모델 선택
+├── agent_templates.py  # 역할별 템플릿 (6종)
+├── agent_workspace.py  # 파일 기반 워크스페이스
+├── orchestrator.py     # 메인 실행 엔진 (5 Phase)
+└── __init__.py         # 공개 API
 ```
 
 ---
 
 ## 모듈 구현 세부사항
+
+### agent_templates.py (v3.3 추가)
+
+- `AGENT_TEMPLATES`: 6개 역할 템플릿 dict
+- `get_template(role)`: 템플릿 조회
+- `get_model_for_role(role)`: COMPLEXITY_MODEL_MAP 기반 모델 resolve
+- `resolve_subtask_template(subtask, default_role)`: subtask에 템플릿 기본값 적용
+- `list_roles()`: 역할 → 설명 dict 반환
+
+### agent_workspace.py (v3.3 추가)
+
+- `generate_run_id()`: 타임스탬프 기반 run ID 생성
+- `create_workspace()`: 디렉토리 구조 생성 + 초기 status.json
+- `write_instructions()`: inbox/instructions.md 작성
+- `update_status()` / `read_status()`: status.json 관리
+- `collect_outbox()`: outbox 파일 목록 반환
+- `list_agent_workspaces()`: run 내 에이전트 목록
+- `cleanup_run()`: workspace/ 정리 (inbox/outbox 보존)
+- `write_execution_summary()`: execution_summary.json 생성
 
 ### model_selector.py
 
@@ -394,30 +381,32 @@ lib/
 - `classify_work_size()`: ETA/토큰으로 작업 크기 분류
 - `estimate_cost()`: USD 비용 추정
 - `run_confirmation_gates()`: Gate 1/2 실행
-- `execute_orchestrator_task()`: 메인 실행 함수
+- `_run_dissolution_phase()`: Phase 4 Dissolution (v3.3 추가)
+- `execute_orchestrator_task()`: 메인 실행 함수 (5 Phase)
 
 ---
 
 ## 버전 이력
 
+**v3.3 (2026-02-11):** 에이전트 템플릿 + 워크스페이스 + Dissolution
+- 에이전트 템플릿 6종 추가 (researcher, coder, analyst, writer, reviewer, integrator)
+- 파일 기반 에이전트 워크스페이스 (inbox/outbox/workspace/status.json)
+- Phase 4 Dissolution 추가 (정리·아카이브·메트릭 수집)
+- execute_orchestrator_task()에 workspace_root, archive_workspace, enable_workspace 파라미터 추가
+- session_manager import를 optional로 변경 (graceful fallback)
+
 **v3.2 (2026-02-09):** YAML SOT 마이그레이션
 - Notion 모든 참조 제거
 - 모델 목록 업데이트 (gpt-5.2, claude-opus-4-5, gemini-cli 경로 등)
 - AGENTS.md 섹션 참조 정확화 (§ 2.5, 2.6, 2.7, 6, 7.3)
-- README + QUICKSTART 통합, 한국어 간결화 (<200줄)
 
 **v3.1 (2026-02-04):** Confirmation Gates + Depth Limit
-- Gate 1/2 추가
-- 2-Level 깊이 제한
-- Task OS 안전 규칙
 
 **v3.0 (2026-02-04):** Fallback Policy
-- 자동 재시도/대체 로직
-- Rate Limit, Timeout, Model Unavailable 처리
 
 ---
 
 **📝 작성 정보**
-- **최종 업데이트:** 2026-02-09 (Claude Haiku 4.5)
+- **최종 업데이트:** 2026-02-11 (Claude Opus 4.6)
 - **상태:** Production ready
 - **라이선스:** MIT (Task OS 일부)
