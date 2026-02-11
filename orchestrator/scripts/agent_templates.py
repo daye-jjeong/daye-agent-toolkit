@@ -24,6 +24,11 @@ AGENT_TEMPLATES: Dict[str, Dict] = {
         ),
         "expected_output": "markdown",
         "description": "심층 연구, 자료 수집, 분석 보고서 작성",
+        "constraints": [
+            "DO NOT modify or create files (read-only access)",
+            "DO NOT send external messages (Telegram, email, Slack)",
+            "DO NOT spawn sub-agents",
+        ],
     },
     "coder": {
         "complexity": TaskComplexity.MODERATE,
@@ -33,6 +38,11 @@ AGENT_TEMPLATES: Dict[str, Dict] = {
         ),
         "expected_output": "code",
         "description": "코드 작성, 리팩토링, 버그 수정",
+        "constraints": [
+            "DO NOT send external messages (Telegram, email, Slack)",
+            "DO NOT spawn sub-agents",
+            "DO NOT modify system config files (AGENTS.md, SOUL.md, crontab, etc.)",
+        ],
     },
     "analyst": {
         "complexity": TaskComplexity.MODERATE,
@@ -42,6 +52,11 @@ AGENT_TEMPLATES: Dict[str, Dict] = {
         ),
         "expected_output": "markdown",
         "description": "데이터 분석, 패턴 식별, 인사이트 도출",
+        "constraints": [
+            "DO NOT modify source code (analysis output only)",
+            "DO NOT send external messages (Telegram, email, Slack)",
+            "DO NOT spawn sub-agents",
+        ],
     },
     "writer": {
         "complexity": TaskComplexity.MODERATE,
@@ -51,6 +66,12 @@ AGENT_TEMPLATES: Dict[str, Dict] = {
         ),
         "expected_output": "markdown",
         "description": "문서 작성, 가이드, 매뉴얼",
+        "constraints": [
+            "DO NOT modify source code (documentation only)",
+            "DO NOT send external messages (Telegram, email, Slack)",
+            "DO NOT spawn sub-agents",
+            "DO NOT run destructive commands (rm, git reset, etc.)",
+        ],
     },
     "reviewer": {
         "complexity": TaskComplexity.SIMPLE,
@@ -60,6 +81,12 @@ AGENT_TEMPLATES: Dict[str, Dict] = {
         ),
         "expected_output": "markdown",
         "description": "코드 리뷰, 문서 검증, 품질 검사",
+        "constraints": [
+            "DO NOT modify any files (read-only, feedback only)",
+            "DO NOT send external messages (Telegram, email, Slack)",
+            "DO NOT spawn sub-agents",
+            "DO NOT run any commands (read and review only)",
+        ],
     },
     "integrator": {
         "complexity": TaskComplexity.MODERATE,
@@ -69,6 +96,11 @@ AGENT_TEMPLATES: Dict[str, Dict] = {
         ),
         "expected_output": "markdown",
         "description": "산출물 통합, 병합, 일관성 확보",
+        "constraints": [
+            "DO NOT send external messages (Telegram, email, Slack)",
+            "DO NOT spawn sub-agents",
+            "DO NOT access web or external APIs",
+        ],
     },
 }
 
@@ -142,6 +174,16 @@ def resolve_subtask_template(
         result["expected_output"] = template["expected_output"]
     if "model" not in result:
         result["model"] = COMPLEXITY_MODEL_MAP[template["complexity"]]
+
+    # Inject constraints into prompt_prefix so the agent sees them
+    constraints = template.get("constraints", [])
+    if constraints and "constraints" not in result:
+        result["constraints"] = constraints
+        constraint_block = "\n".join(f"- {c}" for c in constraints)
+        result["prompt_prefix"] = (
+            f"{result['prompt_prefix']}\n\n"
+            f"CONSTRAINTS (you MUST follow these):\n{constraint_block}"
+        )
 
     return result
 

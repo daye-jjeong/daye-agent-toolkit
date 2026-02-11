@@ -68,14 +68,25 @@
 
 ## 자동 연계
 
+### → tasks.yml (프로젝트 태스크 감지)
+세션 중 수정된 파일을 `memory/projects/*/tasks.yml`의 repos/files_changed와 대조.
+매칭되는 태스크가 있으면:
+> "이 작업은 **t-ronik-001** (캘리봇 기획 재정리) 관련인 것 같아요. progress_log를 업데이트할까요?"
+> → `vault-memory:task-update` 제안
+
+매칭 로직:
+1. 수정 파일 경로가 repos의 repo/branch와 겹치는지
+2. 수정 파일이 기존 progress_log의 files_changed에 있었는지
+3. 세션 주제(첫 메시지)에 태스크 ID나 프로젝트 키워드가 포함되는지
+
 ### → AGENTS.md (정책 감지)
 결정사항 중 아래 키워드가 포함되면 `sync-agents` 제안:
 - "항상", "규칙으로", "정책 추가", "매번", "금지", "필수"
-> "이 결정을 AGENTS.md에 반영할까요?" → `/vault-memory:sync-agents` 제안
+> "이 결정을 AGENTS.md에 반영할까요?" → `vault-memory:sync-agents` 제안
 
 ### → MEMORY.md (장기 보관)
 장기 보관 가치가 있는 결정/배움 발견 시:
-> "이 항목을 MEMORY.md에 영구 저장할까요?" → `/vault-memory:preserve` 제안
+> "이 항목을 MEMORY.md에 영구 저장할까요?" → `vault-memory:preserve` 제안
 
 ## 주의사항
 

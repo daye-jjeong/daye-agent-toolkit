@@ -135,12 +135,54 @@
 
 ---
 
+### memory/projects/{type}--{name}/ — 프로젝트 태스크
+**위치:** `memory/projects/{work|personal}--{name}/`
+**성격:** 프로젝트별 태스크 추적. repo 연결, 진행 로그 포함.
+
+**파일 구조:**
+- `project.yml` — 프로젝트 메타 (이름, 상태, 목표, 태그)
+- `tasks.yml` — 태스크 목록 (SOT)
+
+**기록 대상 (tasks.yml):**
+- **status 변경** — todo → in_progress → done | blocked
+- **subtask 완료** — 개별 subtask status 업데이트
+- **progress_log** — 작업 내용 요약 (append-only, 최신이 위)
+  - `date`: 작업 날짜
+  - `by`: claude-code | openclaw | daye
+  - `summary`: 1-2줄 작업 요약
+  - `files_changed`: 수정한 파일 목록
+- **repos** — 관련 코드 연결
+  - `repo`: GitHub repo (owner/name)
+  - `branch`: 작업 브랜치
+  - `prs`: 관련 PR 번호
+  - `commits`: 주요 커밋 SHA
+
+**기록 트리거:**
+- 태스크 시작/완료 시 (status 변경)
+- 코드 작업 후 (progress_log + repos 업데이트)
+- compress 시 프로젝트 관련 작업이 감지되면 자동 업데이트 제안
+- 커밋 메시지에 `[t-xxx-nnn]` 포함 시 해당 태스크에 commit 기록
+
+**기록하지 않는 것:**
+- 세션 대화 내용 (세션 로그에 기록)
+- 중간 디버깅 과정 (최종 결과만)
+
+**교차 참조:**
+- 태스크 → 목표: `linked_goals`에 `[[위키링크]]`
+- 목표 → 태스크: 본문에 `[[t-xxx-nnn]]`
+- 커밋 → 태스크: 커밋 메시지에 `[t-xxx-nnn]`
+
+---
+
 ## 기록 흐름
 
 ```
-세션 중 결정 발생
+세션 중 작업 발생
     │
-    ├─ 일회성? ──────────────── → 세션 로그 (compress)
+    ├─ 프로젝트 작업? ─────── → tasks.yml (status + progress_log + repos)
+    │                            + 세션 로그 (compress)
+    │
+    ├─ 일회성 결정? ─────────── → 세션 로그 (compress)
     │
     ├─ 반복 규칙? ───────────── → AGENTS.md (sync-agents)
     │                              └─ 상세 필요? → policy/*.md
@@ -148,6 +190,24 @@
     ├─ 다예 개인 정보/선호? ──── → MEMORY.md (preserve)
     │
     └─ 산출물? ──────────────── → reports/ 또는 docs/
+```
+
+### 프로젝트 작업 기록 흐름 (상세)
+
+```
+코드 작업 완료
+    │
+    ├─ 1. tasks.yml status 업데이트
+    │     └─ subtask 완료 처리
+    │
+    ├─ 2. progress_log append
+    │     └─ date, by, summary, files_changed
+    │
+    ├─ 3. repos 필드 업데이트
+    │     └─ branch, commits, prs
+    │
+    └─ 4. 세션 로그에 요약 기록
+          └─ "t-ronik-001: 캘리 프로세스 as-is 정리 완료"
 ```
 
 ## 플랫폼별 트리거
@@ -158,7 +218,8 @@
 |--------|--------|----------|
 | 세션 종료 | 자동 | `SessionEnd` hook → `memory/YYYY-MM-DD.md`에 세션 마커 append |
 | 세션 압축 | 수동 | `/vault-memory:compress` Skill 호출 → 세션 마커를 AI 분석으로 보강 |
-| 에이전트 완료 | 정책 | 메인 세션이 Task 결과 수신 후 세션 로그에 결과 요약 기록 |
+| 프로젝트 작업 | 정책 | 태스크 시작/완료 시 tasks.yml 업데이트 + progress_log + repos 기록 |
+| 에이전트 완료 | 정책 | 메인 세션이 Task 결과 수신 후 세션 로그 + 관련 tasks.yml 업데이트 |
 | 정책 동기화 | 수동 | compress 후 정책 키워드 감지 시 sync-agents 제안 |
 | 장기 보존 | 수동 | `/vault-memory:preserve` Skill 호출 |
 
@@ -173,7 +234,8 @@
 |--------|--------|----------|
 | 세션 종료 | 대화 지시 | "세션 저장해", "compress", "오늘 정리" → compress 워크플로우 실행 |
 | 자동 저장 | 크론 | `vault-session-save` (30분 주기) → 기본 세션 마커 append |
-| 에이전트 완료 | 정책 | orchestrator가 worker 완료 수신 후 세션 로그에 기록 |
+| 프로젝트 작업 | 정책 | 태스크 시작/완료 시 tasks.yml 업데이트 + progress_log + repos 기록 |
+| 에이전트 완료 | 정책 | orchestrator가 worker 완료 수신 후 세션 로그 + 관련 tasks.yml 업데이트 |
 | 정책 동기화 | 대화 지시 | "정책 동기화", "agents 업데이트" → sync-agents 워크플로우 |
 | 장기 보존 | 대화 지시 | "기억해줘", "MEMORY에 저장" → preserve 워크플로우 |
 
@@ -188,6 +250,37 @@
 - **기록 경로**: 양쪽 모두 `memory/YYYY-MM-DD.md` (flat)
 - **세션 헤더**: `## 세션 HH:MM (플랫폼, session-id-8자리)` — 플랫폼은 `claude-code` 또는 `openclaw`
 - **충돌 방지**: 같은 날 양쪽에서 기록해도 세션 헤더로 구분
+
+---
+
+## 알림
+
+### 태스크 상태 변경 알림
+
+태스크 상태가 변경되면 텔레그램으로 알림:
+
+| 이벤트 | 메시지 |
+|--------|--------|
+| 시작 | `🔄 t-ronik-001 시작 (by claude-code)` |
+| 완료 | `✅ t-ronik-001 완료 (by openclaw): 캘리 프로세스 정리` |
+| 차단 | `🚫 t-ronik-001 blocked: API 키 필요` |
+| 핸드오프 | `🔀 t-ronik-001 핸드오프 → openclaw` |
+| 마감 임박 | `⏰ t-ronik-004 마감 내일 (2/12), subtask 1/2 완료` |
+
+**구현:**
+- Claude Code: `session_end.py` hook에서 tasks.yml 변경 감지 → 알림 스크립트 호출
+- OpenClaw: task-update 워크플로우 내에서 직접 텔레그램 전송
+- 알림 스크립트: `scripts/notify_task_update.py` (TODO: 구현 필요)
+
+### 크로스 플랫폼 알림
+
+다른 플랫폼이 작업한 내용을 알려주는 알림:
+
+| 상황 | 알림 |
+|------|------|
+| OpenClaw이 태스크 완료 → Claude Code 세션 시작 | resume에서 자동 표시 |
+| Claude Code이 태스크 완료 → OpenClaw 세션 시작 | resume에서 자동 표시 |
+| 긴급 핸드오프 | 텔레그램 즉시 알림 |
 
 ---
 
