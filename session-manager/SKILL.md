@@ -1,6 +1,7 @@
 ---
 name: session-manager
 description: 서브에이전트 세션 자동 fallback/retry — 429 rate limit 대응
+user-invocable: false
 ---
 
 # Session Manager Skill

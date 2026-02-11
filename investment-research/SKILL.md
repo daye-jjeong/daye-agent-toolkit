@@ -1,6 +1,6 @@
 ---
 name: investment-research
-description: Personal investing research workflow for Daye (Jarvis). Use when asked to evaluate a stock/ETF, turn a long “investment analysis prompt” into a reusable operating template, run a safe Deep Research process (scope then deep) to gather evidence/links, and store results into Daye’s personal Notion (NEW HOME) in a consistent page/DB format.
+description: 투자 종목 리서치 및 분석 워크플로우
 ---
 
 # Jarvis Investment Research

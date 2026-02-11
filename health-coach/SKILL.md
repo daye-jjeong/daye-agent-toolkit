@@ -1,6 +1,7 @@
 ---
 name: health-coach
 description: Health Tracker 데이터를 분석하여 맞춤 건강 조언 제공. 허리디스크 안전 운동 추천, 증상 패턴 분석, PT 숙제 가이드, 저속노화 루틴 관리. Obsidian vault 기반.
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Health Coach

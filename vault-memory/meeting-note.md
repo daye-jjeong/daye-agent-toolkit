@@ -2,7 +2,7 @@
 
 > 미팅 트랜스크립트를 결정/액션아이템/논의로 구조화한다.
 
-**기록 규격**: `~/mingming-vault/memory/format.md` 참조
+**기록 규격**: `memory/format.md` 참조
 
 ## 트리거
 
@@ -19,7 +19,7 @@
 
 ### 2. 프로젝트 감지
 
-키워드로 `~/mingming-vault/projects/` 하위 프로젝트명과 매칭.
+키워드로 `memory/projects/` 하위 프로젝트명과 매칭.
 매칭 없으면 사용자에게 지정 요청.
 
 ### 3. 구조화
@@ -52,7 +52,7 @@ tags: [meeting, project-code]
 
 ### 4. 저장
 
-**경로**: `~/mingming-vault/memory/reports/meeting-YYYY-MM-DD-{slug}.md`
+**경로**: `memory/reports/meeting-YYYY-MM-DD-{slug}.md`
 - slug: 미팅 제목에서 생성 (예: `meeting-2026-02-11-vault-design`)
 
 ### 5. 후속 제안

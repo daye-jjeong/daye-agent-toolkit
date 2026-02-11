@@ -1,6 +1,7 @@
 ---
 name: banksalad-import
-description: Import banksalad export xlsx (password-protected zip) into Obsidian vault as Dataview-queryable markdown. Use when Daye sends a banksalad zip file or asks to update her financial data. Handles deduplication, incremental import, and in-place updates for investments/loans.
+description: 뱅크샐러드 → Obsidian vault 금융 데이터 import
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Banksalad → Obsidian Import

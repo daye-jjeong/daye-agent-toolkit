@@ -2,7 +2,7 @@
 
 > 세션 종료 전 컨텍스트를 구조화하여 세션 로그에 저장한다.
 
-**기록 규격**: `~/mingming-vault/memory/format.md` 참조
+**기록 규격**: `memory/format.md` 참조
 
 ## 트리거
 
@@ -49,7 +49,7 @@
 
 ### 4. 파일 저장
 
-**경로**: `~/mingming-vault/memory/daily/YYYY-MM-DD.md`
+**경로**: `memory/YYYY-MM-DD.md`
 
 - 파일 없으면: frontmatter + Quick Reference + 세션 섹션 생성
 - 파일 있으면: Quick Reference 업데이트 + 새 세션 섹션 append

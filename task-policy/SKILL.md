@@ -1,6 +1,7 @@
 ---
 name: task-policy
 description: 태스크 생성/실행 정책 가드레일 — pre-work gate, post-work 업로드, 감사 로깅
+user-invocable: false
 ---
 
 # Task Policy

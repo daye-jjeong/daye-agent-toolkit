@@ -1,11 +1,7 @@
 ---
 name: news-brief
-description: Unified news briefing skill. Fetches RSS feeds, deduplicates headlines, analyzes Ronik impact (robotics, commercial kitchen, retail automation), prioritizes by relevance, and formats for Telegram. Combines RSS aggregation with LLM-powered impact analysis.
-tier: 3 (Full LLM)
-status: Experimental
-version: 0.2.0
-input: RSS feeds list (rss_feeds.txt), keywords list (keywords.txt), impact analysis prompt (impact_prompt.txt)
-output: Formatted Telegram message (markdown) with prioritized headlines and Ronik impact analysis
+description: 키워드 기반 뉴스 브리핑 + 로닉 임팩트 분석
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # News Brief Skill

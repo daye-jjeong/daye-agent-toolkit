@@ -1,6 +1,7 @@
 ---
 name: prompt-guard
 description: 프롬프트 인젝션/탈옥 스캐너 — 패턴 매칭 + 시맨틱 탐지
+user-invocable: false
 ---
 
 # Prompt Guard

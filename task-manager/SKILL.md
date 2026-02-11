@@ -1,3 +1,8 @@
+---
+name: task-manager
+description: 태스크 생성, 실행, 추적 관리
+---
+
 # Task Manager - Auto-Resume System
 
 **Version:** 0.1.0

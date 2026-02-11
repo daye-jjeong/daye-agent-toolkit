@@ -1,6 +1,6 @@
 ---
 name: notion
-description: Unified Notion API client with retry logic, connection reuse, and modern API features (workspace version).
+description: Notion API 클라이언트 — retry, 엔드포인트 라우팅
 ---
 
 # Notion Skill

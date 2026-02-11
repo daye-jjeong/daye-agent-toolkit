@@ -1,6 +1,7 @@
 ---
 name: pantry-manager
 description: 식재료 관리 자동화 — 재고, 유통기한, 쇼핑리스트, 레시피 추천
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Pantry Manager Skill

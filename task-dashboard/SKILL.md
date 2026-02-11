@@ -1,6 +1,7 @@
 ---
 name: task-dashboard
 description: 프로젝트 tasks.yml + goals YAML → 인터랙티브 HTML 대시보드
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Task Dashboard Skill

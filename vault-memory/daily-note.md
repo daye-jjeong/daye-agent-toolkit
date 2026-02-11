@@ -2,7 +2,7 @@
 
 > 주간/월간 목표 + 미완료 항목 기반으로 일간 계획을 생성한다.
 
-**기록 규격**: `~/mingming-vault/memory/format.md` 참조
+**기록 규격**: `memory/format.md` 참조
 
 ## 트리거
 
@@ -15,10 +15,10 @@
 
 | 소스 | 경로 | 용도 |
 |------|------|------|
-| 월간 목표 | `~/mingming-vault/projects/goals/monthly/YYYY-MM.md` | 이번 달 방향 |
-| 주간 목표 | `~/mingming-vault/projects/goals/weekly/YYYY-Www.md` | 이번 주 구체 목표 |
-| 어제 세션 | `~/mingming-vault/memory/daily/YYYY-MM-DD.md` | 미완료 항목 |
-| 진행 중 태스크 | `~/mingming-vault/projects/` (status: in_progress) | 현재 작업 |
+| 월간 목표 | `memory/goals/monthly/YYYY-MM.md` | 이번 달 방향 |
+| 주간 목표 | `memory/goals/weekly/YYYY-Www.md` | 이번 주 구체 목표 |
+| 어제 세션 | `memory/YYYY-MM-DD.md` | 미완료 항목 |
+| 진행 중 태스크 | `memory/projects/config/` (status: in_progress) | 현재 작업 |
 
 ### 2. 에너지 레벨 확인
 
@@ -34,7 +34,7 @@
 
 ### 4. 저장
 
-**경로**: `~/mingming-vault/projects/goals/daily/YYYY-MM-DD.md`
+**경로**: `memory/goals/daily/YYYY-MM-DD.md`
 
 ```markdown
 ---

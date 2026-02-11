@@ -1,6 +1,6 @@
 ---
 name: saju-manse
-description: Korean 사주/만세력 workflow: compute and interpret 사주팔자 (년/월/일/시 천간지지), 오행 균형, 용신/기신 후보, 대운/세운 포인트, and practical life guidance. Use when Daye asks to 봐줘/풀이해줘/만세력 기준으로 사주 분석, or wants ongoing 사주 체크-ins and 기록.
+description: 사주팔자 분석 — 오행, 용신, 대운/세운
 ---
 
 # 사주/만세력 (Saju Manse)

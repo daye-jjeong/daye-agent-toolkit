@@ -1,6 +1,8 @@
 ---
 name: check-integrations
-description: Enhanced integration health checker with granular permission checks, OAuth diagnostics, and detailed service breakdowns. Checks AI APIs (OpenAI, Claude, Gemini), Notion workspaces with DB/page listings, Google services per-account (Gmail, Calendar, Drive, Contacts), GitHub org-level access, and provides OAuth token expiry analysis.
+description: 외부 서비스 통합 상태 점검 + OAuth 진단
+disable-model-invocation: true
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Check Integrations Skill

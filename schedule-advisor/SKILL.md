@@ -1,6 +1,7 @@
 ---
 name: schedule-advisor
 description: 캘린더 데이터 기반 브리핑, 알림, 일정 추천
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Schedule Advisor

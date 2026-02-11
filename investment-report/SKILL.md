@@ -1,6 +1,6 @@
 ---
 name: investment-report
-description: Generate daily KR/US portfolio reports from Daye's Excel workbook using portfolio/portfolio_report.py snapshots (KR/US split, cumulative PnL/return, day-over-day delta) and format a concise message with concentration/loss/event triggers. Use when updating Jarvis investment report automation or when asked to produce the daily 투자-국내/투자-해외 report.
+description: 일일 투자 포트폴리오 리포트 생성
 ---
 
 # Jarvis Investment Report Skill

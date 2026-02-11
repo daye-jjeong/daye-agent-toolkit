@@ -1,6 +1,7 @@
 ---
 name: orchestrator
 description: 다단계 작업 분해 + 서브에이전트 조율 메타-에이전트
+user-invocable: false
 ---
 
 # Orchestrator

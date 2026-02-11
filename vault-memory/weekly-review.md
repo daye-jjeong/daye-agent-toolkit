@@ -2,7 +2,7 @@
 
 > 한 주의 세션 로그 + 목표를 종합하여 주간 회고를 생성한다.
 
-**기록 규격**: `~/mingming-vault/memory/format.md` 참조
+**기록 규격**: `memory/format.md` 참조
 
 ## 트리거
 
@@ -15,10 +15,10 @@
 
 | 소스 | 경로 |
 |------|------|
-| 주간 목표 | `~/mingming-vault/projects/goals/weekly/YYYY-Www.md` |
-| 세션 로그 (7일) | `~/mingming-vault/memory/daily/` |
-| 일간 목표 (7일) | `~/mingming-vault/projects/goals/daily/` |
-| 태스크 변화 | `~/mingming-vault/projects/` |
+| 주간 목표 | `memory/goals/weekly/YYYY-Www.md` |
+| 세션 로그 (7일) | `memory/YYYY-MM-DD.md` |
+| 일간 목표 (7일) | `memory/goals/daily/` |
+| 태스크 변화 | `memory/projects/` |
 
 ### 2. 분석
 
@@ -66,7 +66,7 @@ updated_at: ISO-8601
 
 ### 4. 저장
 
-**경로**: `~/mingming-vault/projects/goals/weekly/YYYY-Www.md`
+**경로**: `memory/goals/weekly/YYYY-Www.md`
 
 - 파일 있으면: `## 회고` 이후 섹션 업데이트 (목표 섹션 보존)
 - 파일 없으면: 전체 생성

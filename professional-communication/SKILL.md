@@ -117,7 +117,5 @@ allowed-tools: Read, Glob, Grep
 - `{baseDir}/references/remote-async-communication.md` - 원격/비동기 가이드
 - `{baseDir}/references/writing-clarity.md` - 글쓰기 명확성 상세 예시
 
----
-
 **원본:** [softaworks/agent-toolkit](https://github.com/softaworks/agent-toolkit) (professional-communication)
 **한국어화:** daye-agent-toolkit v1.0.0

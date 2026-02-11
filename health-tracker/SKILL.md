@@ -1,6 +1,7 @@
 ---
 name: health-tracker
 description: 건강 상태 모니터링 + 운동/PT/증상 트래킹. Obsidian vault에 Dataview-queryable markdown으로 기록. 허리디스크/메니에르 증상 추적, PT 숙제 관리, 운동 기록, 패턴 분석.
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Health Tracker

@@ -1,6 +1,7 @@
 ---
 name: goal-planner
 description: 월간 → 주간 → 일간 3계층 목표 수립 및 관리
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Goal Planner

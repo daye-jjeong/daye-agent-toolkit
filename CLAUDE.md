@@ -8,49 +8,90 @@
 | 환경 | 접근 방식 |
 |------|-----------|
 | Claude Code (로컬) | `./setup.sh` → 마켓플레이스 등록 + 플러그인 설치 + symlink |
-| OpenClaw (원격) | `./setup.sh --openclaw` → extraDirs 설정 안내 |
+| OpenClaw (원격) | `./setup.sh --openclaw` → clone + 스킬 enable + cron |
+
+## 스킬 분류
+
+### Claude Code 전용 (3개) — `.claude-skill` 있음, OpenClaw disabled
+
+| 스킬 | 설명 |
+|------|------|
+| mermaid-diagrams | Mermaid 다이어그램 생성 가이드 |
+| professional-communication | 업무 커뮤니케이션 가이드 |
+| skill-forge | SKILL.md 생성/최적화/감사 |
+
+### Claude Code + OpenClaw 양쪽 (12개) — `.claude-skill` 있음, OpenClaw enabled
+
+| 스킬 | 설명 |
+|------|------|
+| banksalad-import | 뱅크샐러드 → Obsidian vault import |
+| goal-planner | 월간→주간→일간 목표 관리 |
+| health-coach | 맞춤 건강 조언 + 운동 추천 |
+| health-tracker | 운동/증상/PT 트래킹 |
+| investment-report | 일일 투자 리포트 |
+| investment-research | 투자 종목 리서치 |
+| meal-tracker | 식사 기록 + 영양 모니터링 |
+| news-brief | 키워드 뉴스 브리핑 |
+| pantry-manager | 식재료 관리 자동화 |
+| saju-manse | 사주팔자 분석 |
+| task-dashboard | 프로젝트 HTML 대시보드 |
+| vault-memory | Obsidian vault 메모리 관리 |
+
+### OpenClaw 전용 (12개) — `.claude-skill` 없음, OpenClaw enabled
+
+| 스킬 | 설명 | 비고 |
+|------|------|------|
+| check-integrations | 외부 서비스 통합 점검 | `disable-model-invocation` |
+| doc-lint | 시스템 .md 린터 | |
+| notion | Notion API 클라이언트 | |
+| openclaw-docs | OpenClaw 문서 스마트 접근 | |
+| orchestrator | 서브에이전트 조율 | `user-invocable: false` |
+| prompt-guard | 프롬프트 인젝션 스캐너 | `user-invocable: false` |
+| quant-swing | 스윙 전략 실행/분석 | |
+| schedule-advisor | 캘린더 브리핑/알림 | |
+| session-manager | 세션 fallback/retry | `user-invocable: false` |
+| taling-auto-monitor | 탈잉 챌린지 자동 모니터 | `disable-model-invocation` |
+| task-manager | 태스크 관리 | |
+| task-policy | 태스크 정책 가드레일 | `user-invocable: false` |
 
 ## skills.json 매니페스트
 
-모든 스킬 선언은 `skills.json`에서 관리:
-
-- `local_skills`: 이 레포에 있는 SKILL.md 스킬 이름 배열
-- `marketplaces`: 등록할 외부 마켓플레이스 목록
-- `plugins`: 설치할 외부 플러그인 목록
-
-새 스킬/플러그인 추가 시 skills.json을 수정하고 `./setup.sh` 재실행.
+`local_skills`: Claude Code에서 symlink할 스킬 목록 (15개).
+OpenClaw은 `~/clawd/skills/` 전체를 스캔하므로 별도 목록 불필요.
+OpenClaw enable/disable은 `setup.sh --openclaw`이 `~/.openclaw/openclaw.json`에 설정.
 
 ## 스킬 포맷
 
-- `<skill-name>/SKILL.md` — 스킬 본문 (Claude Code + OpenClaw 공통)
-- `<skill-name>/.claude-skill` — 스킬 메타데이터
-- `<skill-name>/.claude-plugin/plugin.json` — Claude Code plugin (slash command 필요 시)
-- `<skill-name>/commands/*.md` — Claude Code slash command (필요 시)
+- `<skill-name>/SKILL.md` — 스킬 본문 (공통, 150줄 이내)
+- `<skill-name>/references/` — 상세 문서 (SKILL.md에서 포인터 참조)
+- `<skill-name>/.claude-skill` — Claude Code 메타데이터 (양쪽/CC전용만)
 
-## 포맷 선택 기준
+### SKILL.md frontmatter 필드
 
-| 조건 | 포맷 |
-|------|------|
-| 슬래시 커맨드 불필요 | SKILL.md only |
-| 슬래시 커맨드 필요 + OpenClaw도 사용 | Dual (SKILL.md + plugin.json) |
-| Claude Code 전용 기능 (hooks, agents) | Plugin only |
+| 필드 | 필수 | 설명 |
+|------|------|------|
+| `name` | Y | 스킬 식별자 |
+| `description` | Y | 50자 이내 한줄 설명 (OpenClaw 시스템 프롬프트 주입) |
+| `user-invocable` | N | `false`면 슬래시 커맨드 비노출 (내부 스킬) |
+| `disable-model-invocation` | N | `true`면 모델 프롬프트에서 제외 (cron/수동 전용) |
+| `metadata` | N | OpenClaw 의존성 게이팅 (requires.bins, requires.env) |
 
 ## 새 스킬 추가 절차
 
 1. `<skill-name>/` 디렉토리 생성
-2. `SKILL.md` + `.claude-skill` 작성
-3. slash command 필요 시: `.claude-plugin/plugin.json` + `commands/<name>.md` 추가
-4. `skills.json`의 `local_skills`에 스킬 이름 추가
-5. Plugin 포맷이면: `.claude-plugin/marketplace.json`의 `plugins`에도 추가
+2. `SKILL.md` 작성 (frontmatter + 150줄 이내)
+3. 상세 내용은 `references/`로 분리
+4. Claude Code용이면: `.claude-skill` 추가 + `skills.json`의 `local_skills`에 추가
+5. OpenClaw용이면: `setup.sh`의 `ENABLED_SKILLS`에 추가
 6. `./setup.sh` 실행
-7. 커밋 + push (OpenClaw 원격 서버에 자동 반영)
+7. 커밋 + push
 
-## 외부 플러그인 추가 절차
+## 동기화
 
-1. `skills.json`의 `marketplaces`에 마켓플레이스 추가 (필요 시)
-2. `skills.json`의 `plugins`에 플러그인 추가
-3. `./setup.sh` 실행
-4. 커밋
+- 레포가 source of truth
+- `~/clawd/skills/`는 이 레포의 clone
+- `scripts/sync.py`로 양방향 git sync (OpenClaw PC용)
+- `setup.sh --openclaw`으로 초기 셋업 (clone + enable + cron)
 
 ## scripts/ 규칙
 
@@ -63,3 +104,4 @@
 - cube-claude-skills는 건드리지 않음
 - 이 레포는 개인 범용 스킬만 관리
 - Cube 업무용 스킬은 cube-claude-skills에 유지
+- 네이밍: 하이픈(`-`) 통일 (언더스코어 금지)

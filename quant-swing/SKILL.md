@@ -1,6 +1,6 @@
 ---
 name: quant-swing
-description: Run and critique the "Growth Breakout Momentum Top3" swing strategy (QQQ regime + breakout + top-N momentum + ATR stop + risk sizing) with realistic execution (next-open), slippage stress tests, and walk-forward evaluation. Use to produce a concise daily strategy-aware briefing and to re-run tests when rules change.
+description: Growth Breakout Momentum 스윙 전략 실행/분석
 ---
 
 # Jarvis Quant Swing

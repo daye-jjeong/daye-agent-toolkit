@@ -1,8 +1,8 @@
 # vault-memory:inbox-process
 
-> `~/mingming-vault/+inbox/` 미분류 항목을 스캔하고 적절한 위치로 분류한다.
+> `memory/+inbox/` 미분류 항목을 스캔하고 적절한 위치로 분류한다.
 
-**기록 규격**: `~/mingming-vault/memory/format.md` 참조
+**기록 규격**: `memory/format.md` 참조
 
 ## 트리거
 
@@ -12,7 +12,7 @@
 
 ### 1. 스캔
 
-`~/mingming-vault/+inbox/` 모든 파일을 읽는다.
+`memory/+inbox/` 모든 파일을 읽는다.
 파일명, 내용, frontmatter(있으면) 분석.
 
 ### 2. 분류 제안

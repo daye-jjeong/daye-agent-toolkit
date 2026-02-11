@@ -1,6 +1,8 @@
 ---
 name: taling-auto-monitor
 description: 탈잉 챌린지 자동 감지 (Telegram) → 체크리스트 생성 → Obsidian vault 저장
+disable-model-invocation: true
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Taling Auto Monitor Skill
