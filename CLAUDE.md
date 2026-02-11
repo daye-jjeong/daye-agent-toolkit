@@ -50,7 +50,6 @@
 | quant-swing | 스윙 전략 실행/분석 | |
 | schedule-advisor | 캘린더 브리핑/알림 | |
 | session-manager | 세션 fallback/retry | `user-invocable: false` |
-| taling-auto-monitor | 탈잉 챌린지 자동 모니터 | `disable-model-invocation` |
 | task-manager | 태스크 관리 | |
 | task-policy | 태스크 정책 가드레일 | `user-invocable: false` |
 
