@@ -1,0 +1,10 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "daye-agent-toolkit",
+  "version": "1.0.0",
+  "description": "Daye's personal agent toolkit - general-purpose skills for Claude Code and OpenClaw",
+  "owner": {
+    "name": "Daye Jeong"
+  },
+  "plugins": []
+}
