@@ -59,9 +59,24 @@ AGENTS.md § 2.2에 정의된 활성 모델 목록과, 다른 파일에서 참�
 - 예외: 요약/컨텍스트 제공 목적의 간략한 반복은 허용
 
 ### 5. 프로젝트 구조 정합성 (Project Structure)
-`projects/` 내 폴더들이 올바른 형식(`{type}--{name}/`)이고, 필수 파일(`project.yml`, `tasks.yml`)을 포함하는지 검사.
+`memory/projects/` 내 폴더들이 올바른 형식(`{type}--{name}/`)이고, 필수 파일(`project.yml`, `t-{project}-NNN.md`)을 포함하는지 검사.
 
-### 6. 레거시 참조 (Stale References)
+### 6. Heartbeat/Cron 분리 (Heartbeat-Cron Separation)
+HEARTBEAT.md에 cron으로 분리해야 할 내용이 섞여있는지 검사.
+
+**원칙:** 고립된 상태에서 실행 가능하면 cron, 대화 컨텍스트 필요하면 heartbeat.
+
+**검출 대상:**
+- HEARTBEAT.md에 특정 스크립트의 상세 동작/설정이 기술된 경우 (cron 스크립트가 담당해야 함)
+- HEARTBEAT.md에 모델 fallback 체인, recovery protocol 등 독립 실행 가능한 로직이 포함된 경우
+- HEARTBEAT.md 줄 수 > 120줄 (비대화 경고)
+
+**허용:**
+- `sessions_list`, 메시지 큐 등 대화 컨텍스트 필요한 체크
+- Cron Jobs 참조표 (한 줄짜리 포인터)
+- Silent scan 규칙, 알림 조건, 빈도 설정
+
+### 7. 레거시 참조 (Stale References)
 더 이상 유효하지 않은 구 시스템 참조를 검출.
 
 **검출 대상:**
@@ -133,10 +148,15 @@ stale_patterns:
     exception: "없음"
   - pattern: "notion_uploader"
     context: "yaml_writer로 대체됨"
-  - pattern: "claude-opus-4-6"
-    context: "올바른 이름: claude-opus-4-5"
+  - pattern: "tasks\\.yml"
+    context: "per-task MD로 변경됨 (t-{project}-NNN.md)"
+    exception: "마이그레이션 문서의 레거시 참조"
   - pattern: "gemini-2.5"
     context: "사용 금지 모델"
+  - pattern: "claude-skills"
+    context: "daye-agent-toolkit으로 변경됨"
+  - pattern: "mingming-skills"
+    context: "daye-agent-toolkit으로 변경됨"
 ```
 
 ## 주기적 실행
