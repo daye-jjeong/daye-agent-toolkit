@@ -1,0 +1,6 @@
+{
+  "name": "skill-forge",
+  "version": "1.0.0",
+  "description": "SKILL.md 스킬을 간결하게 생성하고 기존 스킬을 최적화. 컨텍스트 효율적인 스킬 관리.",
+  "entrypoint": "SKILL.md"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "mermaid-diagrams",
+  "version": "1.0.0",
+  "description": "Mermaid 문법으로 소프트웨어 다이어그램 생성 (클래스, 시퀀스, ERD, C4, 플로우차트 등)",
+  "entrypoint": "SKILL.md"
+}

@@ -1,6 +1,10 @@
 {
   "$comment": "daye-agent-toolkit 스킬 매니페스트. setup.sh가 이 파일을 읽어 환경을 구성합니다.",
-  "local_skills": [],
+  "local_skills": [
+    "mermaid-diagrams",
+    "professional-communication",
+    "skill-forge"
+  ],
   "marketplaces": [
     {
       "name": "claude-plugins-official",
