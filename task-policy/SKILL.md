@@ -1,3 +1,8 @@
+---
+name: task-policy
+description: 태스크 생성/실행 정책 가드레일 — pre-work gate, post-work 업로드, 감사 로깅
+---
+
 # Task Policy
 
 태스크 생성, 분류, 실행의 전체 정책과 가드레일을 관리하는 스킬. 하위에 guardrails, triage 서브스킬 포함.

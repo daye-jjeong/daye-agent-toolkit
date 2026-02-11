@@ -1,6 +1,6 @@
 {
   "name": "news-brief",
   "version": "1.0.0",
-  "description": "RSS 뉴스 수집 → 로보틱스/유통 영향 분석 → 텔레그램 브리핑",
+  "description": "키워드 기반 뉴스 브리핑 생성",
   "entrypoint": "SKILL.md"
 }

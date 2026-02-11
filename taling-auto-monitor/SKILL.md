@@ -1,3 +1,8 @@
+---
+name: taling-auto-monitor
+description: 탈잉 챌린지 자동 감지 (Telegram) → 체크리스트 생성 → Obsidian vault 저장
+---
+
 # Taling Auto Monitor Skill
 
 

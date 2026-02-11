@@ -1,6 +1,0 @@
-{
-  "name": "session_manager",
-  "version": "1.0.0",
-  "description": "서브에이전트 세션 자동 fallback/retry — 429 rate limit 대응",
-  "entrypoint": "SKILL.md"
-}

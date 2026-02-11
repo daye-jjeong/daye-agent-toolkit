@@ -1,6 +1,0 @@
-{
-  "name": "doc-lint",
-  "version": "1.0.0",
-  "description": "시스템 .md 파일 정합성 검사 — 중복, 참조 깨짐, 이름 불일치 탐지",
-  "entrypoint": "SKILL.md"
-}

@@ -1,3 +1,8 @@
+---
+name: vault-memory
+description: Obsidian vault 기반 메모리 관리 — 일일/주간 노트, 압축, 보존
+---
+
 # Vault Memory Plugin
 
 > Version: 0.1.0 | Status: Active | Updated: 2026-02-11

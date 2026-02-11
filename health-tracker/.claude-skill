@@ -1,6 +1,6 @@
 {
   "name": "health-tracker",
   "version": "1.0.0",
-  "description": "운동/PT/증상 트래킹 → Obsidian vault 기반 건강 모니터링",
+  "description": "건강 데이터 기록 및 추적 — 운동, 증상, PT 숙제",
   "entrypoint": "SKILL.md"
 }

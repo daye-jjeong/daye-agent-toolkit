@@ -1,6 +1,6 @@
 {
   "name": "pantry-manager",
   "version": "1.0.0",
-  "description": "식재료 관리 자동화 — Notion DB 재고, 유통기한, 쇼핑리스트, 레시피 추천",
+  "description": "식재료 관리 자동화 — 재고, 유통기한, 쇼핑리스트, 레시피 추천",
   "entrypoint": "SKILL.md"
 }

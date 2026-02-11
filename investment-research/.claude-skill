@@ -1,6 +1,6 @@
 {
   "name": "investment-research",
   "version": "1.0.0",
-  "description": "종목/ETF 리서치 워크플로우 — 평가 템플릿 + Deep Research",
+  "description": "투자 종목 리서치 및 분석",
   "entrypoint": "SKILL.md"
 }

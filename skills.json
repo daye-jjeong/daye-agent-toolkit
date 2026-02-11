@@ -2,8 +2,6 @@
   "$comment": "daye-agent-toolkit 스킬 매니페스트. setup.sh가 이 파일을 읽어 환경을 구성합니다.",
   "local_skills": [
     "banksalad-import",
-    "check-integrations",
-    "doc-lint",
     "goal-planner",
     "health-coach",
     "health-tracker",
@@ -12,20 +10,12 @@
     "meal-tracker",
     "mermaid-diagrams",
     "news-brief",
-    "notion",
-    "orchestrator",
     "pantry-manager",
     "professional-communication",
-    "prompt-guard",
-    "quant-swing",
     "saju-manse",
-    "schedule-advisor",
-    "session_manager",
     "skill-forge",
-    "taling-auto-monitor",
     "task-dashboard",
-    "task-manager",
-    "task-policy"
+    "vault-memory"
   ],
   "marketplaces": [
     {
