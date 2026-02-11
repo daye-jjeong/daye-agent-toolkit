@@ -103,7 +103,53 @@ if [ "${1:-}" = "--openclaw" ]; then
   fi
   echo ""
 
-  # 3. cron 자동 pull 설정 (선택)
+  # 3. openclaw.json 스킬 entries 설정
+  echo "── 스킬 enable 설정 ──"
+  OPENCLAW_CONFIG="$HOME/.openclaw/openclaw.json"
+  mkdir -p "$HOME/.openclaw"
+
+  # OpenClaw에서 로드할 스킬 목록 (Claude Code 전용 제외)
+  ENABLED_SKILLS=(
+    banksalad-import check-integrations doc-lint goal-planner
+    health-coach health-tracker investment-report investment-research
+    meal-tracker news-brief notion openclaw-docs orchestrator
+    pantry-manager prompt-guard quant-swing saju-manse
+    schedule-advisor session-manager taling-auto-monitor
+    task-dashboard task-manager task-policy vault-memory
+  )
+
+  # Claude Code 전용 → OpenClaw에서 비활성화
+  DISABLED_SKILLS=(mermaid-diagrams professional-communication skill-forge)
+
+  python3 -c "
+import json, os
+
+config_path = '$OPENCLAW_CONFIG'
+if os.path.exists(config_path):
+    with open(config_path) as f:
+        config = json.load(f)
+else:
+    config = {}
+
+skills = config.setdefault('skills', {})
+entries = skills.setdefault('entries', {})
+
+enabled = '${ENABLED_SKILLS[*]}'.split()
+disabled = '${DISABLED_SKILLS[*]}'.split()
+
+for name in enabled:
+    entries.setdefault(name, {})['enabled'] = True
+for name in disabled:
+    entries.setdefault(name, {})['enabled'] = False
+
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2, ensure_ascii=False)
+
+print(f'✓ enabled: {len(enabled)}개, disabled: {len(disabled)}개')
+"
+  echo ""
+
+  # 4. cron 자동 pull 설정 (선택)
   CRON_CMD="*/30 * * * * cd $SKILLS_TARGET && python3 scripts/sync.py pull >> /tmp/skill-sync.log 2>&1"
 
   echo "── 자동 동기화 ──"
