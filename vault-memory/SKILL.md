@@ -1,19 +1,19 @@
 ---
 name: vault-memory
-description: Obsidian vault 기반 메모리 관리 — 일일/주간 노트, 압축, 보존
+description: Obsidian vault 기반 메모리 관리 — 기록, 압축, 보존, 정책 동기화
 ---
 
 # Vault Memory Plugin
 
-> Version: 0.1.0 | Status: Active | Updated: 2026-02-11
+> Version: 0.2.0 | Status: Active | Updated: 2026-02-11
 
 밍밍 공유 볼트(`memory/`) 기반 메모리 관리 플러그인.
 Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복원, 장기 기억 관리를 수행한다.
 
-## 기록 규격
+## 기록 규칙
 
-**반드시 먼저 읽을 것**: `memory/format.md`
-모든 볼트 쓰기 작업은 format.md 규격을 따른다.
+**파일별 뭘 기록하는지**: [recording-rules.md](recording-rules.md)
+**기록 포맷 규격**: `memory/format.md`
 
 ## 서브커맨드
 
@@ -24,6 +24,7 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 | `vault-memory:compress` | [compress.md](compress.md) | 세션 종료 전 구조화 저장 |
 | `vault-memory:resume` | [resume.md](resume.md) | 이전 세션 컨텍스트 복원 |
 | `vault-memory:preserve` | [preserve.md](preserve.md) | MEMORY.md 영구 저장 |
+| `vault-memory:sync-agents` | [sync-agents.md](sync-agents.md) | 세션 결정 → AGENTS.md 반영 |
 
 ### Daily Operations
 
@@ -34,26 +35,42 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 | `vault-memory:inbox-process` | [inbox-process.md](inbox-process.md) | +inbox/ 정리 |
 | `vault-memory:weekly-review` | [weekly-review.md](weekly-review.md) | 주간 회고 |
 
+### Reference
+
+| 파일 | 설명 |
+|------|------|
+| [recording-rules.md](recording-rules.md) | 파일별 기록 대상/트리거/금지 규칙 |
+
 ## 공유 경로
 
 | 용도 | 경로 |
 |------|------|
-| 기록 규격 | `memory/format.md` |
-| 세션 로그 | `memory/YYYY-MM-DD.md` (flat) |
+| 기록 규칙 | [recording-rules.md](recording-rules.md) |
+| 기록 포맷 | `memory/format.md` |
+| 시스템 정책 | `~/clawd/AGENTS.md` |
 | 장기 기억 | `memory/MEMORY.md` |
+| 세션 로그 | `memory/YYYY-MM-DD.md` (flat) |
+| 목표 | `memory/goals/{daily,weekly,monthly}/` |
+| 설계 문서 | `memory/docs/` |
+| 정책 상세 | `memory/policy/` |
+| 산출물/리서치 | `memory/reports/` |
 | 런타임 상태 | `memory/state/*.json` |
 | 인박스 | `memory/+inbox/` |
-| 일간 목표 | `memory/goals/daily/` |
-| 주간 목표 | `memory/goals/weekly/` |
-| 월간 목표 | `memory/goals/monthly/` |
 
-## 사용법
+## 기록 흐름
 
-**Claude Code**: `/vault-memory:compress` 등 슬래시 커맨드로 호출
-**OpenClaw**: 이 SKILL.md 읽은 후 해당 서브커맨드의 .md 파일을 읽고 따라갈 것
+```
+세션 중 결정 발생
+    │
+    ├─ 일회성? ──────── → 세션 로그 (compress)
+    ├─ 반복 규칙? ────── → AGENTS.md (sync-agents)
+    ├─ 개인 정보/선호? ── → MEMORY.md (preserve)
+    └─ 산출물? ─────── → reports/ 또는 docs/
+```
 
 ## 자동 기록
 
-Claude Code는 `SessionEnd` hook으로 `.jsonl` 트랜스크립트를 자동 파싱하여
-기본 세션 마커(수정 파일, 명령어, 에러)를 `memory/YYYY-MM-DD.md`에 append한다.
-`/vault-memory:compress`는 이 마커를 AI 분석으로 보강(enrich)한다.
+- **SessionEnd hook**: `.jsonl` 파싱 → `memory/YYYY-MM-DD.md`에 세션 마커 append
+- **vault-session-save cron**: 30분마다 메인 세션 대화 자동 기록
+- **compress**: 세션 마커를 AI 분석으로 보강 + 정책성 결정 감지 시 `sync-agents` 제안
+- **compress → preserve 연계**: 장기 보관 가치 발견 시 `preserve` 제안

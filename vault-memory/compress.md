@@ -66,8 +66,14 @@
 - 카테고리별 항목 수
 - Quick Reference 내용
 
-## Preserve 연계
+## 자동 연계
 
+### → AGENTS.md (정책 감지)
+결정사항 중 아래 키워드가 포함되면 `sync-agents` 제안:
+- "항상", "규칙으로", "정책 추가", "매번", "금지", "필수"
+> "이 결정을 AGENTS.md에 반영할까요?" → `/vault-memory:sync-agents` 제안
+
+### → MEMORY.md (장기 보관)
 장기 보관 가치가 있는 결정/배움 발견 시:
 > "이 항목을 MEMORY.md에 영구 저장할까요?" → `/vault-memory:preserve` 제안
 
