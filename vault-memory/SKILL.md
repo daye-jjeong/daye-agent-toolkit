@@ -14,7 +14,7 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 
 **파일별 뭘 기록하는지**: [recording-rules.md](recording-rules.md)
 **기록 포맷 규격**: `memory/format.md`
-**태스크 템플릿**: `memory/projects/config/task-template.yml`
+**태스크 템플릿**: `memory/.obsidian/templates/task-template.md`
 
 ## 서브커맨드
 
@@ -81,8 +81,8 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 ```
 세션 중 작업 발생
     │
-    ├─ 새 태스크? ────── → tasks.yml (task-create, description 필수)
-    ├─ 프로젝트 작업? ── → tasks.yml (task-update) + 세션 로그 (compress)
+    ├─ 새 태스크? ────── → t-*.md (task-create, description 필수)
+    ├─ 프로젝트 작업? ── → t-*.md (task-update) + 세션 로그 (compress)
     ├─ 목표 수립? ────── → goals/*.yml (goal-create, goal-planner가 내용 결정)
     ├─ 일회성 결정? ──── → 세션 로그 (compress)
     ├─ 반복 규칙? ────── → AGENTS.md (sync-agents)
@@ -95,15 +95,15 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 ```
 Claude Code                    memory/projects/          OpenClaw
     │                              │                        │
-    ├── task-update ──────→ tasks.yml ←────── task-update ──┤
+    ├── task-update ──────→ t-*.md ←──────── task-update ──┤
     ├── compress ─────────→ YYYY-MM-DD.md ←── compress ─────┤
     └── resume ←──────────── 활성 태스크 ──────→ resume ─────┘
 ```
 
-- **tasks.yml**이 양쪽의 공유 태스크 보드
-- **progress_log**로 누가 뭘 했는지 추적
-- **repos** 필드로 코드 연결 (repo, branch, PR, commit)
-- **핸드오프**: progress_log에 `[HANDOFF → 플랫폼]` 메모
+- **t-*.md** 개별 파일이 양쪽의 공유 태스크 단위
+- **## 진행 로그**로 누가 뭘 했는지 추적
+- **## 코드 변경**으로 코드 연결 (repo, branch, PR)
+- **핸드오프**: 진행 로그에 `[HANDOFF → 플랫폼]` 메모
 
 ## 스크립트
 
@@ -121,7 +121,7 @@ Claude Code                    memory/projects/          OpenClaw
 
 - **SessionEnd hook** (Claude Code): `.jsonl` 파싱 → `memory/YYYY-MM-DD.md`에 세션 마커 append
 - **vault-session-save cron** (OpenClaw): 30분마다 세션 대화 자동 기록
-- **compress → task-update 연계**: 프로젝트 작업 감지 시 tasks.yml 업데이트 제안
+- **compress → task-update 연계**: 프로젝트 작업 감지 시 t-*.md 업데이트 제안
 - **compress → sync-agents 연계**: 정책성 결정 감지 시 AGENTS.md 반영 제안
 - **compress → preserve 연계**: 장기 보관 가치 발견 시 MEMORY.md 저장 제안
 - **알림**: 태스크 상태 변경 시 텔레그램 알림 (recording-rules.md 참조)

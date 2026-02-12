@@ -153,27 +153,38 @@ def get_stuck_sessions() -> int:
         return 0
 
 
-def get_today_remaining_tasks() -> List[str]:
-    """Get today's remaining tasks from vault tasks.yml files"""
-    try:
-        import yaml
+def _parse_frontmatter(text: str) -> Dict:
+    """Parse YAML frontmatter from markdown text."""
+    if not text.startswith("---"):
+        return {}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    fm = {}
+    for line in parts[1].strip().split("\n"):
+        if ":" in line:
+            key, val = line.split(":", 1)
+            fm[key.strip()] = val.strip().strip("'\"")
+    return fm
 
+
+def get_today_remaining_tasks() -> List[str]:
+    """Get today's remaining tasks from vault t-*.md files"""
+    try:
         today = datetime.now().strftime("%Y-%m-%d")
         remaining = []
 
-        for tasks_file in PROJECTS_DIR.rglob("tasks.yml"):
+        for task_file in PROJECTS_DIR.rglob("t-*.md"):
             try:
-                with open(tasks_file) as f:
-                    data = yaml.safe_load(f) or {}
+                fm = _parse_frontmatter(task_file.read_text(encoding="utf-8"))
             except Exception:
                 continue
 
-            for task in data.get("tasks", []):
-                deadline = str(task.get("deadline", ""))
-                status = task.get("status", "todo")
+            deadline = str(fm.get("deadline", ""))
+            status = fm.get("status", "todo")
 
-                if deadline == today and status not in ("done", "on_hold"):
-                    remaining.append(task.get("title", "(untitled)"))
+            if deadline == today and status not in ("done", "on_hold"):
+                remaining.append(fm.get("title", "(untitled)"))
 
         return remaining[:5]
     except Exception as e:

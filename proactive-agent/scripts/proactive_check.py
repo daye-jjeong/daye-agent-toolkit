@@ -179,31 +179,27 @@ class ProactiveChecker:
             pass
     
     def check_vault_backlog(self) -> None:
-        """Check vault tasks.yml for overdue high-priority tasks"""
+        """Check vault t-*.md for overdue high-priority tasks"""
         try:
-            import yaml
-
             today = datetime.date.today().isoformat()
             overdue_tasks = []
 
-            for tasks_file in PROJECTS_DIR.rglob("tasks.yml"):
+            for task_file in PROJECTS_DIR.rglob("t-*.md"):
                 try:
-                    with open(tasks_file) as f:
-                        data = yaml.safe_load(f) or {}
+                    fm = self._parse_frontmatter(task_file.read_text(encoding="utf-8"))
                 except Exception:
                     continue
 
-                for task in data.get("tasks", []):
-                    priority = task.get("priority", "medium")
-                    status = task.get("status", "todo")
-                    deadline = str(task.get("deadline", ""))
+                priority = fm.get("priority", "medium")
+                status = fm.get("status", "todo")
+                deadline = str(fm.get("deadline", ""))
 
-                    if priority == "high" and status not in ("done", "on_hold") and deadline and deadline < today:
-                        overdue_tasks.append({
-                            "id": task.get("id", ""),
-                            "title": task.get("title", "(untitled)"),
-                            "deadline": deadline,
-                        })
+                if priority == "high" and status not in ("done", "on_hold") and deadline and deadline < today:
+                    overdue_tasks.append({
+                        "id": fm.get("id", ""),
+                        "title": fm.get("title", "(untitled)"),
+                        "deadline": deadline,
+                    })
 
             if overdue_tasks:
                 count = len(overdue_tasks)
@@ -218,6 +214,21 @@ class ProactiveChecker:
                 )
         except Exception as e:
             pass
+
+    @staticmethod
+    def _parse_frontmatter(text: str) -> Dict:
+        """Parse YAML frontmatter from markdown text."""
+        if not text.startswith("---"):
+            return {}
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            return {}
+        fm = {}
+        for line in parts[1].strip().split("\n"):
+            if ":" in line:
+                key, val = line.split(":", 1)
+                fm[key.strip()] = val.strip().strip("'\"")
+        return fm
     
     def check_system_health(self) -> None:
         """Check system issues from recent logs"""

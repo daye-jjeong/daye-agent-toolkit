@@ -53,43 +53,26 @@ def check_cooldown(file_path):
     return False
 
 
-def parse_tasks_yml(file_path):
-    """Parse tasks.yml with simple line-by-line parsing (no PyYAML)."""
+def parse_task_md(file_path):
+    """Parse t-*.md frontmatter (stdlib only)."""
     try:
-        with open(file_path, 'r') as f:
-            lines = f.readlines()
+        with open(file_path, 'r', encoding='utf-8') as f:
+            text = f.read()
     except FileNotFoundError:
-        return []
+        return {}
 
-    tasks = []
-    current = None
+    if not text.startswith("---"):
+        return {}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}
 
-    for line in lines:
-        stripped = line.rstrip()
-
-        # New task entry: "  - id: t-xxx-nnn"
-        m = re.match(r'^\s+-\s+id:\s+(.+)', stripped)
-        if m:
-            if current:
-                tasks.append(current)
-            current = {'id': m.group(1).strip()}
-            continue
-
-        if current is None:
-            continue
-
-        # Key-value pairs within a task
-        m = re.match(r'^\s{4,}(\w+):\s+(.+)', stripped)
-        if m:
-            key, val = m.group(1).strip(), m.group(2).strip()
-            if key in ('title', 'status', 'priority', 'owner', 'completed'):
-                # Remove quotes
-                current[key] = val.strip('"').strip("'")
-
-    if current:
-        tasks.append(current)
-
-    return tasks
+    fm = {}
+    for line in parts[1].strip().split("\n"):
+        if ":" in line:
+            key, val = line.split(":", 1)
+            fm[key.strip()] = val.strip().strip("'\"")
+    return fm
 
 
 def parse_project_yml(file_path):
@@ -109,48 +92,38 @@ def parse_project_yml(file_path):
 
 
 def detect_project(file_path):
+    """Detect project name from file path (e.g., 'work/ronik')."""
     path = Path(file_path)
-    for parent in path.parents:
-        if parent.parent == PROJECTS_DIR:
-            return parent.name
+    try:
+        rel = path.relative_to(PROJECTS_DIR)
+        # rel is like work/ronik/t-ronik-001.md → take first 2 parts
+        parts = rel.parts
+        if len(parts) >= 2:
+            return f"{parts[0]}/{parts[1]}"
+    except ValueError:
+        pass
     return None
 
 
-def build_summary(file_path, tasks_or_data):
+def build_summary(file_path, data):
     project = detect_project(file_path)
     if not project:
         return None
 
     filename = Path(file_path).name
-    today = datetime.now(KST).strftime('%Y-%m-%d')
 
-    if filename == 'tasks.yml' and isinstance(tasks_or_data, list):
-        tasks = tasks_or_data
-        in_progress = [t for t in tasks if t.get('status') == 'in_progress']
-        done_today = [t for t in tasks if t.get('status') == 'done' and t.get('completed') == today]
+    if filename.startswith('t-') and filename.endswith('.md') and isinstance(data, dict):
+        task_id = data.get('id', filename)
+        title = data.get('title', '?')
+        status = data.get('status', '?')
 
-        lines = [f"📋 {project} tasks.yml 변경됨"]
+        icon = {'done': '✅', 'in_progress': '🔄', 'blocked': '🚫'}.get(status, '📋')
+        return f"{icon} {project}/{task_id}: {title} ({status})"
 
-        for t in done_today:
-            lines.append(f"  ✅ {t.get('id', '?')}: {t.get('title', '?')} 완료")
-
-        for t in in_progress:
-            lines.append(f"  🔄 {t.get('id', '?')}: {t.get('title', '?')}")
-
-        if len(lines) == 1:
-            # No in_progress or done_today, just note the change
-            total = len(tasks)
-            lines.append(f"  총 {total}개 태스크")
-
-        return '\n'.join(lines)
-
-    if filename == 'project.yml' and isinstance(tasks_or_data, dict):
-        name = tasks_or_data.get('name', project)
-        status = tasks_or_data.get('status', '?')
+    if filename == '_project.md' and isinstance(data, dict):
+        name = data.get('name', project)
+        status = data.get('status', '?')
         return f"📋 {name} 프로젝트 설정 변경됨 (status: {status})"
-
-    if filename.startswith('t-') and filename.endswith('.md'):
-        return f"📋 {project}/{filename} 태스크 파일 변경됨"
 
     return None
 
@@ -211,7 +184,8 @@ def main():
     # Only process task-related files in projects/
     if 'projects/' not in file_path:
         sys.exit(0)
-    if not any(x in file_path for x in ['tasks.yml', 'project.yml', '/t-']):
+    filename = Path(file_path).name
+    if not (filename.startswith('t-') and filename.endswith('.md')) and filename != '_project.md':
         sys.exit(0)
 
     # Cooldown check
@@ -219,13 +193,12 @@ def main():
         sys.exit(0)
 
     # Parse
-    filename = Path(file_path).name
-    if filename == 'tasks.yml':
-        data = parse_tasks_yml(file_path)
-    elif filename == 'project.yml':
+    if filename.startswith('t-') and filename.endswith('.md'):
+        data = parse_task_md(file_path)
+    elif filename == '_project.md':
         data = parse_project_yml(file_path)
     else:
-        data = filename  # t-*.md — just pass filename
+        data = {}
 
     if not data:
         sys.exit(0)

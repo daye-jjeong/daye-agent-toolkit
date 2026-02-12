@@ -141,6 +141,21 @@ def get_daily_goals_file(date: datetime) -> Path:
     return GOALS_ROOT / "daily" / f"{date.strftime('%Y-%m-%d')}.yml"
 
 
+def parse_task_frontmatter(text: str) -> Dict[str, Any]:
+    """Parse YAML frontmatter from t-*.md file."""
+    if not text.startswith("---"):
+        return {}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    fm: Dict[str, Any] = {}
+    for line in parts[1].strip().split("\n"):
+        if ":" in line:
+            key, val = line.split(":", 1)
+            fm[key.strip()] = val.strip().strip("'\"")
+    return fm
+
+
 def find_deadline_tasks(date: datetime) -> List[Dict[str, Any]]:
     """Find all tasks with deadline on given date."""
     tasks = []
@@ -150,24 +165,16 @@ def find_deadline_tasks(date: datetime) -> List[Dict[str, Any]]:
 
     target_date_str = date.strftime("%Y-%m-%d")
 
-    # Iterate through all project directories
-    for project_dir in PROJECTS_ROOT.iterdir():
-        if not project_dir.is_dir() or project_dir.name.startswith("_"):
+    for task_file in PROJECTS_ROOT.rglob("t-*.md"):
+        try:
+            fm = parse_task_frontmatter(task_file.read_text(encoding="utf-8"))
+        except Exception:
             continue
 
-        tasks_file = project_dir / "tasks.yml"
-        if not tasks_file.exists():
-            continue
-
-        project_data = load_yaml_file(tasks_file)
-        if not project_data or "tasks" not in project_data:
-            continue
-
-        for task in project_data["tasks"]:
-            deadline = task.get("deadline", "")
-            if deadline and str(deadline) == target_date_str:
-                task["project_name"] = project_dir.name
-                tasks.append(task)
+        deadline = str(fm.get("deadline", ""))
+        if deadline == target_date_str:
+            fm["project_name"] = task_file.parent.name
+            tasks.append(fm)
 
     return tasks
 
