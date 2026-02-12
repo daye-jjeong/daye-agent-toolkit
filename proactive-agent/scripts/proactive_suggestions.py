@@ -28,8 +28,7 @@ from typing import Dict, List, Tuple
 # Configuration
 WORKSPACE = Path("/Users/dayejeong/clawd")
 STATE_FILE = WORKSPACE / "memory" / "proactive-suggestions-state.json"
-NOTION_API_KEY = Path.home() / ".config" / "notion" / "api_key_daye_personal"
-TASKS_DB_ID = "8e0e8902-0c60-4438-8bbf-abe10d474b9b"
+PROJECTS_DIR = WORKSPACE / "memory" / "projects"
 
 # Limits
 MAX_DAILY_SENDS = 10
@@ -155,62 +154,30 @@ def get_stuck_sessions() -> int:
 
 
 def get_today_remaining_tasks() -> List[str]:
-    """Get today's remaining tasks from Notion"""
+    """Get today's remaining tasks from vault tasks.yml files"""
     try:
-        if not NOTION_API_KEY.exists():
-            return []
-        
-        with open(NOTION_API_KEY) as f:
-            api_key = f.read().strip()
-        
-        import requests
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Notion-Version": "2022-06-28",
-            "Content-Type": "application/json"
-        }
-        
+        import yaml
+
         today = datetime.now().strftime("%Y-%m-%d")
-        
-        payload = {
-            "filter": {
-                "and": [
-                    {
-                        "property": "Due",
-                        "date": {"equals": today}
-                    },
-                    {
-                        "property": "Status",
-                        "status": {"does_not_equal": "Done"}
-                    }
-                ]
-            },
-            "page_size": 5
-        }
-        
-        resp = requests.post(
-            f"https://api.notion.com/v1/databases/{TASKS_DB_ID}/query",
-            headers=headers,
-            json=payload,
-            timeout=10
-        )
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            results = data.get("results", [])
-            
-            tasks = []
-            for r in results:
-                title_prop = r.get("properties", {}).get("Name", {})
-                title = title_prop.get("title", [{}])[0].get("plain_text", "Untitled")
-                tasks.append(title)
-            
-            return tasks[:3]
-        
-        return []
+        remaining = []
+
+        for tasks_file in PROJECTS_DIR.rglob("tasks.yml"):
+            try:
+                with open(tasks_file) as f:
+                    data = yaml.safe_load(f) or {}
+            except Exception:
+                continue
+
+            for task in data.get("tasks", []):
+                deadline = str(task.get("deadline", ""))
+                status = task.get("status", "todo")
+
+                if deadline == today and status not in ("done", "on_hold"):
+                    remaining.append(task.get("title", "(untitled)"))
+
+        return remaining[:5]
     except Exception as e:
-        log(f"⚠️ Failed to get Notion tasks: {e}")
+        log(f"⚠️ Failed to get vault tasks: {e}")
         return []
 
 

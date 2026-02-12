@@ -31,8 +31,17 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 
 | 커맨드 | 파일 | 설명 |
 |--------|------|------|
-| `vault-memory:task-update` | [task-update.md](task-update.md) | 태스크 시작/진행/완료 + progress_log + repos |
+| `vault-memory:task-create` | [task-create.md](task-create.md) | 태스크 생성 (description 필수) |
+| `vault-memory:task-update` | [task-update.md](task-update.md) | 태스크 수정 (status, progress, enrich) |
 | `vault-memory:task-brief` | [task-brief.md](task-brief.md) | 프로젝트/태스크 현황 브리핑 |
+
+### Goals
+
+| 커맨드 | 파일 | 설명 |
+|--------|------|------|
+| `vault-memory:goal-create` | [goal-create.md](goal-create.md) | 목표 YAML 생성 (monthly/weekly/daily) |
+| `vault-memory:goal-update` | [goal-update.md](goal-update.md) | 목표 진행률/회고/상태 업데이트 |
+| `vault-memory:goal-brief` | [goal-brief.md](goal-brief.md) | 목표 현황 브리핑 + 태스크 크로스 참조 |
 
 ### Daily Operations
 
@@ -72,7 +81,9 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 ```
 세션 중 작업 발생
     │
+    ├─ 새 태스크? ────── → tasks.yml (task-create, description 필수)
     ├─ 프로젝트 작업? ── → tasks.yml (task-update) + 세션 로그 (compress)
+    ├─ 목표 수립? ────── → goals/*.yml (goal-create, goal-planner가 내용 결정)
     ├─ 일회성 결정? ──── → 세션 로그 (compress)
     ├─ 반복 규칙? ────── → AGENTS.md (sync-agents)
     ├─ 개인 정보/선호? ── → MEMORY.md (preserve)

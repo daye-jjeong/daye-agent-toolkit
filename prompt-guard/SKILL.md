@@ -110,6 +110,8 @@ python3 skills/prompt-guard/guard.py --dry-run --message "test"
 
 | 파일 | 용도 | 티어 |
 |------|------|------|
+| `guard.py` | 메인 프롬프트 가드 엔진 (패턴 매칭 + 판정) | Tier 1 |
+| `test_guard.py` | 가드 유닛 테스트 | Tier 1 |
 | `scripts/prompt_guard_scan.py` | 인바운드 메시지 패턴 매칭 스캐너 (CLI) | Tier 1 |
 | `scripts/guard_prompt_injection.sh` | 프롬프트 가드 셸 래퍼 | Tier 1 |
 

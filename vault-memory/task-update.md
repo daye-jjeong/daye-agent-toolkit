@@ -10,6 +10,7 @@
 - "태스크 시작", "t-xxx-nnn 시작", "작업 시작"
 - "태스크 완료", "t-xxx-nnn 끝", "작업 완료"
 - "진행 기록", "progress 업데이트"
+- "태스크 정의 채워줘", "description 채워", "태스크 내용 보강"
 - compress 중 프로젝트 작업 감지 시 자동 제안
 
 ## 워크플로우
@@ -33,6 +34,7 @@
 | **완료** | 태스크 완료 | status → done, completed 날짜 |
 | **차단** | 블로커 기록 | status → blocked, progress_log에 사유 |
 | **핸드오프** | 다른 플랫폼에 인수인계 | progress_log에 handoff 메모 |
+| **정의(enrich)** | 태스크 내용 보강 | description, tags, links, linked_goals 채우기 |
 
 ### 3. 정보 수집
 
@@ -134,6 +136,44 @@ progress_log:
 ```
 
 받는 쪽은 `vault-memory:resume` 또는 `task-brief`로 컨텍스트 확인.
+
+## 정의(enrich) 워크플로우
+
+description이 비어 있는 태스크에 내용을 채우는 작업.
+
+### 트리거
+- "태스크 정의 채워줘" / "description 채워" / "태스크 내용 보강"
+- task-brief 시 description 누락 태스크 감지 → 자동 제안
+
+### 채울 필드
+
+| 필드 | 필수 | 설명 |
+|------|------|------|
+| `description` | Y | 이 태스크가 **무엇을 왜 하는지** 1-3줄. 완료 기준 포함 |
+| `tags` | N | 분류 태그 (feature, bugfix, maintenance, research, infra) |
+| `links` | N | 관련 문서/URL |
+| `linked_goals` | N | 연결된 목표 (goals/ 파일의 `[[위키링크]]`) |
+
+### description 작성 규칙
+
+```yaml
+description: |
+  [무엇을] 현재 수동 캘리브레이션 프로세스를 분석하고 AI 봇 자동화 시나리오를 설계한다.
+  [왜] 로닉 캘리 작업이 반복적이고 시간 소모가 크기 때문.
+  [완료 기준] as-is 문서 + to-be 시나리오 3가지 + 입출력 포맷 정의 완료.
+```
+
+- **무엇을**: 구체적 행동 (동사로 시작)
+- **왜**: 이 태스크의 배경/필요성
+- **완료 기준**: 어떻게 되면 "끝"인지
+
+### 배치 enrich
+
+여러 태스크를 한 번에 채울 때:
+1. 프로젝트 지정 또는 전체 스캔
+2. description 없는 태스크 목록 출력
+3. 각 태스크에 대해 title + subtasks + 프로젝트 컨텍스트로 description 초안 생성
+4. 사용자 확인 후 tasks.yml 업데이트
 
 ## 주의사항
 

@@ -10,12 +10,12 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 프로젝트별 태스크 파일(t-{project}-NNN.md)과 goals YAML을 결합하여 인터랙티브 HTML 대시보드를 생성합니다.
 
 ## Version
-0.3.0
+0.4.0
 
 ## Usage
 
 ```bash
-python generate_dashboard_v2.py
+python3 {baseDir}/generate_dashboard_v3.py
 ```
 
 ### Configuration

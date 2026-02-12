@@ -84,6 +84,7 @@ Hybrid pipeline: deterministic data fetch (0 tokens) + LLM analysis (200-400 tok
 
 | 파일 | 용도 | 티어 |
 |------|------|------|
+| `schedule_advisor.py` | 일정 분석 + 브리핑/알림 생성 (LLM 파이프라인) | Tier 2 |
 | `scripts/fetch_schedule.py` | Google/iCloud 캘린더 데이터 fetch (JSON 출력) | Tier 1 |
 | `scripts/daily_brief.py` | 일일 일정 텔레그램 브리핑 | Tier 1 |
 

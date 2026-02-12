@@ -114,12 +114,12 @@ if [ "${1:-}" = "--openclaw" ]; then
     health-coach health-tracker investment-report investment-research
     meal-tracker news-brief notion openclaw-docs orchestrator
     pantry-manager prompt-guard quant-swing saju-manse
-    schedule-advisor session-manager taling-auto-monitor
+    schedule-advisor session-manager skill-forge taling-auto-monitor
     task-dashboard task-manager task-policy vault-memory
   )
 
   # Claude Code 전용 → OpenClaw에서 비활성화
-  DISABLED_SKILLS=(mermaid-diagrams professional-communication skill-forge)
+  DISABLED_SKILLS=(mermaid-diagrams professional-communication)
 
   python3 -c "
 import json, os

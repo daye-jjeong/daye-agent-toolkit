@@ -44,6 +44,7 @@ Python3만 필요. 별도 API 키 불필요.
 | `shopping_list.py` | 장보기 목록 생성 |
 | `recipe_suggest.py` | 레시피 추천 |
 | `parse_receipt.py` | 영수증 이미지 파싱 |
+| `weekly_check.py` | 주간 냉장고 정리 체크 + 알림 |
 
 **상세 (명령어 예시, 크론 설정)**: `{baseDir}/references/usage-examples.md` 참고
 

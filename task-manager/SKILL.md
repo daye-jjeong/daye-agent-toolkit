@@ -148,6 +148,11 @@ Edit `skills/task-manager/index.js`:
 
 | 파일 | 용도 | 티어 |
 |------|------|------|
+| `index.js` | 태스크 큐 확인 + 모델 선택 + 실행 권장 JSON 출력 | Tier 1 |
+| `process-task.js` | 태스크 큐에서 처리 완료 항목 제거 | Tier 1 |
+| `task_manager.py` | Python 기반 태스크 큐 관리 유틸리티 | Tier 1 |
+| `add-task.sh` | 셸에서 태스크 큐에 항목 추가 | Tier 1 |
+| `check-and-spawn.sh` | 큐 확인 + 서브에이전트 자동 스폰 | Tier 1 |
 | `scripts/notify_task_change.py` | Obsidian Shell Commands 연동 — tasks.yml/project.yml 변경 시 Telegram 알림 | Tier 1 |
 
 ## Monitoring

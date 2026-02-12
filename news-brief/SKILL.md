@@ -62,7 +62,7 @@ python news_brief.py --feeds rss_feeds.txt --keywords keywords.txt --max-items 1
 |--------|---------|----------|
 | `news_brief.py` | RSS fetch + dedup + filter | `--feeds`, `--keywords`, `--max-items`, `--dedupe-threshold` |
 | `analyzer.py` | LLM impact analysis + formatting | stdin JSON |
-| `ai_trends_ingest.py` | AI 트렌드 Notion DB 적재 + 브리핑 페이지 생성 | stdin JSON |
+| `ai_trends_ingest.py` | AI 트렌드 vault 적재 (`memory/reports/ai-trends/`) | stdin JSON |
 
 ## References (AI Trends Team)
 

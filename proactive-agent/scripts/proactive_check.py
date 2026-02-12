@@ -23,8 +23,7 @@ WORKSPACE = Path("/Users/dayejeong/clawd")
 QUEUE_FILE = WORKSPACE / "memory" / "proactive-queue.md"
 STATE_FILE = WORKSPACE / "memory" / "proactive-state.json"
 LOCK_FILE = WORKSPACE / "memory" / "proactive-check.lock"
-NOTION_API_KEY = Path.home() / ".config" / "notion" / "api_key_daye_personal"
-TASKS_DB_ID = "8e0e8902-0c60-4438-8bbf-abe10d474b9b"
+PROJECTS_DIR = WORKSPACE / "memory" / "projects"
 
 # Telegram config (JARVIS HQ group)
 TELEGRAM_GROUP = "-1003242721592"
@@ -179,74 +178,44 @@ class ProactiveChecker:
             # Silent failure - don't disrupt background process
             pass
     
-    def check_notion_backlog(self) -> None:
-        """Check Notion for overdue P0/P1 tasks"""
+    def check_vault_backlog(self) -> None:
+        """Check vault tasks.yml for overdue high-priority tasks"""
         try:
-            if not NOTION_API_KEY.exists():
-                return
-            
-            with open(NOTION_API_KEY) as f:
-                api_key = f.read().strip()
-            
-            # Query Notion Tasks DB for P0/P1 overdue tasks
-            import requests
-            
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Notion-Version": "2022-06-28",
-                "Content-Type": "application/json"
-            }
-            
-            # Filter: Priority=P0 OR P1, Status!=Done, Due < today
+            import yaml
+
             today = datetime.date.today().isoformat()
-            
-            payload = {
-                "filter": {
-                    "and": [
-                        {
-                            "or": [
-                                {"property": "Priority", "select": {"equals": "P0"}},
-                                {"property": "Priority", "select": {"equals": "P1"}}
-                            ]
-                        },
-                        {
-                            "property": "Status",
-                            "status": {
-                                "does_not_equal": "Done"
-                            }
-                        },
-                        {
-                            "property": "Due",
-                            "date": {
-                                "before": today
-                            }
-                        }
-                    ]
-                }
-            }
-            
-            resp = requests.post(
-                f"https://api.notion.com/v1/databases/{TASKS_DB_ID}/query",
-                headers=headers,
-                json=payload,
-                timeout=10
-            )
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                results = data.get("results", [])
-                
-                if results:
-                    count = len(results)
-                    # Higher score for P0 overdue
-                    score = 85 if any(r.get("properties", {}).get("Priority", {}).get("select", {}).get("name") == "P0" for r in results) else 65
-                    
-                    self.log_finding(
-                        "backlog",
-                        f"밀린 중요 작업 {count}개 발견",
-                        score,
-                        {"count": count, "tasks": [r.get("url") for r in results[:3]]}
-                    )
+            overdue_tasks = []
+
+            for tasks_file in PROJECTS_DIR.rglob("tasks.yml"):
+                try:
+                    with open(tasks_file) as f:
+                        data = yaml.safe_load(f) or {}
+                except Exception:
+                    continue
+
+                for task in data.get("tasks", []):
+                    priority = task.get("priority", "medium")
+                    status = task.get("status", "todo")
+                    deadline = str(task.get("deadline", ""))
+
+                    if priority == "high" and status not in ("done", "on_hold") and deadline and deadline < today:
+                        overdue_tasks.append({
+                            "id": task.get("id", ""),
+                            "title": task.get("title", "(untitled)"),
+                            "deadline": deadline,
+                        })
+
+            if overdue_tasks:
+                count = len(overdue_tasks)
+                score = 85 if count >= 3 else 65
+                task_names = [t["title"] for t in overdue_tasks[:3]]
+
+                self.log_finding(
+                    "backlog",
+                    f"밀린 중요 작업 {count}개 발견: {', '.join(task_names)}",
+                    score,
+                    {"count": count, "tasks": [t["id"] for t in overdue_tasks[:5]]}
+                )
         except Exception as e:
             pass
     
@@ -428,7 +397,7 @@ class ProactiveChecker:
         """Main check routine"""
         # Run all checks
         self.check_calendar_deadlines()
-        self.check_notion_backlog()
+        self.check_vault_backlog()
         self.check_system_health()
         self.check_unread_notes()
         

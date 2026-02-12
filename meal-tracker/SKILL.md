@@ -148,6 +148,17 @@ crontab -l | grep meal
 python3 {baseDir}/scripts/meal_reminder.py breakfast
 ```
 
+## 스크립트
+
+| 파일 | 용도 |
+|------|------|
+| `scripts/log_meal.py` | 식사 기록 CLI |
+| `scripts/daily_summary.py` | 일일 영양 요약 |
+| `scripts/meal_reminder.py` | 식사 시간 알림 |
+| `scripts/meals_io.py` | Vault 기반 식사 I/O 모듈 (공통) |
+| `scripts/setup_cron.sh` | 크론 자동 설정 |
+| `scripts/test.sh` | 스크립트 통합 테스트 |
+
 ## 팁
 
 1. **거르지 말기:** 입맛 없어도 조금이라도 먹기 (Health Coach 조언 참고)

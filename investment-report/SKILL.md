@@ -68,3 +68,4 @@ Example sections:
 |------|------|------|
 | `scripts/portfolio_report.py` | 뱅샐현황 시트 파싱 → JSON 요약 생성 | Tier 1 |
 | `scripts/render_report.py` | JSON → 텔레그램 메시지 렌더링 | Tier 1 |
+| `scripts/toss_parse_snapshot.py` | 토스증권 스냅샷 파싱 (일별 비교용) | Tier 1 |
