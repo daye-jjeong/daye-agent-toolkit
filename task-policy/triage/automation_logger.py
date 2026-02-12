@@ -2,7 +2,7 @@
 """
 Automation Logger - Record cron/automation execution to Obsidian vault.
 Ensures all automated work leaves a trace.
-Storage: ~/clawd/memory/projects/ + ~/.clawdbot/guardrails/automation.jsonl
+Storage: ~/openclaw/vault/projects/ + ~/.clawdbot/guardrails/automation.jsonl
 """
 
 import json
@@ -75,7 +75,7 @@ def log_automation_run(
         with open(AUTOMATION_LOG, "a") as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
-        # 2. Append to vault daily log (optional: ~/clawd/memory/projects/goals/daily/)
+        # 2. Append to vault daily log (optional: ~/openclaw/vault/projects/goals/daily/)
         daily_log_dir = PROJECTS_DIR / "goals" / "daily"
         daily_log_file = daily_log_dir / f"{today()}.md"
 

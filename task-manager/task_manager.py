@@ -2,7 +2,7 @@
 """
 Task Manager - Vault 기반 태스크 CRUD
 
-Obsidian vault (~/clawd/memory/projects/) 에 태스크를 생성/업데이트/완료.
+Obsidian vault (~/openclaw/vault/projects/) 에 태스크를 생성/업데이트/완료.
 Notion API 의존성 없음. stdlib만 사용.
 
 Commands:
@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Vault paths
-VAULT_DIR = Path(os.environ.get("TASK_VAULT", "~/clawd/memory")).expanduser()
+VAULT_DIR = Path(os.environ.get("TASK_VAULT", "~/openclaw/vault")).expanduser()
 PROJECTS_DIR = VAULT_DIR / "projects"
 
 

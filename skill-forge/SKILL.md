@@ -1,6 +1,6 @@
 ---
 name: skill-forge
-description: SKILL.md 스킬을 간결하게 생성하고 기존 스킬을 최적화합니다. 새 스킬 만들기, 긴 SKILL.md 리팩터링, 스킬 감사에 사용하세요.
+description: SKILL.md 생성/최적화/감사 도구
 argument-hint: "create <name>" 또는 "optimize <skill-path>" 또는 "audit"
 ---
 

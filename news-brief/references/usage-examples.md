@@ -3,12 +3,12 @@
 ## Basic invocation
 
 ```bash
-/Users/dayejeong/clawd/.venv/bin/python \
-  /Users/dayejeong/clawd/skills/news-brief/scripts/news_brief.py \
-  --feeds /Users/dayejeong/clawd/skills/news-brief/references/rss_feeds.txt \
-  --keywords /Users/dayejeong/clawd/skills/news-brief/references/keywords.txt \
+/Users/dayejeong/openclaw/.venv/bin/python \
+  /Users/dayejeong/openclaw/skills/news-brief/scripts/news_brief.py \
+  --feeds /Users/dayejeong/openclaw/skills/news-brief/references/rss_feeds.txt \
+  --keywords /Users/dayejeong/openclaw/skills/news-brief/references/keywords.txt \
   --max-items 15 \
-| /Users/dayejeong/clawd/skills/news-brief/scripts/analyzer.py
+| /Users/dayejeong/openclaw/skills/news-brief/scripts/analyzer.py
 ```
 
 ## With Telegram send (for cron)
@@ -20,13 +20,13 @@
 ## Full cron command
 
 ```bash
-0 9 * * * cd ~/clawd && \
-  /Users/dayejeong/clawd/.venv/bin/python \
-    /Users/dayejeong/clawd/skills/news-brief/scripts/news_brief.py \
-    --feeds /Users/dayejeong/clawd/skills/news-brief/references/rss_feeds.txt \
-    --keywords /Users/dayejeong/clawd/skills/news-brief/references/keywords.txt \
+0 9 * * * cd ~/openclaw && \
+  /Users/dayejeong/openclaw/.venv/bin/python \
+    /Users/dayejeong/openclaw/skills/news-brief/scripts/news_brief.py \
+    --feeds /Users/dayejeong/openclaw/skills/news-brief/references/rss_feeds.txt \
+    --keywords /Users/dayejeong/openclaw/skills/news-brief/references/keywords.txt \
     --max-items 15 \
-  | /Users/dayejeong/clawd/skills/news-brief/scripts/analyzer.py \
+  | /Users/dayejeong/openclaw/skills/news-brief/scripts/analyzer.py \
   | /opt/homebrew/bin/clawdbot message send -t -1003242721592 --thread-id 171 \
   >> /tmp/news_brief.log 2>&1
 ```
@@ -35,21 +35,21 @@
 
 ```bash
 # Test RSS fetch + dedup
-python /Users/dayejeong/clawd/skills/news-brief/scripts/news_brief.py \
-  --feeds /Users/dayejeong/clawd/skills/news-brief/references/rss_feeds.txt \
-  --keywords /Users/dayejeong/clawd/skills/news-brief/references/keywords.txt \
+python /Users/dayejeong/openclaw/skills/news-brief/scripts/news_brief.py \
+  --feeds /Users/dayejeong/openclaw/skills/news-brief/references/rss_feeds.txt \
+  --keywords /Users/dayejeong/openclaw/skills/news-brief/references/keywords.txt \
   --max-items 5 > /tmp/test_news.json
 
 # Verify JSON structure
 cat /tmp/test_news.json | jq '.'
 
 # Test analyzer (stub mode)
-cat /tmp/test_news.json | python /Users/dayejeong/clawd/skills/news-brief/scripts/analyzer.py
+cat /tmp/test_news.json | python /Users/dayejeong/openclaw/skills/news-brief/scripts/analyzer.py
 
 # Test full pipeline
-python /Users/dayejeong/clawd/skills/news-brief/scripts/news_brief.py \
-  --feeds /Users/dayejeong/clawd/skills/news-brief/references/rss_feeds.txt \
-  --keywords /Users/dayejeong/clawd/skills/news-brief/references/keywords.txt \
+python /Users/dayejeong/openclaw/skills/news-brief/scripts/news_brief.py \
+  --feeds /Users/dayejeong/openclaw/skills/news-brief/references/rss_feeds.txt \
+  --keywords /Users/dayejeong/openclaw/skills/news-brief/references/keywords.txt \
   --max-items 5 \
-| python /Users/dayejeong/clawd/skills/news-brief/scripts/analyzer.py
+| python /Users/dayejeong/openclaw/skills/news-brief/scripts/analyzer.py
 ```

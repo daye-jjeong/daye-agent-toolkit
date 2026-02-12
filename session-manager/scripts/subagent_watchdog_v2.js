@@ -29,7 +29,7 @@ const { execSync } = require('child_process');
 
 // Configuration
 const CONFIG = {
-  STATE_FILE: path.join(__dirname, '../memory/subagent-watchdog-state.json'),
+  STATE_FILE: path.join(__dirname, '../vault/state/subagent-watchdog-state.json'),
   SESSIONS_DIR: path.join(process.env.HOME, '.clawdbot/agents/main/sessions'),
   GATEWAY_PID_FILE: '/tmp/clawdbot-gateway.pid',
   STUCK_THRESHOLD_MS: 10 * 60 * 1000, // 10분

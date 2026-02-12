@@ -1,6 +1,6 @@
 #!/bin/bash
 # OpenClaw Status Deep Check - 주기적 시스템 종합 진단
-# Cron: */15 9-22 * * * /Users/dayejeong/clawd/skills/model-health-orchestrator/scripts/status_deep_check.sh
+# Cron: */15 9-22 * * * /Users/dayejeong/openclaw/skills/model-health-orchestrator/scripts/status_deep_check.sh
 #
 # - openclaw status --deep 실행
 # - critical/warn 파싱
@@ -9,7 +9,7 @@
 # - --force: quiet hours 무시
 
 LOG_FILE="/tmp/status_deep_check.log"
-STATE_FILE="$HOME/clawd/memory/state/status_deep.json"
+STATE_FILE="$HOME/openclaw/vault/state/status_deep.json"
 TELEGRAM_GROUP_ID="-1003242721592"
 
 log() {

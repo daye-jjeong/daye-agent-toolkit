@@ -28,9 +28,9 @@ from datetime import datetime, date, timedelta
 from typing import Dict, List, Tuple
 
 # Configuration
-WORKSPACE = Path("/Users/dayejeong/clawd")
-STATE_FILE = WORKSPACE / "memory" / "proactive-suggestions-state.json"
-PROJECTS_DIR = WORKSPACE / "memory" / "projects"
+WORKSPACE = Path("/Users/dayejeong/openclaw")
+STATE_FILE = WORKSPACE / "vault" / "state" / "proactive-suggestions-state.json"
+PROJECTS_DIR = WORKSPACE / "vault" / "projects"
 
 # Limits
 MAX_DAILY_SENDS = 10

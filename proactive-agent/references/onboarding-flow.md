@@ -1,6 +1,6 @@
 # Onboarding Flow Reference
 
-> clawd에서는 USER.md를 직접 관리하므로 이 플로우는 참조용.
+> openclaw에서는 USER.md를 직접 관리하므로 이 플로우는 참조용.
 > 새 사용자/에이전트 셋업 시 참고할 수 있음.
 
 ## 모드

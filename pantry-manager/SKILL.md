@@ -55,8 +55,8 @@ Python3만 필요. 별도 API 키 불필요.
 
 ## Data Storage
 
-- **Vault:** `~/clawd/memory/pantry/items/` (각 식재료 = 개별 .md, YAML frontmatter)
-- **환경변수:** `PANTRY_VAULT` (기본값: `~/clawd/memory`)
+- **Vault:** `~/openclaw/vault/pantry/items/` (각 식재료 = 개별 .md, YAML frontmatter)
+- **환경변수:** `PANTRY_VAULT` (기본값: `~/openclaw/vault`)
 - **로컬 캐시:** `~/.cache/pantry-manager/` (임시 리포트, 이미지 파싱 결과)
 
 ## Frontmatter Schema

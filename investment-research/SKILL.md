@@ -54,11 +54,11 @@ Output constraints:
 - Keep “interpretation” to a short final section
 
 ### 5) 결과 저장 (Obsidian vault)
-결과물은 `~/clawd/memory/reports/investment/` 에 마크다운으로 저장.
+결과물은 `~/openclaw/vault/reports/investment/` 에 마크다운으로 저장.
 
 **저장 위치:**
-- 리서치 결과: `memory/reports/investment/{ticker}_{date}.md`
-- Claims 기록: `memory/reports/investment/claims/`
+- 리서치 결과: `vault/reports/investment/{ticker}_{date}.md`
+- Claims 기록: `vault/reports/investment/claims/`
 
 Store results as a markdown file using the template below.
 

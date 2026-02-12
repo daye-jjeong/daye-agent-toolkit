@@ -2,12 +2,12 @@
 
 # Morning brief (8:00 AM daily)
 # Fetch today's events → analyze → send brief
-0 8 * * * /Users/dayejeong/clawd/skills/schedule-advisor/scripts/fetch_schedule.py today | /Users/dayejeong/clawd/skills/schedule-advisor/schedule_advisor.py brief
+0 8 * * * /Users/dayejeong/openclaw/skills/schedule-advisor/scripts/fetch_schedule.py today | /Users/dayejeong/openclaw/skills/schedule-advisor/schedule_advisor.py brief
 
 # Midday check (2:00 PM daily)
 # Check remaining events
-0 14 * * * /Users/dayejeong/clawd/skills/schedule-advisor/scripts/fetch_schedule.py today | /Users/dayejeong/clawd/skills/schedule-advisor/schedule_advisor.py check
+0 14 * * * /Users/dayejeong/openclaw/skills/schedule-advisor/scripts/fetch_schedule.py today | /Users/dayejeong/openclaw/skills/schedule-advisor/schedule_advisor.py check
 
 # P0 reminders (every 30 min, 8am-8pm)
 # Proactive alerts for urgent tasks
-*/30 8-20 * * * /Users/dayejeong/clawd/skills/schedule-advisor/scripts/fetch_schedule.py today | /Users/dayejeong/clawd/skills/schedule-advisor/schedule_advisor.py remind
+*/30 8-20 * * * /Users/dayejeong/openclaw/skills/schedule-advisor/scripts/fetch_schedule.py today | /Users/dayejeong/openclaw/skills/schedule-advisor/schedule_advisor.py remind

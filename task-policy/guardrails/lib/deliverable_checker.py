@@ -66,8 +66,8 @@ def extract_deliverables(text: str, file_paths: List[str] = None) -> List[Dict]:
             "source": "markdown_link"
         })
 
-    # Pattern 4: Vault file paths (~/clawd/memory/...)
-    vault_pattern = r"(~/clawd/memory/[^\s\)]+)"
+    # Pattern 4: Vault file paths (~/openclaw/vault/...)
+    vault_pattern = r"(~/openclaw/vault/[^\s\)]+)"
     vault_paths = re.findall(vault_pattern, text)
     for vpath in vault_paths:
         if vpath not in [d["url"] for d in deliverables]:
@@ -189,7 +189,7 @@ def detect_created_files(work_dir: Path, before_snapshot: List[Path] = None) -> 
     Detect newly created files in deliverable directories
 
     Args:
-        work_dir: Working directory (e.g., /Users/dayejeong/clawd)
+        work_dir: Working directory (e.g., /Users/dayejeong/openclaw)
         before_snapshot: List of files before work started
 
     Returns:
@@ -233,13 +233,13 @@ if __name__ == "__main__":
     - vault 페이지: [[ai-trends-report]]
     - 웹 링크: https://example.com/report.pdf
     - 로컬 문서: [가이드](./docs/guide.md)
-    - vault 경로: ~/clawd/memory/projects/work/ronik/deliverables/report.md
+    - vault 경로: ~/openclaw/vault/projects/work/ronik/deliverables/report.md
 
     ## 참고
-    추가 자료는 /Users/dayejeong/clawd/output/data.csv 참조
+    추가 자료는 /Users/dayejeong/openclaw/output/data.csv 참조
     """
 
-    deliverables = extract_deliverables(test_output, ["/Users/dayejeong/clawd/output/data.csv"])
+    deliverables = extract_deliverables(test_output, ["/Users/dayejeong/openclaw/output/data.csv"])
 
     print(f"Found {len(deliverables)} deliverables:\n")
     for d in deliverables:

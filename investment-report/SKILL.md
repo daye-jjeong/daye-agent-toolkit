@@ -14,20 +14,20 @@ description: 일일 투자 포트폴리오 리포트 생성
 This skill standardizes how to generate **domestic(KR)** and **US** portfolio reports from vault markdown and format them for messaging.
 
 ## Data sources
-- Vault: `memory/finance/investments/*.md` (banksalad-import 스킬로 생성)
+- Vault: `vault/finance/investments/*.md` (banksalad-import 스킬로 생성)
 - Script: `scripts/portfolio_report.py`
 - Snapshots dir (for day-over-day): `portfolio/snapshots/`
 
 ## Command (generate JSON)
 
 ```bash
-python3 /Users/dayejeong/clawd/skills/investment-report/scripts/portfolio_report.py --top 5
+python3 /Users/dayejeong/openclaw/skills/investment-report/scripts/portfolio_report.py --top 5
 ```
 
 Options:
-- `--vault <path>` — 투자 데이터 디렉토리 (기본: `~/clawd/memory/finance/investments`)
+- `--vault <path>` — 투자 데이터 디렉토리 (기본: `~/openclaw/vault/finance/investments`)
 - `--top <N>` — Top N 종목 수 (기본: 5)
-- `--snapshot-dir <path>` — 스냅샷 디렉토리 (기본: `~/clawd/portfolio/snapshots`)
+- `--snapshot-dir <path>` — 스냅샷 디렉토리 (기본: `~/openclaw/portfolio/snapshots`)
 
 ## Output rules (must follow)
 

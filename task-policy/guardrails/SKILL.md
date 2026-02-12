@@ -192,7 +192,7 @@ result = pre_work_gate(
 ### Environment Variables
 
 - `GUARDRAILS_ENABLED=true` (default: true)
-- `TASK_VAULT=~/clawd/memory` (default vault path)
+- `TASK_VAULT=~/openclaw/vault` (default vault path)
 
 ### Tunable Parameters
 
@@ -315,7 +315,7 @@ def spawn_subagent(task, model, label, **kwargs):
 
 **Cause:** Task URL not accessible  
 **Fix:** 
-- Verify Task exists in vault (`~/clawd/memory/projects/`)
+- Verify Task exists in vault (`~/openclaw/vault/projects/`)
 - Check file path is accessible
 - Ensure Task is not archived
 

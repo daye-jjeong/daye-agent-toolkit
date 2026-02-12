@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse Toss US portfolio table from clawd browser aria snapshot JSON.
+"""Parse Toss US portfolio table from openclaw browser aria snapshot JSON.
 
 Expected input: JSON from Clawdbot browser snapshot (aria).
 Output: list of {name, avg_price, qty, currency}.

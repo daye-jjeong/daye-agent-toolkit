@@ -1,6 +1,6 @@
 ---
 name: professional-communication
-description: 개발자를 위한 업무 커뮤니케이션 가이드. 이메일, 팀 메시징, 미팅, 기술↔비기술 소통을 다룹니다. 업무 메시지 작성, 미팅 준비, 커뮤니케이션 개선이 필요할 때 사용하세요.
+description: 업무 커뮤니케이션 가이드 — 이메일, 미팅, 기술 소통
 allowed-tools: Read, Glob, Grep
 ---
 

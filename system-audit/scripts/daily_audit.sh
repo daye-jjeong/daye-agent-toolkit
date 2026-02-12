@@ -1,19 +1,19 @@
 #!/bin/bash
 # Daily System Audit — Tier 1 린트 → Tier 3 LLM 분석 하이브리드 파이프라인
-# Cron: 0 9 * * * /Users/dayejeong/clawd/skills/system-audit/scripts/daily_audit.sh
+# Cron: 0 9 * * * /Users/dayejeong/openclaw/skills/system-audit/scripts/daily_audit.sh
 #
 # 1단계: lint_docs.py (Tier 1, 0토큰) → 구문 결과 JSON
 # 2단계: clawdbot 세션 (Tier 3) → 의미 분석 + 세션/크론 감사
-# 결과: memory/reports/audit/YYYY-MM-DD.md + Telegram (Critical만)
+# 결과: vault/reports/audit/YYYY-MM-DD.md + Telegram (Critical만)
 
 set -euo pipefail
 
 DATE=$(date +"%Y-%m-%d")
 TASK_LABEL="daily-audit-$DATE"
 LOG_FILE="/tmp/daily-audit.log"
-CLAWD_ROOT="$HOME/clawd"
+CLAWD_ROOT="$HOME/openclaw"
 SKILL_DIR="$CLAWD_ROOT/skills/system-audit"
-REPORT_DIR="$CLAWD_ROOT/memory/reports/audit"
+REPORT_DIR="$CLAWD_ROOT/vault/reports/audit"
 LINT_RESULT="/tmp/lint_result_${DATE}.json"
 
 log() {
@@ -82,7 +82,7 @@ $LINT_SUMMARY
 - 깨진 경로 발견 시 Critical
 
 ### D. 리포트 생성
-- 파일: memory/reports/audit/$DATE.md
+- 파일: vault/reports/audit/$DATE.md
 - 이전 감사 결과가 있으면 diff 비교
 - 우선순위: Critical > High > Medium
 

@@ -1,20 +1,20 @@
 ---
 name: vault-memory
-description: Obsidian vault 기반 메모리 + 태스크 관리 — 기록, 압축, 보존, 정책 동기화, 프로젝트 추적
+description: Obsidian vault 메모리 + 태스크 관리
 ---
 
 # Vault Memory Plugin
 
 > Version: 0.3.0 | Status: Active | Updated: 2026-02-11
 
-밍밍 공유 볼트(`memory/`) 기반 메모리 + 프로젝트 태스크 관리 플러그인.
+밍밍 공유 볼트(`vault/`) 기반 메모리 + 프로젝트 태스크 관리 플러그인.
 Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복원, 태스크 공유를 수행한다.
 
 ## 기록 규칙
 
 **파일별 뭘 기록하는지**: [recording-rules.md](recording-rules.md)
-**기록 포맷 규격**: `memory/format.md`
-**태스크 템플릿**: `memory/.obsidian/templates/task-template.md`
+**기록 포맷 규격**: `vault/format.md`
+**태스크 템플릿**: `vault/.obsidian/templates/task-template.md`
 
 ## 서브커맨드
 
@@ -64,18 +64,20 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 | 용도 | 경로 |
 |------|------|
 | 기록 규칙 | [recording-rules.md](recording-rules.md) |
-| 기록 포맷 | `memory/format.md` |
-| 시스템 정책 | `~/clawd/AGENTS.md` |
-| 장기 기억 | `memory/MEMORY.md` |
+| 기록 포맷 | `vault/format.md` |
+| 시스템 정책 | `~/openclaw/AGENTS.md` |
+| 장기 기억 | `MEMORY.md` |
 | 세션 로그 | `memory/YYYY-MM-DD.md` (flat) |
-| 프로젝트/태스크 | `memory/projects/{type}/{name}/` |
-| 태스크 템플릿 | `memory/projects/config/task-template.yml` |
-| 목표 | `memory/goals/{daily,weekly,monthly}/` |
-| 설계 문서 | `memory/docs/` |
-| 정책 상세 | `memory/policy/` |
-| 산출물/리서치 | `memory/reports/` |
-| 런타임 상태 | `memory/state/*.json` |
-| 인박스 | `memory/+inbox/` |
+| 프로젝트/태스크 | `vault/projects/{type}/{name}/` |
+| 태스크 템플릿 | `vault/projects/config/task-template.yml` |
+| 목표 | `vault/goals/{daily,weekly,monthly}/` |
+| 설계 문서 | `vault/docs/` |
+| 정책 상세 | `vault/policy/` |
+| 산출물/리서치 | `vault/reports/` |
+| 뉴스 브리핑 아카이브 | `vault/reports/news-brief/YYYY-MM-DD.md` |
+| AI 트렌드 아카이브 | `vault/reports/ai-trends/` |
+| 런타임 상태 | `vault/state/*.json` |
+| 인박스 | `vault/+inbox/` |
 
 ## 기록 흐름
 
@@ -88,13 +90,14 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
     ├─ 일회성 결정? ──── → 세션 로그 (compress)
     ├─ 반복 규칙? ────── → AGENTS.md (sync-agents)
     ├─ 개인 정보/선호? ── → MEMORY.md (preserve)
-    └─ 산출물? ─────── → reports/ 또는 docs/
+    ├─ 산출물? ─────── → reports/ 또는 docs/
+    └─ 뉴스 기사? ──── → reports/news-brief/YYYY-MM-DD.md (save_to_vault.py)
 ```
 
 ## 크로스 플랫폼 태스크 공유
 
 ```
-Claude Code                    memory/projects/          OpenClaw
+Claude Code                    vault/projects/          OpenClaw
     │                              │                        │
     ├── task-update ──────→ t-*.md ←──────── task-update ──┤
     ├── compress ─────────→ YYYY-MM-DD.md ←── compress ─────┤

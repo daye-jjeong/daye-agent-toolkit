@@ -1,0 +1,48 @@
+# Broad keywords for general news (intentionally wide coverage)
+# 정치/외교
+한국
+미국
+중국
+일본
+북한
+정상회담
+summit
+sanctions
+trade
+
+# 경제/금융
+경제
+금리
+환율
+주식
+부동산
+인플레이션
+GDP
+S&P
+KOSPI
+recession
+Fed
+
+# 사회/생활
+사회
+교육
+인구
+출산
+고용
+부동산
+
+# 과학/기술 (AI 외)
+climate
+energy
+반도체
+semiconductor
+EV
+battery
+space
+
+# 글로벌 이슈
+war
+election
+regulation
+tariff
+supply chain

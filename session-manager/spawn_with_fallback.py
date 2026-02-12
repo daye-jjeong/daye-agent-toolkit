@@ -305,7 +305,7 @@ def spawn_subagent_with_retry(
     print(f"   Tried: {' -> '.join(attempted_models)}")
     
     # Send user notification (rate-limited to prevent spam)
-    notify_script = Path.home() / "clawd" / "scripts" / "notify_model_failure.sh"
+    notify_script = Path.home() / "openclaw" / "scripts" / "notify_model_failure.sh"
     if notify_script.exists():
         try:
             subprocess.run([str(notify_script)], timeout=10, capture_output=True)

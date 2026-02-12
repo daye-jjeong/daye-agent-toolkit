@@ -18,8 +18,8 @@ const { execSync } = require('child_process');
 
 // Configuration
 const CONFIG = {
-  PENDING_TASKS_FILE: path.join(__dirname, '../../memory/pending_tasks.json'),
-  LOCK_FILE: path.join(__dirname, '../../memory/task-manager.lock'),
+  PENDING_TASKS_FILE: path.join(__dirname, '../../vault/state/pending_tasks.json'),
+  LOCK_FILE: path.join(__dirname, '../../vault/state/task-manager.lock'),
   MAX_CONCURRENT_TASKS: 3, // VIP Lane protection (increased for parallel work)
   
   // Model selection by complexity

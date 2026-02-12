@@ -1,6 +1,6 @@
 ---
 name: health-tracker
-description: 건강 상태 모니터링 + 운동/PT/증상 트래킹. Obsidian vault에 Dataview-queryable markdown으로 기록. 허리디스크/메니에르 증상 추적, PT 숙제 관리, 운동 기록, 패턴 분석.
+description: 운동/증상/PT 트래킹 — Obsidian vault 기록
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
@@ -9,7 +9,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 **Version:** 0.2.0
 **Updated:** 2026-02-11
 
-건강 데이터를 Obsidian vault에 기록하고 분석하는 통합 건강 관리 시스템.
+건강 데이터를 Obsidian vault에 기록하는 트래킹 시스템. 분석/조언은 health-coach 담당.
 
 ## 건강 정보
 
@@ -21,7 +21,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ## Obsidian 저장 구조
 
 ```
-~/clawd/memory/health/
+~/openclaw/vault/health/
   symptoms/          # 증상 기록
     2026-02-11_허리디스크.md
   exercises/         # 운동 기록
@@ -57,12 +57,6 @@ python {baseDir}/scripts/log_pt_homework.py list
 
 # 완료
 python {baseDir}/scripts/log_pt_homework.py complete --file "2026-02-11_플랭크.md"
-```
-
-### 패턴 분석
-```bash
-python {baseDir}/scripts/analyze_health.py --period week
-python {baseDir}/scripts/analyze_health.py --period month
 ```
 
 ### PT 출석 체크

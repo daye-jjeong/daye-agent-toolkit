@@ -1,15 +1,15 @@
 #!/bin/bash
 # Model Health Unified Runner
 # Purpose: Consolidate check_model_health.sh + detect_model_fallback.sh into one 5-min runner
-# Cron: */5 * * * * /Users/dayejeong/clawd/skills/model-health-orchestrator/scripts/model_health_unified.sh
+# Cron: */5 * * * * /Users/dayejeong/openclaw/skills/model-health-orchestrator/scripts/model_health_unified.sh
 # Policy: Silent operation (no success logs), alerts only on state transitions/high risk
 
 set -euo pipefail
 
 # Configuration
-CLAWD_ROOT="$HOME/clawd"
+CLAWD_ROOT="$HOME/openclaw"
 SCRIPT_DIR="$CLAWD_ROOT/skills/model-health-orchestrator/scripts"
-STATE_FILE="$CLAWD_ROOT/memory/state/model_health_unified.json"
+STATE_FILE="$CLAWD_ROOT/vault/state/model_health_unified.json"
 DATA_TEMP="/tmp/model_health_data_$$.json"
 GATEWAY_LOG="$HOME/.clawdbot/logs/gateway.log"
 GATEWAY_ERR_LOG="$HOME/.clawdbot/logs/gateway.err.log"
@@ -91,8 +91,21 @@ PY
         quota_probe_data=$(python3 "$SCRIPT_DIR/quota_hybrid_probe.py" 2>/dev/null || echo "$quota_probe_data")
     fi
 
-    # 5) Compose JSON robustly in python (avoid heredoc JSON breakage)
-    python3 - <<'PY' "$DATA_TEMP" "$now" "$status_deep" "$cooldown_data" "$rate_limit_count" "$failover_errors" "$all_cooldown_detected" "$quota_probe_data"
+    # 5) session token data — openclaw sessions --json --active 120 (last 2h)
+    local session_json='[]'
+    if command -v openclaw &> /dev/null; then
+        session_json=$(openclaw sessions --json --active 120 2>/dev/null | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(json.dumps(d.get('sessions', []) if isinstance(d, dict) else d))
+except Exception:
+    print('[]')
+" 2>/dev/null || echo '[]')
+    fi
+
+    # 6) Compose JSON robustly in python (avoid heredoc JSON breakage)
+    python3 - <<'PY' "$DATA_TEMP" "$now" "$status_deep" "$cooldown_data" "$rate_limit_count" "$failover_errors" "$all_cooldown_detected" "$quota_probe_data" "$session_json"
 import json,sys
 out_path=sys.argv[1]
 now=int(sys.argv[2])
@@ -102,6 +115,7 @@ rate=int(sys.argv[5] or 0)
 fail=int(sys.argv[6] or 0)
 all_cd=(str(sys.argv[7]).lower()=="true")
 probe_raw=sys.argv[8]
+sessions_raw=sys.argv[9]
 
 def parse_obj(s, default):
     try:
@@ -110,6 +124,13 @@ def parse_obj(s, default):
     except Exception:
         return default
 
+def parse_list(s):
+    try:
+        v=json.loads(s)
+        return v if isinstance(v,list) else []
+    except Exception:
+        return []
+
 obj={
   "timestamp": now,
   "status_deep": status,
@@ -117,7 +138,8 @@ obj={
   "rate_limit_count": rate,
   "failover_errors": fail,
   "all_cooldown_detected": all_cd,
-  "quota_probe": parse_obj(probe_raw, {"quota_sources":{},"quota_confidence":"estimated","direct_quota_available":False})
+  "quota_probe": parse_obj(probe_raw, {"quota_sources":{},"quota_confidence":"estimated","direct_quota_available":False}),
+  "sessions": parse_list(sessions_raw)
 }
 with open(out_path,'w',encoding='utf-8') as f:
     json.dump(obj,f,ensure_ascii=False)

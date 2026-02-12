@@ -15,9 +15,9 @@ Input (stdin JSON):
   "links": [{"label":"...","url":"..."}]
 }
 
-Output: memory/reports/ai-trends/{date}.md
+Output: vault/reports/ai-trends/{date}.md
 
-Migrated 2026-02-12: Notion → vault (memory/reports/ai-trends/)
+Migrated 2026-02-12: Notion → vault (vault/reports/ai-trends/)
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Vault output directory
-VAULT_ROOT = Path.home() / "clawd" / "memory" / "reports" / "ai-trends"
+VAULT_ROOT = Path.home() / "openclaw" / "vault" / "reports" / "ai-trends"
 
 
 def render_markdown(payload: dict) -> str:

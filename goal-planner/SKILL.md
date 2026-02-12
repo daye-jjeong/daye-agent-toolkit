@@ -9,7 +9,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 **Version:** 0.1.0 | **Updated:** 2026-02-10 | **Status:** Active
 
 월간 -> 주간 -> 일간 3계층 목표를 수립하고 관리하는 스킬.
-`memory/goals/` 디렉토리에 YAML 파일을 생성/수정한다.
+`vault/goals/` 디렉토리에 YAML 파일을 생성/수정한다.
 
 ## 트리거
 
@@ -22,7 +22,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ## 파일 구조
 
 ```
-memory/goals/
+vault/goals/
   ├── monthly/2026-02.yml     # 월간 (YYYY-MM)
   ├── weekly/2026-W07.yml     # 주간 (YYYY-Www)
   ├── daily/2026-02-10.yml    # 일간 (YYYY-MM-DD)
@@ -84,8 +84,8 @@ memory/goals/
 ### CLI
 
 ```bash
-python3 create_goal.py monthly|weekly|daily [--date YYYY-MM-DD] [--dry-run]
-python3 create_goal.py retro --type daily|weekly|monthly
+python3 scripts/create_goal.py monthly|weekly|daily [--date YYYY-MM-DD] [--dry-run]
+python3 scripts/create_goal.py retro --type daily|weekly|monthly
 ```
 
 **상세 (전체 옵션, 크론)**: `{baseDir}/references/auto-draft-rules.md` 참고

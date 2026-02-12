@@ -2,7 +2,7 @@
 """
 Record daily health check-in metrics to Obsidian vault.
 
-Writes a .md file to ~/clawd/memory/health/check-ins/ with frontmatter
+Writes a .md file to ~/openclaw/vault/health/check-ins/ with frontmatter
 containing sleep, steps, workout, stress, water, and notes.
 stdlib only.
 """

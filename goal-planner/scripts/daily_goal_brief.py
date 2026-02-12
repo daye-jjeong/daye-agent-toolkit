@@ -23,8 +23,8 @@ TELEGRAM_GROUP = "-1003242721592"
 THREAD_ID = "167"  # 📅 일정/준비 관련 topic
 
 # Path setup
-CLAWD_ROOT = Path(__file__).resolve().parent.parent.parent  # clawd/
-VAULT_DIR = CLAWD_ROOT / "memory"
+CLAWD_ROOT = Path(__file__).resolve().parent.parent.parent  # openclaw/
+VAULT_DIR = CLAWD_ROOT / "vault"
 PROJECTS_ROOT = VAULT_DIR / "projects"
 GOALS_ROOT = VAULT_DIR / "goals"
 

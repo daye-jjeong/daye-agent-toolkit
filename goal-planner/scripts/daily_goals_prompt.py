@@ -37,7 +37,7 @@ def main():
 
 오늘 하루 어떤 것들을 해볼까요?
 
-간단히 알려주시면 `memory/goals/daily/{today}.yml`에 기록해둘게요.
+간단히 알려주시면 `vault/goals/daily/{today}.yml`에 기록해둘게요.
 
 예시:
 - 밍밍 대시보드 Cloudflare 배포

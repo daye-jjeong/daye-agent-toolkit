@@ -2,7 +2,7 @@
 
 > 세션 종료 전 컨텍스트를 구조화하여 세션 로그에 저장한다.
 
-**기록 규격**: `memory/format.md` 참조
+**기록 규격**: `vault/format.md` 참조
 
 ## 트리거
 
@@ -69,7 +69,7 @@
 ## 자동 연계
 
 ### → tasks.yml (프로젝트 태스크 감지)
-세션 중 수정된 파일을 `memory/projects/*/tasks.yml`의 repos/files_changed와 대조.
+세션 중 수정된 파일을 `vault/projects/*/tasks.yml`의 repos/files_changed와 대조.
 매칭되는 태스크가 있으면:
 > "이 작업은 **t-ronik-001** (캘리봇 기획 재정리) 관련인 것 같아요. progress_log를 업데이트할까요?"
 > → `vault-memory:task-update` 제안

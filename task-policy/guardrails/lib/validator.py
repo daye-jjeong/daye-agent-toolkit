@@ -97,7 +97,7 @@ if __name__ == "__main__":
     test_refs = [
         "t-ronik-001",
         "t-nonexistent-999",
-        "/Users/dayejeong/clawd/report.md",
+        "/Users/dayejeong/openclaw/report.md",
     ]
 
     for ref in test_refs:

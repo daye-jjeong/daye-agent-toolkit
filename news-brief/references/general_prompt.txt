@@ -1,0 +1,7 @@
+Rewrite the following deduped headlines into Korean as a daily general news briefing for a Korean professional.
+Constraints:
+- 12–18 lines total.
+- Group by category: 🌏 국제, 💰 경제, 🏛️ 정치, 🔬 과학/기술, 📌 사회.
+- Each headline: 1-line summary + 1-line '왜 중요한가'.
+- Add a final '오늘의 핵심(1개)' — the single most impactful story.
+- Tone: factual, concise; if unconfirmed say '확인 필요'.

@@ -1,15 +1,15 @@
 ---
 name: proactive-agent
 version: 1.0.0
-description: "능동적 에이전트 행동 패턴 — Context Flush, Reverse Prompting, Self-Healing, Proactive Surprise"
+description: 능동적 에이전트 패턴 — 선제 제안 + 자가 치유
 source: "https://github.com/sundial-org/awesome-openclaw-skills/tree/main/skills/proactive-agent"
 adapted: true
 ---
 
-# Proactive Agent (clawd 적응판)
+# Proactive Agent (openclaw 적응판)
 
-원본 스킬의 행동 패턴을 clawd 아키텍처에 맞게 적용한 버전.
-clawd의 기존 시스템 파일(HEARTBEAT.md, SOUL.md, format.md)에 통합되어 동작한다.
+원본 스킬의 행동 패턴을 openclaw 아키텍처에 맞게 적용한 버전.
+openclaw의 기존 시스템 파일(HEARTBEAT.md, SOUL.md, format.md)에 통합되어 동작한다.
 
 ---
 
@@ -17,13 +17,13 @@ clawd의 기존 시스템 파일(HEARTBEAT.md, SOUL.md, format.md)에 통합되�
 
 | 패턴 | 통합 위치 | 상태 |
 |------|----------|------|
-| Context Flush Protocol | `memory/format.md` § 6 | 적용 |
+| Context Flush Protocol | `vault/format.md` § 6 | 적용 |
 | Reverse Prompting | `SOUL.md` | 적용 |
 | Self-Healing | `HEARTBEAT.md` | 적용 |
 | Proactive Surprise | `HEARTBEAT.md` | 적용 |
-| Memory Flush Checklist | `memory/format.md` § 6 | 적용 |
+| Memory Flush Checklist | `vault/format.md` § 6 | 적용 |
 | Security Hardening | `HEARTBEAT.md` (기존 + 강화) | 적용 |
-| Onboarding | 미적용 (clawd는 USER.md 직접 관리) | 스킵 |
+| Onboarding | 미적용 (openclaw는 USER.md 직접 관리) | 스킵 |
 | Curiosity Loops | 미적용 (MEMORY.md + USER.md로 커버) | 스킵 |
 
 ---

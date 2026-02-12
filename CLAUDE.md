@@ -37,26 +37,29 @@
 | task-dashboard | 프로젝트 HTML 대시보드 |
 | vault-memory | Obsidian vault 메모리 관리 |
 
-### OpenClaw 전용 (12개) — `.claude-skill` 없음, OpenClaw enabled
+### OpenClaw 전용 (14개) — `.claude-skill` 없음, OpenClaw enabled
 
 | 스킬 | 설명 | 비고 |
 |------|------|------|
 | check-integrations | 외부 서비스 통합 점검 | `disable-model-invocation` |
-| doc-lint | 시스템 .md 린터 | |
+| elon-thinking | First Principles 사고 프레임 | |
+| model-health-orchestrator | 모델 헬스체크 + 폴백 | |
 | notion | Notion API 클라이언트 | |
-| openclaw-docs | OpenClaw 문서 스마트 접근 | |
+| openclaw-docs | OpenClaw 문서 참조 가이드 | |
 | orchestrator | 서브에이전트 조율 | `user-invocable: false` |
+| proactive-agent | 능동적 에이전트 패턴 | |
 | prompt-guard | 프롬프트 인젝션 스캐너 | `user-invocable: false` |
 | quant-swing | 스윙 전략 실행/분석 | |
 | schedule-advisor | 캘린더 브리핑/알림 | |
 | session-manager | 세션 fallback/retry | `user-invocable: false` |
+| system-audit | 시스템 감사 — 문서 린트 + 점검 | |
 | task-manager | 태스크 관리 | |
 | task-policy | 태스크 정책 가드레일 | `user-invocable: false` |
 
 ## skills.json 매니페스트
 
 `local_skills`: Claude Code에서 symlink할 스킬 목록 (15개).
-OpenClaw은 `~/clawd/skills/` 전체를 스캔하므로 별도 목록 불필요.
+OpenClaw은 `~/openclaw/skills/` 전체를 스캔하므로 별도 목록 불필요.
 OpenClaw enable/disable은 `setup.sh --openclaw`이 `~/.openclaw/openclaw.json`에 설정.
 
 ## 스킬 포맷
@@ -88,7 +91,7 @@ OpenClaw enable/disable은 `setup.sh --openclaw`이 `~/.openclaw/openclaw.json`�
 ## 동기화
 
 - 레포가 source of truth
-- `~/clawd/skills/`는 이 레포의 clone
+- `~/openclaw/skills/`는 이 레포의 clone
 - `scripts/sync.py`로 양방향 git sync (OpenClaw PC용)
 - `setup.sh --openclaw`으로 초기 셋업 (clone + enable + cron)
 

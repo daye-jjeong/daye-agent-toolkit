@@ -10,7 +10,7 @@
  * - Fallback log entry with WATCHDOG_UNRESPONSIVE code
  * 
  * MECHANISM:
- * - Checks memory/heartbeat-state.json for last heartbeat timestamp
+ * - Checks vault/state/heartbeat-state.json for last heartbeat timestamp
  * - If >10 minutes ago → alert
  * - Prevents duplicate alerts within 30 minutes
  */
@@ -21,8 +21,8 @@ const { execSync } = require('child_process');
 
 // Configuration
 const CONFIG = {
-  HEARTBEAT_STATE: path.join(__dirname, '../memory/state/heartbeat-state.json'),
-  WATCHDOG_STATE: path.join(__dirname, '../memory/state/watchdog-state.json'),
+  HEARTBEAT_STATE: path.join(__dirname, '../vault/state/heartbeat-state.json'),
+  WATCHDOG_STATE: path.join(__dirname, '../vault/state/watchdog-state.json'),
   UNRESPONSIVE_THRESHOLD_MS: 10 * 60 * 1000, // 10 minutes
   DUPLICATE_ALERT_COOLDOWN_MS: 30 * 60 * 1000, // 30 minutes
   TELEGRAM_GROUP: '-1003242721592'

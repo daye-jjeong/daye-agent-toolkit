@@ -19,12 +19,12 @@ python3 skills/schedule-advisor/scripts/fetch_schedule.py today | \
 
 **Old (monolithic):**
 ```cron
-0 8 * * * /Users/dayejeong/clawd/skills/schedule-manager/schedule_manager.py brief
+0 8 * * * /Users/dayejeong/openclaw/skills/schedule-manager/schedule_manager.py brief
 ```
 
 **New (hybrid pipeline):**
 ```cron
-0 8 * * * /Users/dayejeong/clawd/skills/schedule-advisor/scripts/fetch_schedule.py --today | /Users/dayejeong/clawd/skills/schedule-advisor/schedule_advisor.py brief
+0 8 * * * /Users/dayejeong/openclaw/skills/schedule-advisor/scripts/fetch_schedule.py --today | /Users/dayejeong/openclaw/skills/schedule-advisor/schedule_advisor.py brief
 ```
 
 ## Architecture Benefits

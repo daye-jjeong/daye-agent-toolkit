@@ -32,7 +32,7 @@ def _load_vault_root() -> Path:
         config = json.loads(CONFIG_FILE.read_text())
         return Path(config["vault_root"])
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
-        return Path.home() / "clawd" / "memory"
+        return Path.home() / "openclaw" / "vault"
 
 
 VAULT_ROOT = _load_vault_root()

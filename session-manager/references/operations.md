@@ -28,7 +28,7 @@ Consider alerting when:
 
 Run the test suite:
 ```bash
-cd /Users/dayejeong/clawd
+cd /Users/dayejeong/openclaw
 python3 tests/test_session_fallback.py
 ```
 

@@ -27,7 +27,7 @@ Automatically resume failed or interrupted tasks with adaptive model selection w
 - Complex → Opus (VIP lane protected)
 
 ### 3. **Task Queue**
-- Stored in: `memory/pending_tasks.json` (JSON format)
+- Stored in: `vault/state/pending_tasks.json` (JSON format)
 - FIFO processing with priority support
 - Persistent across restarts with retry logic
 
@@ -71,19 +71,19 @@ node skills/task-manager/index.js
 # Programmatically
 node -e "
 const fs = require('fs');
-const tasks = JSON.parse(fs.readFileSync('memory/pending_tasks.json'));
+const tasks = JSON.parse(fs.readFileSync('vault/state/pending_tasks.json'));
 tasks.push({
   prompt: 'Analyze this data...',
   priority: 1,
   added_at: new Date().toISOString()
 });
-fs.writeFileSync('memory/pending_tasks.json', JSON.stringify(tasks, null, 2));
+fs.writeFileSync('vault/state/pending_tasks.json', JSON.stringify(tasks, null, 2));
 "
 ```
 
 ### View Queue
 ```bash
-cat memory/pending_tasks.json | jq
+cat vault/state/pending_tasks.json | jq
 ```
 
 ## Heartbeat Integration

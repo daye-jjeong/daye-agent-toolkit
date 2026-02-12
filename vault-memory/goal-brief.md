@@ -24,9 +24,9 @@
 
 | 계층 | 경로 | 현재 기간 판정 |
 |------|------|---------------|
-| 월간 | `memory/goals/monthly/YYYY-MM.yml` | 이번 달 |
-| 주간 | `memory/goals/weekly/YYYY-Www.yml` | 이번 주 |
-| 일간 | `memory/goals/daily/YYYY-MM-DD.yml` | 오늘 |
+| 월간 | `vault/goals/monthly/YYYY-MM.yml` | 이번 달 |
+| 주간 | `vault/goals/weekly/YYYY-Www.yml` | 이번 주 |
+| 일간 | `vault/goals/daily/YYYY-MM-DD.yml` | 오늘 |
 
 `status: active` 또는 `status: completed`(회고 포함) 파일만 대상.
 

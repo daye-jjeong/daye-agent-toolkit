@@ -192,7 +192,7 @@ def load_config_models() -> Dict:
     Raises:
         FileNotFoundError: If config file doesn't exist
     """
-    config_path = Path.home() / "clawd" / "config" / "session-models.json"
+    config_path = Path.home() / "openclaw" / "config" / "session-models.json"
     
     if not config_path.exists():
         raise FileNotFoundError(f"Model config not found: {config_path}")

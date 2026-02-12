@@ -38,7 +38,7 @@ A research/ops skill to:
 
 ### Single backtest (rule-based universe, more realistic)
 ```bash
-/Users/dayejeong/clawd/.venv/bin/python /Users/dayejeong/clawd/skills/quant-swing/scripts/growth_swing_backtest.py \
+/Users/dayejeong/openclaw/.venv/bin/python /Users/dayejeong/openclaw/skills/quant-swing/scripts/growth_swing_backtest.py \
   --start 2019-01-01 \
   --breakout 100 \
   --atr_k 2.5 \
@@ -52,7 +52,7 @@ A research/ops skill to:
 
 ### Single backtest (tiered slippage by cluster)
 ```bash
-/Users/dayejeong/clawd/.venv/bin/python /Users/dayejeong/clawd/skills/quant-swing/scripts/growth_swing_backtest.py \
+/Users/dayejeong/openclaw/.venv/bin/python /Users/dayejeong/openclaw/skills/quant-swing/scripts/growth_swing_backtest.py \
   --start 2019-01-01 \
   --breakout 100 \
   --atr_k 2.5 \
@@ -64,7 +64,7 @@ A research/ops skill to:
 
 ### Walk-forward (3y train / 1y test, with slippage + rule-based universe)
 ```bash
-/Users/dayejeong/clawd/.venv/bin/python /Users/dayejeong/clawd/skills/quant-swing/scripts/growth_walkforward.py \
+/Users/dayejeong/openclaw/.venv/bin/python /Users/dayejeong/openclaw/skills/quant-swing/scripts/growth_walkforward.py \
   --start_year 2019 \
   --end_year 2025 \
   --grid_breakout 80,100,120 \

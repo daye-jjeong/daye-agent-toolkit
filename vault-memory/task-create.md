@@ -2,7 +2,7 @@
 
 > 새 태스크를 `t-{project}-NNN.md` 파일로 생성한다. description 필수.
 
-**태스크 템플릿**: `memory/.obsidian/templates/task-template.md` 참조
+**태스크 템플릿**: `vault/.obsidian/templates/task-template.md` 참조
 
 ## 트리거
 
@@ -15,7 +15,7 @@
 ### 1. 프로젝트 선택
 
 프로젝트가 명시되지 않으면:
-1. `memory/projects/*/_project.md`에서 `status: active` 프로젝트 목록 표시
+1. `vault/projects/*/_project.md`에서 `status: active` 프로젝트 목록 표시
 2. 사용자가 선택
 
 프로젝트가 명시되면:

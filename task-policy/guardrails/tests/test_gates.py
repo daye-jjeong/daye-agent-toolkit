@@ -54,7 +54,7 @@ class TestPreWorkGate(unittest.TestCase):
             "accessible": True,
             "task_id": "t-ronik-001",
             "title": "Test Task",
-            "path": "/Users/dayejeong/clawd/memory/projects/work/ronik/t-ronik-001.md",
+            "path": "/Users/dayejeong/openclaw/vault/projects/work/ronik/t-ronik-001.md",
             "error": None
         }
 
@@ -155,7 +155,7 @@ class TestPostWorkGate(unittest.TestCase):
 
         mock_state = GuardrailsState(
             session_id="test",
-            task_url="/Users/dayejeong/clawd/memory/projects/work/ronik/t-ronik-001.md",
+            task_url="/Users/dayejeong/openclaw/vault/projects/work/ronik/t-ronik-001.md",
             task_id="t-ronik-001",
             work_type="deliverable",
             gate_status="passed",
@@ -189,7 +189,7 @@ class TestPostWorkGate(unittest.TestCase):
 
         mock_state = GuardrailsState(
             session_id="test",
-            task_url="/Users/dayejeong/clawd/memory/projects/work/ronik/t-ronik-001.md",
+            task_url="/Users/dayejeong/openclaw/vault/projects/work/ronik/t-ronik-001.md",
             task_id="t-ronik-001",
             work_type="deliverable",
             gate_status="passed",

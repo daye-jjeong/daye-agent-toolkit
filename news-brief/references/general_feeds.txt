@@ -1,0 +1,17 @@
+# General news feeds. One URL per line.
+
+# 한국 종합
+https://www.yna.co.kr/rss/news.xml
+https://rss.donga.com/total.xml
+https://www.hankyung.com/feed/all-news
+
+# 국제 (한국어)
+https://feeds.bbci.co.uk/korean/rss.xml
+
+# 국제 (영어)
+https://feeds.reuters.com/reuters/topNews
+https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+
+# 경제/금융
+https://feeds.reuters.com/reuters/businessNews
+https://www.yna.co.kr/rss/economy.xml

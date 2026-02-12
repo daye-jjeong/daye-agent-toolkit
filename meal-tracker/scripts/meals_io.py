@@ -1,7 +1,7 @@
 """
 meals_io.py — Obsidian vault 기반 식사 데이터 I/O 모듈.
 
-meal-tracker 전용. ~/clawd/memory/meals/ 아래에 Dataview-queryable markdown 파일을 읽고 쓴다.
+meal-tracker 전용. ~/openclaw/vault/meals/ 아래에 Dataview-queryable markdown 파일을 읽고 쓴다.
 health_io.py 패턴을 따르며 stdlib만 사용.
 """
 
@@ -10,7 +10,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-VAULT_DIR = Path(os.environ.get("MEALS_VAULT", "~/clawd/memory")).expanduser()
+VAULT_DIR = Path(os.environ.get("MEALS_VAULT", "~/openclaw/vault")).expanduser()
 MEALS_DIR = VAULT_DIR / "meals"
 
 

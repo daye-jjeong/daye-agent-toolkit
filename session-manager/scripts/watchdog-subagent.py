@@ -6,7 +6,7 @@ Monitors subagent sessions for inactivity (>5 min) and sends group alerts.
 - 5분 무응답 감지 (HEARTBEAT.md 정책 통일)
 - JARVIS HQ 그룹 알림 (TOOLS.md 정책)
 - 30분 쿨다운 (중복 알림 방지)
-- 상태 파일: memory/subagent-watchdog-state.json
+- 상태 파일: vault/state/subagent-watchdog-state.json
 
 Usage:
   ./scripts/watchdog-subagent.py
@@ -23,7 +23,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 # Configuration
-STATE_FILE = Path.home() / "clawd" / "memory" / "subagent-watchdog-state.json"
+STATE_FILE = Path.home() / "openclaw" / "vault" / "state" / "subagent-watchdog-state.json"
 INACTIVE_THRESHOLD_MINUTES = 5  # Unified with HEARTBEAT.md policy
 COOLDOWN_MINUTES = 30
 DRY_RUN = "--dry-run" in sys.argv

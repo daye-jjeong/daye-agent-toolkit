@@ -2,7 +2,7 @@
 """
 MingMing Dashboard v3 — Vault Edition
 
-Reads MD+frontmatter from ~/clawd/memory/projects/ and generates
+Reads MD+frontmatter from ~/openclaw/vault/projects/ and generates
 an HTML dashboard with:
   - 오늘 목표 (daily goals)
   - 내가 할 일 (todo)
@@ -22,9 +22,9 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 
-VAULT_DIR = Path.home() / "clawd" / "memory"
+VAULT_DIR = Path.home() / "openclaw" / "vault"
 PROJECTS_DIR = VAULT_DIR / "projects"
-OUTPUT_DIR = Path.home() / "clawd" / "docs" / "dashboard"
+OUTPUT_DIR = Path.home() / "openclaw" / "docs" / "dashboard"
 
 OWNER_ICONS = {
     "claude-code": ("🤖", "CC"),
@@ -239,7 +239,7 @@ def build_goal_chains(goals: dict) -> list[dict]:
         for line in goals["monthly"]["body"].split("\n"):
             stripped = line.strip()
             if stripped.startswith("### "):
-                # e.g., "### clawd 시스템 완성 `high`"
+                # e.g., "### openclaw 시스템 완성 `high`"
                 title = re.sub(r'`[^`]*`', '', stripped[4:]).strip()
                 monthly_by_project["_current"] = title
             elif stripped.startswith("프로젝트:"):
@@ -867,7 +867,7 @@ def generate_html(tasks: list[dict], goals: dict) -> str:
         </div>
 
         <div class="footer">
-            <p>Last updated: {timestamp} | Source: ~/clawd/memory/projects/</p>
+            <p>Last updated: {timestamp} | Source: ~/openclaw/vault/projects/</p>
         </div>
     </div>
     <script>

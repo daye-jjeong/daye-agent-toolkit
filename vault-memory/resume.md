@@ -3,7 +3,7 @@
 > 이전 세션 로그를 스캔하여 컨텍스트를 빠르게 복원한다.
 > Quick Reference 우선 스캔으로 토큰 절약.
 
-**기록 규격**: `memory/format.md` 참조
+**기록 규격**: `vault/format.md` 참조
 
 ## 트리거
 
@@ -23,7 +23,7 @@
 
 ### 1. 활성 태스크 스캔
 
-**경로**: `memory/projects/*/tasks.yml`
+**경로**: `vault/projects/*/tasks.yml`
 
 세션 로그보다 먼저 활성 태스크를 확인한다:
 1. 모든 active 프로젝트의 `tasks.yml` 스캔
@@ -43,7 +43,7 @@
 
 ### 2. 세션 로그 스캔
 
-**경로**: `memory/`
+**경로**: `vault/`
 
 1. 해당 기간의 `YYYY-MM-DD.md` 파일 목록 (최신순)
 2. **1차: Quick Reference만 스캔** — 각 파일의 `## Quick Reference` 섹션만 읽음

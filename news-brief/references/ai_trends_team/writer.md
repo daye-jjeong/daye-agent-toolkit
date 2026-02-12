@@ -29,6 +29,7 @@ Researcher의 JSON 출력:
 1. **카테고리별 그룹핑**
    - Models / Tools / Open-source / Business / Policy 순으로 정리
    - 같은 카테고리는 연속으로 배치
+   - **Community 카테고리 추가**: HN/Reddit/PH/GitHub Trending에서 온 아이템
 
 2. **텔레그램 메시지 작성** (5-8개 불릿)
    - 각 불릿: `• [제목]: [요약] ([출처])`

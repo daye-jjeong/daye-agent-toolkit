@@ -483,22 +483,22 @@ def main():
     print_header("🛡️ Prompt Guard (Injection Detection)")
     
     # Check if skill exists
-    prompt_guard_skill = os.path.expanduser("~/clawd/skills/prompt-guard/guard.py")
-    prompt_guard_scanner = os.path.expanduser("~/clawd/skills/prompt-guard/scripts/prompt_guard_scan.py")
+    prompt_guard_skill = os.path.expanduser("~/openclaw/skills/prompt-guard/guard.py")
+    prompt_guard_scanner = os.path.expanduser("~/openclaw/skills/prompt-guard/scripts/prompt_guard_scan.py")
     
     if not os.path.exists(prompt_guard_skill) and not os.path.exists(prompt_guard_scanner):
         print(f"- ❌ **Prompt Guard**: Not installed")
-        print(f"  - Install: See ~/clawd/skills/prompt-guard/SKILL.md")
+        print(f"  - Install: See ~/openclaw/skills/prompt-guard/SKILL.md")
     else:
         print(f"- ✅ **Prompt Guard**: Installed")
         if os.path.exists(prompt_guard_scanner):
-            print(f"  - Scanner: ~/clawd/skills/prompt-guard/scripts/prompt_guard_scan.py")
+            print(f"  - Scanner: ~/openclaw/skills/prompt-guard/scripts/prompt_guard_scan.py")
         if os.path.exists(prompt_guard_skill):
-            print(f"  - Skill: ~/clawd/skills/prompt-guard/guard.py")
+            print(f"  - Skill: ~/openclaw/skills/prompt-guard/guard.py")
         
         # Check configs (prefer workspace config, fallback to skill config)
-        workspace_config = os.path.expanduser("~/clawd/config/prompt_guard.json")
-        skill_config = os.path.expanduser("~/clawd/skills/prompt-guard/config.json")
+        workspace_config = os.path.expanduser("~/openclaw/config/prompt_guard.json")
+        skill_config = os.path.expanduser("~/openclaw/skills/prompt-guard/config.json")
         config_path = workspace_config if os.path.exists(workspace_config) else skill_config
         
         if os.path.exists(config_path):
@@ -531,7 +531,7 @@ def main():
             print(f"  - ❌ Config missing")
         
         # Check log file
-        log_path = os.path.expanduser("~/clawd/memory/prompt_guard_log.jsonl")
+        log_path = os.path.expanduser("~/openclaw/vault/state/prompt_guard_log.jsonl")
         if os.path.exists(log_path):
             try:
                 with open(log_path, 'r') as f:

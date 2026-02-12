@@ -3,7 +3,7 @@
 Generate weekly health report from Obsidian vault data.
 
 Reads last 7 days of check-ins, exercises, and symptoms from
-~/clawd/memory/health/ and computes summary statistics.
+~/openclaw/vault/health/ and computes summary statistics.
 stdlib only.
 """
 

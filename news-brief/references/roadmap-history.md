@@ -30,7 +30,7 @@ Old skills are superseded by this unified version:
 To restore old behavior:
 ```bash
 # Use old monolithic skill (if needed)
-python /Users/dayejeong/clawd/skills/jarvis-news-brief/scripts/news_brief.py \
+python /Users/dayejeong/openclaw/skills/jarvis-news-brief/scripts/news_brief.py \
   --feeds ... --keywords ... --max-items 5
 ```
 

@@ -1,5 +1,5 @@
 """Task Policy Guardrails Library - Core enforcement system for deliverable accessibility.
-Storage backend: Obsidian vault (~/clawd/memory/projects/).
+Storage backend: Obsidian vault (~/openclaw/vault/projects/).
 """
 
 from .classifier import classify_work

@@ -4,7 +4,7 @@
 
 ### Add Item
 ```bash
-python3 ~/clawd/skills/pantry-manager/scripts/add_item.py \
+python3 ~/openclaw/skills/pantry-manager/scripts/add_item.py \
   --name "양파" \
   --category "채소" \
   --quantity 5 \
@@ -16,35 +16,35 @@ python3 ~/clawd/skills/pantry-manager/scripts/add_item.py \
 ### Check Expiry
 ```bash
 # 임박(3일 이내) + 만료 식재료 확인
-python3 ~/clawd/skills/pantry-manager/scripts/check_expiry.py
+python3 ~/openclaw/skills/pantry-manager/scripts/check_expiry.py
 ```
 
 ### List Items
 ```bash
 # 전체 목록
-python3 ~/clawd/skills/pantry-manager/scripts/list_items.py
+python3 ~/openclaw/skills/pantry-manager/scripts/list_items.py
 
 # 카테고리별
-python3 ~/clawd/skills/pantry-manager/scripts/list_items.py --category "채소"
+python3 ~/openclaw/skills/pantry-manager/scripts/list_items.py --category "채소"
 
 # 위치별
-python3 ~/clawd/skills/pantry-manager/scripts/list_items.py --location "냉장"
+python3 ~/openclaw/skills/pantry-manager/scripts/list_items.py --location "냉장"
 ```
 
 ### Shopping List
 ```bash
-python3 ~/clawd/skills/pantry-manager/scripts/shopping_list.py
+python3 ~/openclaw/skills/pantry-manager/scripts/shopping_list.py
 ```
 
 ### Recipe Suggestion
 ```bash
 # 현재 재료로 만들 수 있는 저속노화 메뉴
-python3 ~/clawd/skills/pantry-manager/scripts/recipe_suggest.py
+python3 ~/openclaw/skills/pantry-manager/scripts/recipe_suggest.py
 ```
 
 ### Receipt Image Parsing
 ```bash
-python3 ~/clawd/skills/pantry-manager/scripts/parse_receipt.py --image /path/to/receipt.jpg
+python3 ~/openclaw/skills/pantry-manager/scripts/parse_receipt.py --image /path/to/receipt.jpg
 ```
 
 ## Cron Setup

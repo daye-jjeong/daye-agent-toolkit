@@ -6,7 +6,7 @@ Golden Snippet은 자주 묻는 질문에 대한 사전 캐시된 답변.
 ## 스니펫 위치
 
 ```
-~/clawd/data/docs-snippets/
+~/openclaw/data/docs-snippets/
 ├── telegram-setup.md
 ├── oauth-troubleshoot.md
 ├── skill-setup.md

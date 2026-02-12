@@ -3,7 +3,7 @@
 > 태스크 시작/진행/완료 시 t-*.md 파일을 업데이트하고 진행 로그를 기록한다.
 
 **기록 규칙**: `recording-rules.md` → 프로젝트 태스크 섹션 참조
-**태스크 템플릿**: `memory/.obsidian/templates/task-template.md` 참조
+**태스크 템플릿**: `vault/.obsidian/templates/task-template.md` 참조
 
 ## 트리거
 
@@ -18,11 +18,11 @@
 ### 1. 태스크 식별
 
 태스크 ID가 명시되지 않으면:
-1. `memory/projects/*/t-*.md`에서 `status: in_progress` 태스크 목록 표시
+1. `vault/projects/*/t-*.md`에서 `status: in_progress` 태스크 목록 표시
 2. 사용자가 선택하거나 새 태스크 지정
 
 태스크 ID가 명시되면:
-1. `memory/projects/` 하위에서 `{task_id}.md` 파일 검색
+1. `vault/projects/` 하위에서 `{task_id}.md` 파일 검색
 2. 파일 존재 확인
 
 ### 2. 액션 선택
@@ -110,7 +110,7 @@ t-*.md 업데이트 후, 현재 세션 로그(`memory/YYYY-MM-DD.md`)에도 한 
 
 ```markdown
 ## 진행 로그
-- 2026-02-11 (claude-code): [HANDOFF → openclaw] as-is 정리 완료. to-be 설계는 Notion 데이터 접근이 필요해서 OpenClaw에서 진행. 참고: memory/docs/cali-as-is.md
+- 2026-02-11 (claude-code): [HANDOFF → openclaw] as-is 정리 완료. to-be 설계는 Notion 데이터 접근이 필요해서 OpenClaw에서 진행. 참고: vault/docs/cali-as-is.md
 ```
 
 받는 쪽은 `vault-memory:resume` 또는 `task-brief`로 컨텍스트 확인.

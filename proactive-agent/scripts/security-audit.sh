@@ -1,5 +1,5 @@
 #!/bin/bash
-# Proactive Agent Security Audit (clawd adapted)
+# Proactive Agent Security Audit (openclaw adapted)
 # Run periodically to check for security issues
 
 set +e
@@ -65,7 +65,7 @@ echo ""
 # 3. Check .gitignore
 echo "Checking .gitignore..."
 if [ -f ".gitignore" ]; then
-    for pattern in ".credentials" ".env" "MEMORY.md" "USER.md" "memory/"; do
+    for pattern in ".credentials" ".env" "MEMORY.md" "USER.md" "vault/"; do
         if grep -q "$pattern" ".gitignore"; then
             pass "$pattern is gitignored"
         else

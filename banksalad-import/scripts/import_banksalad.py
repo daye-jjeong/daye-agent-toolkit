@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # ── 설정 ──────────────────────────────────────
-VAULT_DIR = Path(os.environ.get("BANKSALAD_VAULT", "~/clawd/memory")).expanduser()
+VAULT_DIR = Path(os.environ.get("BANKSALAD_VAULT", "~/openclaw/vault")).expanduser()
 FINANCE_DIR = VAULT_DIR / "finance"
 ZIP_PASSWORD = b"0830"
 EXCEL_EPOCH = datetime(1899, 12, 30)
@@ -456,7 +456,7 @@ def main():
     parser.add_argument("--latest", action="store_true", help="~/Downloads에서 최신 zip 자동 탐색")
     parser.add_argument("--type", default="all", choices=["all", "transactions", "investments", "loans"])
     parser.add_argument("--dry-run", action="store_true", help="Parse only, don't write files")
-    parser.add_argument("--vault", type=Path, help="Obsidian vault path (default: ~/clawd/memory)")
+    parser.add_argument("--vault", type=Path, help="Obsidian vault path (default: ~/openclaw/vault)")
     args = parser.parse_args()
 
     if args.vault:

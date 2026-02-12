@@ -58,7 +58,7 @@ Automate the classification and creation of work items in Obsidian vault, implem
                    ▼
 ┌─────────────────────────────────────────────┐
 │     Return Result                           │
-│  Path: memory/projects/.../t-xxx-NNN.md     │
+│  Path: vault/projects/.../t-xxx-NNN.md     │
 │  ID: t-xxx-NNN                              │
 │  Status: Created                            │
 └─────────────────────────────────────────────┘
@@ -187,7 +187,7 @@ Edit `config.json`:
 
 ```json
 {
-  "vault_path": "~/clawd/memory",
+  "vault_path": "~/openclaw/vault",
   "dry_run_default": true,
   "auto_approve_keywords": ["진행해", "do it", "approve"],
   "similarity_threshold": 0.8,

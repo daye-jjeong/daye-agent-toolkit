@@ -21,7 +21,7 @@
 ```bash
 # Notion에서 Pantry DB 페이지를 열고 URL에서 ID 복사
 # https://www.notion.so/YOUR_WORKSPACE/DATABASE_ID?v=...
-echo "YOUR_DATABASE_ID" > ~/clawd/skills/pantry-manager/config/notion_db_id.txt
+echo "YOUR_DATABASE_ID" > ~/openclaw/skills/pantry-manager/config/notion_db_id.txt
 ```
 
 ## 3. Python Dependencies
@@ -38,7 +38,7 @@ pip3 install requests pillow pytesseract openai
 cat ~/.config/notion/api_key_daye_personal
 
 # DB ID 확인
-cat ~/clawd/skills/pantry-manager/config/notion_db_id.txt
+cat ~/openclaw/skills/pantry-manager/config/notion_db_id.txt
 ```
 
 ### Image Recognition Failure

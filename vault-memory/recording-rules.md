@@ -5,7 +5,7 @@
 ## 파일별 기록 대상
 
 ### AGENTS.md — 시스템 정책/행동 규칙
-**위치:** `~/clawd/AGENTS.md`
+**위치:** `~/openclaw/AGENTS.md`
 **성격:** 살아있는 문서. AI가 작업할 때 매번 참조하는 운영 매뉴얼.
 
 **기록 대상:**
@@ -30,8 +30,8 @@
 
 ---
 
-### memory/MEMORY.md — 장기 기억
-**위치:** `memory/MEMORY.md`
+### MEMORY.md — 장기 기억
+**위치:** `MEMORY.md`
 **성격:** 다예에 대한 팩트, 선호, 상태. AI가 "다예를 아는" 근거.
 
 **기록 대상:**
@@ -58,7 +58,7 @@
 ---
 
 ### memory/YYYY-MM-DD.md — 일일 세션 로그
-**위치:** `memory/` 루트 (flat)
+**위치:** `vault/` 루트 (flat)
 **성격:** 그 날 무슨 일이 있었는지. 검색 가능한 일지.
 
 **기록 대상 (format.md 규격):**
@@ -82,8 +82,8 @@
 
 ---
 
-### memory/policy/*.md — 상세 정책 문서
-**위치:** `memory/policy/`
+### vault/policy/*.md — 상세 정책 문서
+**위치:** `vault/policy/`
 **성격:** AGENTS.md 규칙의 상세 버전. 배경, 예시, 엣지케이스 포함.
 
 **기록 대상:**
@@ -97,8 +97,8 @@
 
 ---
 
-### memory/goals/ — 목표
-**위치:** `memory/goals/{daily,weekly,monthly}/`
+### vault/goals/ — 목표
+**위치:** `vault/goals/{daily,weekly,monthly}/`
 **성격:** 계획과 회고.
 
 **기록 대상:**
@@ -113,8 +113,8 @@
 
 ---
 
-### memory/docs/ — 설계 문서
-**위치:** `memory/docs/`
+### vault/docs/ — 설계 문서
+**위치:** `vault/docs/`
 **성격:** 살아있는 설계/가이드/스펙. 구현 진행 중 참조.
 
 **기록 대상:**
@@ -124,8 +124,8 @@
 
 ---
 
-### memory/reports/ — 완료된 산출물
-**위치:** `memory/reports/`
+### vault/reports/ — 완료된 산출물
+**위치:** `vault/reports/`
 **성격:** 완료된 리서치/분석. 참조용 아카이브.
 
 **기록 대상:**
@@ -145,8 +145,8 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 
 ---
 
-### memory/projects/{type}/{name}/ — 프로젝트 태스크
-**위치:** `memory/projects/{work|personal}--{name}/`
+### vault/projects/{type}/{name}/ — 프로젝트 태스크
+**위치:** `vault/projects/{work|personal}--{name}/`
 **성격:** 프로젝트별 태스크 추적. repo 연결, 진행 로그 포함.
 
 **파일 구조:**
@@ -256,7 +256,7 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 
 ### 공통 규칙
 
-- **기록 포맷**: `memory/format.md` 규격 (양쪽 동일)
+- **기록 포맷**: `vault/format.md` 규격 (양쪽 동일)
 - **기록 경로**: 양쪽 모두 `memory/YYYY-MM-DD.md` (flat)
 - **세션 헤더**: `## 세션 HH:MM (플랫폼, session-id-8자리)` — 플랫폼은 `claude-code` 또는 `openclaw`
 - **충돌 방지**: 같은 날 양쪽에서 기록해도 세션 헤더로 구분
@@ -272,7 +272,7 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
     │
     ↓  Obsidian Shell Commands "File content modified" 감지
     │
-    ↓  python3 ~/clawd/skills/task-manager/scripts/notify_task_change.py "{{file_path}}"
+    ↓  python3 ~/openclaw/skills/task-manager/scripts/notify_task_change.py "{{file_path}}"
     │
     ↓  변경 파싱 + 쿨다운 체크 (30초 내 중복 방지)
     │
@@ -284,7 +284,7 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 ### Obsidian Shell Commands 설정
 
 1. 플러그인 설치: Shell Commands
-2. 셸 커맨드 등록: `python3 ~/clawd/skills/task-manager/scripts/notify_task_change.py "{{file_path}}"`
+2. 셸 커맨드 등록: `python3 ~/openclaw/skills/task-manager/scripts/notify_task_change.py "{{file_path}}"`
 3. 이벤트: "File content modified"
 4. 경로 필터: `projects/**/*` (tasks.yml, project.yml, t-*.md)
 

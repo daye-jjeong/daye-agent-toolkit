@@ -63,7 +63,7 @@ python3 {baseDir}/scripts/lint_docs.py --check freshness # 최신성만
 **Input:** 시스템 .md 파일, `sessions_list`, `crontab -l`, lint JSON 결과
 
 **Output:**
-- `memory/reports/audit/YYYY-MM-DD.md` — 일일 감사 리포트
+- `vault/reports/audit/YYYY-MM-DD.md` — 일일 감사 리포트
 - Telegram 알림 (Critical만, 무음 정책 준수)
 - 로그: `/tmp/daily-audit.log`
 

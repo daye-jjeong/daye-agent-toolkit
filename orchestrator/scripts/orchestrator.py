@@ -348,7 +348,7 @@ def execute_orchestrator_task(
 
     # TODO: Implement actual task decomposition (for now, mock)
     # In real implementation, this would use LLM to decompose task
-    # Note: Task SOT is now memory/projects/{type}/{name}/t-{prefix}-NNN.md
+    # Note: Task SOT is now vault/projects/{type}/{name}/t-{prefix}-NNN.md
     subtasks = [
         {"name": "Setup", "task": "Initialize environment", "complexity": "simple"},
         {"name": "Main Work", "task": request, "complexity": "moderate"},

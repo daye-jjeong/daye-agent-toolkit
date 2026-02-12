@@ -1,8 +1,8 @@
 # vault-memory:preserve
 
-> 중요한 정보를 `memory/MEMORY.md`에 영구 저장한다.
+> 중요한 정보를 `MEMORY.md`에 영구 저장한다.
 
-**기록 규격**: `memory/format.md` § 3 참조
+**기록 규격**: `vault/format.md` § 3 참조
 
 ## 트리거
 
@@ -19,7 +19,7 @@
 
 ### 2. MEMORY.md 읽기
 
-`memory/MEMORY.md` 현재 내용을 읽고 구조 파악.
+`MEMORY.md` 현재 내용을 읽고 구조 파악.
 
 ### 3. 섹션 분류
 
@@ -44,7 +44,7 @@
 
 - **350줄 이하**: 정상 저장
 - **350줄 초과**: 아카이브 제안
-  - 이동 가능 섹션 중 가장 오래된 것 → `memory/archive/MEMORY-YYYY-MM.md`
+  - 이동 가능 섹션 중 가장 오래된 것 → `vault/archive/MEMORY-YYYY-MM.md`
   - 사용자 승인 후 실행
 
 ### 6. 저장 확인

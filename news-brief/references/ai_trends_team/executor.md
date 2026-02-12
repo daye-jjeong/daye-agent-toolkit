@@ -13,7 +13,7 @@ Writer의 출력:
 Writer가 생성한 Notion JSON을 ai_trends_ingest.py로 전달:
 
 ```bash
-cat <<'JSON' | /Users/dayejeong/clawd/.venv/bin/python /Users/dayejeong/clawd/skills/news-brief/scripts/ai_trends_ingest.py
+cat <<'JSON' | /Users/dayejeong/openclaw/.venv/bin/python /Users/dayejeong/openclaw/skills/news-brief/scripts/ai_trends_ingest.py
 {
   "date": "YYYY-MM-DD",
   "title": "AI Trends Briefing — YYYY-MM-DD",
@@ -33,18 +33,46 @@ JSON
 }
 ```
 
-### 2. Telegram 전송
-Writer가 생성한 텔레그램 메시지를 Telegram 그룹으로 전송:
+### 2. HTML 신문 생성
+Writer가 생성한 Notion JSON을 newspaper JSON으로 변환 후 렌더링:
+
+```bash
+python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/render_newspaper.py \
+  --input /tmp/ai_trends_data.json \
+  --output /tmp/mingming_daily_$(date +%Y-%m-%d).html
+```
+
+### 3. Vault 저장
+중요 기사를 vault에 마크다운으로 저장:
+
+```bash
+python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/save_to_vault.py \
+  --input /tmp/ai_trends_data.json \
+  --vault-dir ~/openclaw/vault
+```
+
+**예상 출력:** `✅ /Users/dayejeong/openclaw/vault/reports/news-brief/YYYY-MM-DD.md`
+
+### 4. Telegram 전송
+Writer가 생성한 텔레그램 메시지 + HTML 파일을 Telegram 그룹으로 전송:
 
 - **Target**: `-1003242721592` (JARVIS HQ)
 - **Topic**: `171` (📰 뉴스/트렌드)
 - **Format**: Markdown enabled
 
 ```bash
+# 텍스트 메시지 전송
 clawdbot message send \
   -t -1003242721592 \
   --thread-id 171 \
   "<텔레그램 메시지 내용>"
+
+# HTML 신문 파일 첨부
+clawdbot message send-file \
+  -t -1003242721592 \
+  --thread-id 171 \
+  /tmp/mingming_daily_$(date +%Y-%m-%d).html \
+  --caption "📰 밍밍 데일리 — $(date +%Y-%m-%d)"
 ```
 
 ## Error Handling
@@ -93,7 +121,7 @@ clawdbot message send \
 ## Constraints
 - **멱등성 보장**: 같은 날짜 중복 실행 시 덮어쓰기 또는 스킵 (ai_trends_ingest.py에 의존)
 - **타임아웃**: Notion 30초, Telegram 10초
-- **로그**: 모든 실행 로그를 `/Users/dayejeong/clawd/logs/ai_trends_executor_YYYY-MM-DD.log`에 기록
+- **로그**: 모든 실행 로그를 `/Users/dayejeong/openclaw/logs/ai_trends_executor_YYYY-MM-DD.log`에 기록
 
 ## Success Criteria
 - ✅ Notion 적재 성공 (briefing_url 확보)

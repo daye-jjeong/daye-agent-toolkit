@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Portfolio report from Obsidian vault markdown files.
 
-Reads investment data from memory/finance/investments/*.md (YAML frontmatter)
+Reads investment data from vault/finance/investments/*.md (YAML frontmatter)
 and emits a compact JSON summary with KR/US split and daily delta.
 
 Designed for Clawdbot cron runs (stdlib only, no external deps).
 
-Data source: banksalad-import skill → memory/finance/investments/*.md
+Data source: banksalad-import skill → vault/finance/investments/*.md
 Each file has YAML frontmatter with: product_type, institution, invested,
 current_value, return_pct, currency, source, updated.
 
@@ -31,8 +31,8 @@ try:
 except Exception:  # pragma: no cover
     ZoneInfo = None  # type: ignore
 
-DEFAULT_VAULT = str(Path.home() / "clawd" / "memory" / "finance" / "investments")
-DEFAULT_SNAPSHOT_DIR = str(Path.home() / "clawd" / "portfolio" / "snapshots")
+DEFAULT_VAULT = str(Path.home() / "openclaw" / "vault" / "finance" / "investments")
+DEFAULT_SNAPSHOT_DIR = str(Path.home() / "openclaw" / "portfolio" / "snapshots")
 
 
 @dataclass

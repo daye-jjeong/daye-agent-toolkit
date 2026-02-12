@@ -25,9 +25,9 @@
 ### 1. 대상 파일 식별
 
 명시되지 않으면:
-- `memory/goals/monthly/` — 현재 월 파일
-- `memory/goals/weekly/` — 현재 주 파일
-- `memory/goals/daily/` — 오늘 파일
+- `vault/goals/monthly/` — 현재 월 파일
+- `vault/goals/weekly/` — 현재 주 파일
+- `vault/goals/daily/` — 오늘 파일
 
 명시되면:
 - "2026-W07 업데이트" → `goals/weekly/2026-W07.yml`

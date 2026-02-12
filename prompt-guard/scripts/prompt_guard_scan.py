@@ -10,7 +10,7 @@ Features:
 - Blocks HIGH and CRITICAL severity
 - Allows MEDIUM with warning logged
 - Override phrase support for owner
-- Logs to memory/prompt_guard_log.jsonl
+- Logs to vault/state/prompt_guard_log.jsonl
 
 Usage:
     python3 scripts/prompt_guard_scan.py --message "text" --user-id "12345"
@@ -78,7 +78,7 @@ class PromptGuardScanner:
         
         # Set up log path
         workspace = Path(__file__).parent.parent
-        self.log_path = workspace / self.config.get('log_path', 'memory/prompt_guard_log.jsonl')
+        self.log_path = workspace / self.config.get('log_path', 'vault/state/prompt_guard_log.jsonl')
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Compile patterns

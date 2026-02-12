@@ -48,6 +48,39 @@
       "url": "https://arstechnica.com/tag/artificial-intelligence/feed/",
       "category": "Business",
       "priority": "low"
+    },
+    {
+      "name": "Hacker News",
+      "url": "https://hnrss.org/frontpage",
+      "category": "Community",
+      "priority": "high",
+      "note": "Top stories from HN frontpage; filter AI-related by keywords"
+    },
+    {
+      "name": "Reddit r/artificial",
+      "url": "https://www.reddit.com/r/artificial/.rss",
+      "category": "Community",
+      "priority": "medium"
+    },
+    {
+      "name": "Reddit r/MachineLearning",
+      "url": "https://www.reddit.com/r/MachineLearning/.rss",
+      "category": "Community",
+      "priority": "medium"
+    },
+    {
+      "name": "Product Hunt",
+      "url": "https://www.producthunt.com/feed",
+      "category": "Tools",
+      "priority": "medium",
+      "note": "AI product launches and trending tools"
+    },
+    {
+      "name": "GitHub Trending",
+      "url": "https://rsshub.app/github/trending/daily",
+      "category": "Open-source",
+      "priority": "medium",
+      "note": "RSSHub proxy; may need self-hosted instance if rate-limited"
     }
   ],
   "fallback_keywords": [
@@ -58,6 +91,14 @@
     "AI agents",
     "open-source AI",
     "AI regulation",
-    "AI safety"
+    "AI safety",
+    "Show HN",
+    "trending",
+    "Product Hunt",
+    "GitHub stars",
+    "machine learning",
+    "transformer",
+    "fine-tuning",
+    "RAG"
   ]
 }

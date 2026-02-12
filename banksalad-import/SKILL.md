@@ -28,10 +28,10 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 ## Obsidian 출력
 
-Vault: `~/clawd/memory`
+Vault: `~/openclaw/vault`
 
 ```
-~/clawd/memory/finance/
+~/openclaw/vault/finance/
   transactions/
     2026-02/
       2026-02-09_요기요_-14500.md

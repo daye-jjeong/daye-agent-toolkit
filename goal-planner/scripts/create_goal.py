@@ -28,9 +28,9 @@ except ImportError:
 # ──────────────────────────────────────────────
 # Config
 # ──────────────────────────────────────────────
-CLAWD_ROOT = Path.home() / "clawd"
-PROJECTS_ROOT = CLAWD_ROOT / "memory" / "projects"
-GOALS_ROOT = CLAWD_ROOT / "memory" / "goals"
+CLAWD_ROOT = Path.home() / "openclaw"
+PROJECTS_ROOT = CLAWD_ROOT / "vault" / "projects"
+GOALS_ROOT = CLAWD_ROOT / "vault" / "goals"
 FETCH_SCHEDULE = CLAWD_ROOT / "skills" / "schedule-advisor" / "scripts" / "fetch_schedule.py"
 
 TELEGRAM_GROUP = "-1003242721592"

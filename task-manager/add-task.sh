@@ -3,7 +3,7 @@
 # Usage: ./add-task.sh "Task description or prompt"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TASKS_FILE="$SCRIPT_DIR/../../memory/pending_tasks.json"
+TASKS_FILE="$SCRIPT_DIR/../../vault/state/pending_tasks.json"
 
 if [ $# -eq 0 ]; then
   echo "Usage: $0 \"task prompt\""

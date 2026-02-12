@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const PENDING_TASKS_FILE = path.join(__dirname, '../../memory/pending_tasks.json');
+const PENDING_TASKS_FILE = path.join(__dirname, '../../vault/state/pending_tasks.json');
 
 function removeFirstTask() {
   try {

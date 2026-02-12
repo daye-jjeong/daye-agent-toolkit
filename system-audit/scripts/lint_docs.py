@@ -15,7 +15,7 @@ from datetime import date, timedelta
 
 # ─── 설정 ───────────────────────────────────────────────────────────────
 
-CLAWD_ROOT = Path(os.environ.get("CLAWD_ROOT", Path.home() / "clawd"))
+CLAWD_ROOT = Path(os.environ.get("CLAWD_ROOT", Path.home() / "openclaw"))
 
 # 시스템 .md 파일 (루트 레벨)
 SYSTEM_MD_FILES = [
@@ -98,8 +98,7 @@ INVALID_MODEL_PATTERNS = [
     r"claude-opus-4-5(?!\d)",
     r"claude-sonnet-4-6",
     r"gemini-2\.5",
-    r"gpt-4(?!\.)",  # gpt-4 단독 (gpt-4o는 OK)
-    r"\bgpt-5\.2\b(?![\s\-])",  # gpt-5.2 단독 (gpt-5.2-codex는 OK) — 모델 목록 내부는 제외
+    r"gpt-4(?![\.\-o])",  # gpt-4 단독 (gpt-4o, gpt-4.x는 OK)
 ]
 
 # MEMORY.md 최신성 검사용 — deprecated 키워드/패턴
@@ -127,17 +126,17 @@ MEMORY_STALE_PATTERNS = [
     {
         "pattern": r"projects/_config/structure\.yml",
         "label": "projects/_config/structure.yml",
-        "context": "memory/projects/config/로 이동됨",
+        "context": "vault/projects/config/로 이동됨",
     },
     {
         "pattern": r"projects/_goals/",
         "label": "projects/_goals/ 경로",
-        "context": "memory/goals/로 이동됨",
+        "context": "vault/goals/로 이동됨",
     },
     {
-        "pattern": r"\b~/clawd/projects/\b",
-        "label": "~/clawd/projects/ (레거시 경로)",
-        "context": "memory/projects/로 이동됨",
+        "pattern": r"\b~/openclaw/projects/\b",
+        "label": "~/openclaw/projects/ (레거시 경로)",
+        "context": "vault/projects/로 이동됨",
     },
 ]
 
@@ -149,9 +148,9 @@ AGENTS_STALE_PATTERNS = [
         "context": "primary는 gpt-5.3-codex로 변경됨",
     },
     {
-        "pattern": r"memory/(?!projects|goals|state|docs|policy|reports|archive|finance|format|VAULT|MEMORY|\+inbox|YYYY)[a-z_]+\.json",
-        "label": "memory/ 루트의 JSON 참조",
-        "context": "상태 파일은 memory/state/로 이동됨",
+        "pattern": r"vault/(?!projects|goals|state|docs|policy|reports|archive|finance|format|VAULT|MEMORY|\+inbox|YYYY)[a-z_]+\.json",
+        "label": "vault/ 루트의 JSON 참조",
+        "context": "상태 파일은 vault/state/로 이동됨",
     },
     {
         "pattern": r"projects/\*/tasks\.yml",
@@ -307,7 +306,7 @@ def get_skill_dirs():
 
 
 def get_project_dirs():
-    """memory/projects/ 내 실제 디렉토리 목록 반환."""
+    """vault/projects/ 내 실제 디렉토리 목록 반환."""
     projects_dir = CLAWD_ROOT / "memory" / "projects"
     if not projects_dir.exists():
         return []
@@ -323,6 +322,8 @@ def check_refs(issues):
         r'((?:skills|scripts|config|memory|docs|projects|data)/[A-Za-z0-9_\-./]+(?:\.\w+)?)'
         r'(?:`|")?'
     )
+    # ~/.config/ 등 시스템 경로 패턴 (openclaw 외부)
+    system_path_prefix = re.compile(r'~/\.?' + r'(?=config/|gog/)')
     # 템플릿 패턴 제외
     template_pattern = re.compile(r'\{[^}]+\}')
     # 플레이스홀더 경로 (예시용)
@@ -353,6 +354,12 @@ def check_refs(issues):
                     continue
                 # 플레이스홀더 경로 스킵
                 if ref_path.rstrip("/") in placeholder_paths:
+                    continue
+                # 시스템 경로 스킵 (~/.config/ 등 openclaw 외부)
+                start = match.start(1)
+                if start >= 2 and line_text[start-2:start] in ("~/", "/."):
+                    continue
+                if start >= 3 and line_text[start-3:start] == "~/.":
                     continue
 
                 checked += 1
@@ -492,14 +499,14 @@ def check_duplicates(issues):
 
 
 def check_projects(issues):
-    """프로젝트 구조 정합성 검사 (memory/projects/)."""
+    """프로젝트 구조 정합성 검사 (vault/projects/)."""
     projects_dir = CLAWD_ROOT / "memory" / "projects"
     if not projects_dir.exists():
         return 0, 0
 
     checked = 0
     ok = 0
-    special_dirs = {"config", "_archive"}
+    special_dirs = {"config", "_archive", "personal", "work"}
 
     for d in sorted(projects_dir.iterdir()):
         if not d.is_dir():
@@ -513,7 +520,7 @@ def check_projects(issues):
         if "--" not in d.name:
             issues.append(Issue(
                 "PROJECT_NAMING", "warning",
-                f"memory/projects/{d.name}", None,
+                f"vault/projects/{d.name}", None,
                 f"프로젝트 이름이 '{{type}}--{{name}}' 형식이 아님",
                 "예: work--ronik, personal--health"
             ))
@@ -532,7 +539,7 @@ def check_projects(issues):
                     missing.append("t-{project}-NNN.md (태스크 파일 없음)")
                 issues.append(Issue(
                     "PROJECT_MISSING_FILE", "warning",
-                    f"memory/projects/{d.name}", None,
+                    f"vault/projects/{d.name}", None,
                     f"필수 파일 누락: {', '.join(missing)}",
                     ""
                 ))
@@ -725,7 +732,7 @@ def main():
     parser.add_argument("--format", default="text", choices=["text", "json"],
                         help="출력 형식")
     parser.add_argument("--root", default=None,
-                        help="clawd 루트 디렉토리 (기본: ~/clawd)")
+                        help="openclaw 루트 디렉토리 (기본: ~/openclaw)")
     args = parser.parse_args()
 
     global CLAWD_ROOT
@@ -733,7 +740,7 @@ def main():
         CLAWD_ROOT = Path(args.root)
 
     if not CLAWD_ROOT.exists():
-        print(f"❌ clawd 루트 디렉토리를 찾을 수 없음: {CLAWD_ROOT}", file=sys.stderr)
+        print(f"❌ openclaw 루트 디렉토리를 찾을 수 없음: {CLAWD_ROOT}", file=sys.stderr)
         sys.exit(1)
 
     issues = []

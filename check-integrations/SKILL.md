@@ -25,7 +25,7 @@ Comprehensive status check of all external service integrations with granular pe
 ## Trigger
 
 - `/check_integrations` (Telegram command)
-- Manual: `python3 {baseDir}/check_integrations.py`
+- Manual: `python3 {baseDir}/scripts/check_integrations.py`
 
 ## Core Workflow
 
@@ -40,7 +40,7 @@ Comprehensive status check of all external service integrations with granular pe
 
 ```bash
 # Standalone script (recommended, 0 LLM tokens)
-python3 {baseDir}/check_integrations.py
+python3 {baseDir}/scripts/check_integrations.py
 ```
 
 Note: Converted to standalone script to reduce LLM token costs. Runs without clawdbot/LLM dependencies.

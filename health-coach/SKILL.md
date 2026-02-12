@@ -1,6 +1,6 @@
 ---
 name: health-coach
-description: Health Tracker 데이터를 분석하여 맞춤 건강 조언 제공. 허리디스크 안전 운동 추천, 증상 패턴 분석, PT 숙제 가이드, 저속노화 루틴 관리. Obsidian vault 기반.
+description: 건강 데이터 분석 + 맞춤 운동/라이프스타일 조언
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
@@ -76,6 +76,12 @@ python {baseDir}/scripts/track_health.py \
 python {baseDir}/scripts/daily_routine.py
 ```
 
+### 패턴 분석 (주간/월간)
+```bash
+python {baseDir}/scripts/analyze_health.py --period week
+python {baseDir}/scripts/analyze_health.py --period month
+```
+
 ### 주간 리포트
 ```bash
 python {baseDir}/scripts/weekly_report.py
@@ -98,6 +104,10 @@ water: 2000
 
 - **금지:** 과신전 (백익스텐션, 코브라), 회전 (러시안 트위스트), 과도한 굴곡
 - **권장:** 중립척추 유지 (플랭크, 데드버그, 버드독), 호흡과 함께, 점진적 강도 증가
+
+## 의존성
+
+- `health_io.py` → health-tracker의 공유 I/O 모듈 (symlink)
 
 ## Notes
 

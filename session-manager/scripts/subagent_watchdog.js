@@ -25,7 +25,7 @@ const { execSync } = require('child_process');
 
 // Configuration
 const CONFIG = {
-  STATE_FILE: path.join(__dirname, '../memory/state/subagent-watchdog-state.json'),
+  STATE_FILE: path.join(__dirname, '../vault/state/subagent-watchdog-state.json'),
   GATEWAY_PID_FILE: '/tmp/clawdbot-gateway.pid', // Gateway PID 추적용
   STUCK_THRESHOLD_MS: 10 * 60 * 1000, // 10분
   GATEWAY_RESTART_WINDOW_MS: 15 * 60 * 1000, // Gateway 재시작 후 15분 이내 세션 체크

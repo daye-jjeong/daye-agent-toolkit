@@ -82,7 +82,7 @@ def find_obsidian_vaults() -> list[Path]:
     """알려진 위치에서 Obsidian vault 탐색."""
     candidates = []
     search_dirs = [
-        Path.home() / "clawd" / "memory",
+        Path.home() / "openclaw" / "vault",
         Path.home() / "Documents",
         Path.home() / "Library" / "Mobile Documents"
         / "iCloud~md~obsidian" / "Documents",

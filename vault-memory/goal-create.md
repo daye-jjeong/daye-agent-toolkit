@@ -1,6 +1,6 @@
 # vault-memory:goal-create
 
-> 목표 YAML 파일을 `memory/goals/`에 생성한다.
+> 목표 YAML 파일을 `vault/goals/`에 생성한다.
 
 **YAML 포맷**: goal-planner 스킬의 `references/yaml-formats.md` 참조
 **계획 방법론**: goal-planner 스킬의 SKILL.md 참조
@@ -15,9 +15,9 @@
 
 | 계층 | 파일명 | 예시 |
 |------|--------|------|
-| 월간 | `memory/goals/monthly/YYYY-MM.yml` | `2026-02.yml` |
-| 주간 | `memory/goals/weekly/YYYY-Www.yml` | `2026-W07.yml` |
-| 일간 | `memory/goals/daily/YYYY-MM-DD.yml` | `2026-02-12.yml` |
+| 월간 | `vault/goals/monthly/YYYY-MM.yml` | `2026-02.yml` |
+| 주간 | `vault/goals/weekly/YYYY-Www.yml` | `2026-W07.yml` |
+| 일간 | `vault/goals/daily/YYYY-MM-DD.yml` | `2026-02-12.yml` |
 
 ## 워크플로우
 

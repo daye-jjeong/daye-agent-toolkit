@@ -50,7 +50,7 @@ fi
 # ── --openclaw ───────────────────────────────────
 if [ "${1:-}" = "--openclaw" ]; then
   REPO_URL="https://github.com/daye-jjeong/daye-agent-toolkit.git"
-  SKILLS_TARGET="$HOME/clawd/skills"
+  SKILLS_TARGET="$HOME/openclaw/skills"
 
   echo "=== daye-agent-toolkit OpenClaw setup ==="
   echo ""
@@ -91,9 +91,9 @@ if [ "${1:-}" = "--openclaw" ]; then
   fi
   echo ""
 
-  # 2. ~/clawd/.gitignore에 skills/ 추가
+  # 2. ~/openclaw/.gitignore에 skills/ 추가
   echo "── .gitignore ──"
-  CLAWD_GITIGNORE="$HOME/clawd/.gitignore"
+  CLAWD_GITIGNORE="$HOME/openclaw/.gitignore"
   if [ -f "$CLAWD_GITIGNORE" ]; then
     if grep -qF "skills/" "$CLAWD_GITIGNORE"; then
       echo "✓ skills/ 이미 제외됨"

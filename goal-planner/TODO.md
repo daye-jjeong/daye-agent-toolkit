@@ -2,14 +2,14 @@
 
 ## 1. 월간 목표 업데이트 (2026-02.yml)
 
-`~/clawd/projects/_goals/2026-02.yml` 파일의 current 값들을 업데이트해줘:
+`~/openclaw/projects/_goals/2026-02.yml` 파일의 current 값들을 업데이트해줘:
 
 - AI 비서 시스템 안정화 > SOT 체계: 30% → **70%** (projects/ 구조, 대시보드 v2, skill-sync v2, goal-planner, AGENTS.md 모두 완료)
 - 나머지 KR은 다예에게 현재 상태 물어보고 업데이트
 
 ## 2. 주간 목표 조정 (2026-W07.yml)
 
-`~/clawd/projects/_goals/2026-W07.yml` 업데이트:
+`~/openclaw/projects/_goals/2026-W07.yml` 업데이트:
 
 - "로컬 프로젝트 관리 체계 완성" → status: done (projects/ 구조 + 대시보드 완성됨)
 - 추가 필요한 항목:
@@ -25,7 +25,7 @@
 ## 4. 대시보드 개선 (generate_dashboard_v2.py)
 
 ### 4-a. 일간 목표 표시 추가
-`~/clawd/skills/task-dashboard/generate_dashboard_v2.py` (또는 symlink 후 `~/git_workplace/claude-skills/task-dashboard/generate_dashboard_v2.py`)
+`~/openclaw/skills/task-dashboard/generate_dashboard_v2.py` (또는 symlink 후 `~/git_workplace/claude-skills/task-dashboard/generate_dashboard_v2.py`)
 
 scan_goals()에서 daily YAML도 읽도록 수정:
 - `_goals/YYYY-MM-DD.yml` 파일에서 top3, time_blocks, checklist 읽기
@@ -47,6 +47,6 @@ JS renderGoals()에 일간 카드 추가:
 
 수정 후 대시보드 재생성:
 ```bash
-cd ~/clawd/skills/task-dashboard && python3 generate_dashboard_v2.py
+cd ~/openclaw/skills/task-dashboard && python3 generate_dashboard_v2.py
 ```
-output: `~/clawd/docs/dashboard/index.html` 확인
+output: `~/openclaw/docs/dashboard/index.html` 확인

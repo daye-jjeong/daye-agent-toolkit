@@ -20,7 +20,7 @@
 
 ### 1. 프로젝트 스캔
 
-`memory/projects/{type}/{name}/_project.md`에서 `status: active` 프로젝트 목록 수집.
+`vault/projects/{type}/{name}/_project.md`에서 `status: active` 프로젝트 목록 수집.
 
 ### 2. 태스크 수집
 

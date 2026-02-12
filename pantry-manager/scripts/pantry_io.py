@@ -1,7 +1,7 @@
 """
 pantry_io.py -- Obsidian vault 기반 식재료 데이터 I/O 모듈.
 
-~/clawd/memory/pantry/items/ 아래에 Dataview-queryable markdown 파일을 읽고 쓴다.
+~/openclaw/vault/pantry/items/ 아래에 Dataview-queryable markdown 파일을 읽고 쓴다.
 Notion API 의존성 없음. stdlib만 사용.
 """
 
@@ -10,7 +10,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-VAULT_DIR = Path(os.environ.get("PANTRY_VAULT", "~/clawd/memory")).expanduser()
+VAULT_DIR = Path(os.environ.get("PANTRY_VAULT", "~/openclaw/vault")).expanduser()
 PANTRY_DIR = VAULT_DIR / "pantry"
 ITEMS_DIR = PANTRY_DIR / "items"
 
