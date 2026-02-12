@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
-"""Parse '뱅샐현황' sheet from the yearly portfolio workbook and emit a compact summary.
+"""Portfolio report from Obsidian vault markdown files.
 
-Designed for Clawdbot cron runs (no pandas).
+Reads investment data from memory/finance/investments/*.md (YAML frontmatter)
+and emits a compact JSON summary with KR/US split and daily delta.
 
-Assumptions (confirmed by Daye):
-- Column B (2): asset type (e.g., '주식')
-- Column C (3): broker
-- Column D (4): name/ticker label
-- Column F (6): principal (invested)
-- Column G (7): valuation
-- Column H (8): returnPct
+Designed for Clawdbot cron runs (stdlib only, no external deps).
+
+Data source: banksalad-import skill → memory/finance/investments/*.md
+Each file has YAML frontmatter with: product_type, institution, invested,
+current_value, return_pct, currency, source, updated.
 
 US vs KR rule (confirmed by Daye):
-- If broker == '토스증권' => US
-- If name starts with 'TIGER' => include in US report as well
+- If institution == '토스증권' => US
+- If name starts with 'TIGER' => US
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 from dataclasses import dataclass
 from datetime import datetime
 from glob import glob
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-
-import openpyxl
 
 try:
     from zoneinfo import ZoneInfo  # py3.9+
 except Exception:  # pragma: no cover
     ZoneInfo = None  # type: ignore
+
+DEFAULT_VAULT = str(Path.home() / "clawd" / "memory" / "finance" / "investments")
+DEFAULT_SNAPSHOT_DIR = str(Path.home() / "clawd" / "portfolio" / "snapshots")
 
 
 @dataclass
@@ -49,61 +49,86 @@ class Holding:
         return (self.valuation or 0.0) - (self.principal or 0.0)
 
 
-def _to_float(x: Any) -> Optional[float]:
-    if x is None:
+def _parse_frontmatter(text: str) -> Dict[str, str]:
+    """Parse YAML frontmatter from markdown text."""
+    if not text.startswith("---"):
+        return {}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    fm: Dict[str, str] = {}
+    for line in parts[1].strip().split("\n"):
+        if ":" in line:
+            key, val = line.split(":", 1)
+            fm[key.strip()] = val.strip().strip("'\"")
+    return fm
+
+
+def _extract_name(text: str, filename: str, institution: str) -> str:
+    """Extract product name from markdown heading or filename."""
+    # Try markdown heading first: # ProductName
+    for line in text.split("\n"):
+        if line.startswith("# "):
+            return line[2:].strip()
+    # Fallback: derive from filename by removing institution suffix
+    stem = Path(filename).stem
+    suffix = f"_{institution}"
+    if stem.endswith(suffix):
+        return stem[: -len(suffix)].replace("_", " ")
+    return stem.replace("_", " ")
+
+
+def _to_float(val: str) -> Optional[float]:
+    """Convert frontmatter string value to float."""
+    if not val or val in ("", "-", "None"):
         return None
-    if isinstance(x, (int, float)):
-        if isinstance(x, float) and (math.isnan(x) or math.isinf(x)):
-            return None
-        return float(x)
-    if isinstance(x, str):
-        s = x.strip().replace(",", "")
-        if s in ("", "-"):
-            return None
+    try:
+        return float(val.replace(",", ""))
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_holdings(vault_dir: str) -> List[Holding]:
+    """Read all investment markdown files from vault directory."""
+    holdings: List[Holding] = []
+    vault_path = Path(vault_dir)
+
+    if not vault_path.exists():
+        print(f"Warning: vault directory not found: {vault_dir}", file=__import__("sys").stderr)
+        return holdings
+
+    for md_file in sorted(vault_path.glob("*.md")):
         try:
-            return float(s)
-        except ValueError:
-            return None
-    return None
+            text = md_file.read_text(encoding="utf-8")
+        except Exception:
+            continue
 
+        fm = _parse_frontmatter(text)
 
-def parse_holdings(path: str, sheet: str = "뱅샐현황", max_rows: int = 400) -> List[Holding]:
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-    ws = wb[sheet]
+        # Only process investment files
+        if fm.get("type") != "investment":
+            continue
 
-    out: List[Holding] = []
-    started = False
+        institution = fm.get("institution", "")
+        product_type = fm.get("product_type", "주식")
+        invested = _to_float(fm.get("invested", ""))
+        current_value = _to_float(fm.get("current_value", ""))
+        return_pct = _to_float(fm.get("return_pct", ""))
 
-    for row in ws.iter_rows(min_row=1, max_row=max_rows, min_col=1, max_col=8, values_only=True):
-        asset = row[1]  # col B
-        broker = row[2]  # col C
-        name = row[3]  # col D
-        principal = _to_float(row[5])
-        valuation = _to_float(row[6])
-        retpct = _to_float(row[7])
+        name = _extract_name(text, md_file.name, institution)
 
-        if asset == "주식" and broker and name:
-            started = True
-            if principal is None or valuation is None:
-                # still include but will be less useful
-                principal = principal or 0.0
-                valuation = valuation or 0.0
-            out.append(
-                Holding(
-                    asset=str(asset),
-                    broker=str(broker),
-                    name=str(name),
-                    principal=float(principal),
-                    valuation=float(valuation),
-                    return_pct=retpct,
-                )
+        holdings.append(
+            Holding(
+                asset=product_type,
+                broker=institution,
+                name=name,
+                principal=invested or 0.0,
+                valuation=current_value or 0.0,
+                return_pct=return_pct,
             )
-        else:
-            # stop after we have started and we hit a non-stock block for a while
-            if started and asset and isinstance(asset, str) and asset != "주식":
-                break
+        )
 
-    return out
+    return holdings
 
 
 def split_kr_us(holds: List[Holding]) -> Tuple[List[Holding], List[Holding]]:
@@ -159,7 +184,6 @@ def _load_latest_snapshot(snapshot_dir: str) -> Optional[Dict[str, Any]]:
     paths = sorted(glob(os.path.join(snapshot_dir, "*.json")))
     if not paths:
         return None
-    # pick the most recent snapshot file
     with open(paths[-1], "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -183,32 +207,29 @@ def _compute_daily_delta(cur: Dict[str, Any], prev: Optional[Dict[str, Any]]) ->
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--file", required=True)
-    ap.add_argument("--sheet", default="뱅샐현황")
+    ap = argparse.ArgumentParser(description="Portfolio report from vault markdown files")
+    ap.add_argument("--vault", default=DEFAULT_VAULT, help="Path to investments vault directory")
     ap.add_argument("--top", type=int, default=5)
-    ap.add_argument("--snapshot-dir", default=None, help="If set, writes daily snapshot and computes delta vs last snapshot")
+    ap.add_argument("--snapshot-dir", default=DEFAULT_SNAPSHOT_DIR, help="Daily snapshot directory")
     args = ap.parse_args()
 
-    holds = parse_holdings(args.file, sheet=args.sheet)
+    holds = parse_holdings(args.vault)
     kr, us = split_kr_us(holds)
 
     cur = {
         "asOf": _today_ymd_kst(),
-        "file": args.file,
-        "sheet": args.sheet,
+        "source": args.vault,
         "kr": summarize(kr, top_n=args.top),
         "us": summarize(us, top_n=args.top),
     }
 
-    if args.snapshot_dir:
-        os.makedirs(args.snapshot_dir, exist_ok=True)
-        prev = _load_latest_snapshot(args.snapshot_dir)
-        cur["daily"] = _compute_daily_delta({"kr": cur["kr"], "us": cur["us"]}, prev)
-        snap_path = os.path.join(args.snapshot_dir, f"{cur['asOf']}.json")
-        with open(snap_path, "w", encoding="utf-8") as f:
-            json.dump({"asOf": cur["asOf"], "kr": cur["kr"], "us": cur["us"]}, f, ensure_ascii=False)
-        cur["snapshotPath"] = snap_path
+    os.makedirs(args.snapshot_dir, exist_ok=True)
+    prev = _load_latest_snapshot(args.snapshot_dir)
+    cur["daily"] = _compute_daily_delta({"kr": cur["kr"], "us": cur["us"]}, prev)
+    snap_path = os.path.join(args.snapshot_dir, f"{cur['asOf']}.json")
+    with open(snap_path, "w", encoding="utf-8") as f:
+        json.dump({"asOf": cur["asOf"], "kr": cur["kr"], "us": cur["us"]}, f, ensure_ascii=False)
+    cur["snapshotPath"] = snap_path
 
     print(json.dumps(cur, ensure_ascii=False, indent=2))
 
