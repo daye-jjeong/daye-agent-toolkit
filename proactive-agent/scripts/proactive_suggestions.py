@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-Proactive Suggestions Script
+Proactive Suggestions Script (통합)
 
-자동 제안 크론 (점검/조치와 분리)
+자동 제안 크론 — proactive_check.py 기능 흡수
 - 무조건 보내기 (승인 요청 없음)
 - 23:00~08:00 제외 (자는 시간)
 - 1~3개 제안만
-- inputs: 최근 시스템 이벤트, 오늘 남은 일정, 최근 대화 컨텍스트
+- inputs: 시스템 이벤트, 오늘 태스크, 대화 컨텍스트,
+          내일 캘린더 마감, 밀린 태스크, 실패 큐
 - outputs: JSON 출력 (크론 페이로드가 LLM 호출 및 전송 처리)
+
+Merged from:
+- proactive_suggestions.py (data gathering + JSON output)
+- proactive_check.py (calendar/backlog/system checks)
 
 Usage:
   ./scripts/proactive_suggestions.py [--dry-run]
-
-Cron:
-  크론 페이로드에서 이 스크립트의 출력을 읽어 LLM 호출 및 메시지 전송
 """
 
 import json
@@ -22,7 +24,7 @@ import sys
 import subprocess
 import hashlib
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from typing import Dict, List, Tuple
 
 # Configuration
@@ -192,6 +194,74 @@ def get_today_remaining_tasks() -> List[str]:
         return []
 
 
+def get_calendar_deadlines() -> List[str]:
+    """Check for important events tomorrow (absorbed from proactive_check.py)"""
+    try:
+        result = subprocess.run([
+            "/opt/homebrew/bin/icalBuddy",
+            "-n", "-nc", "-b", "",
+            "-ps", "||",
+            "-ic", "daye@ronik.io,개인,Personal,daye.jjeong@gmail.com",
+            "eventsToday+1"
+        ], capture_output=True, text=True, timeout=10)
+
+        if result.returncode != 0:
+            return []
+
+        important_keywords = ["회의", "미팅", "발표", "제출", "마감", "PT", "수업"]
+        deadlines = []
+        seen = set()
+
+        for event in result.stdout.strip().split("\n"):
+            if not event.strip() or "today at" in event:
+                continue
+            title = event.split("location:")[0].split("notes:")[0].split("tomorrow at")[0].strip()
+            if title in seen:
+                continue
+            seen.add(title)
+            if any(kw in event for kw in important_keywords):
+                deadlines.append(title)
+
+        return deadlines[:3]
+    except Exception:
+        return []
+
+
+def get_overdue_tasks() -> List[str]:
+    """Check vault for overdue high-priority tasks (absorbed from proactive_check.py)"""
+    try:
+        today = date.today().isoformat()
+        overdue = []
+
+        for task_file in PROJECTS_DIR.rglob("t-*.md"):
+            try:
+                fm = _parse_frontmatter(task_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+
+            if (fm.get("priority") == "high"
+                    and fm.get("status") not in ("done", "on_hold")
+                    and fm.get("deadline", "")
+                    and str(fm["deadline"]) < today):
+                overdue.append(fm.get("title", "(untitled)"))
+
+        return overdue[:5]
+    except Exception:
+        return []
+
+
+def get_failed_tasks_count() -> int:
+    """Check failed tasks queue (absorbed from proactive_check.py)"""
+    try:
+        queue_file = WORKSPACE / "memory" / "failed_tasks_queue.json"
+        if not queue_file.exists():
+            return 0
+        with open(queue_file) as f:
+            return len(json.load(f).get("tasks", []))
+    except Exception:
+        return 0
+
+
 def get_recent_conversation_context() -> str:
     """Get brief summary of recent conversation"""
     try:
@@ -234,17 +304,25 @@ def main():
         print(json.dumps({"skip": True, "reason": "daily_limit", "sentToday": state["sentToday"]}))
         return
     
-    # Gather inputs
+    # Gather inputs (기존)
     log("📊 Gathering inputs...")
     cron_errors = get_recent_cron_errors()
     stuck_count = get_stuck_sessions()
     today_tasks = get_today_remaining_tasks()
     conversation_context = get_recent_conversation_context()
-    
+
+    # Gather inputs (proactive_check.py에서 흡수)
+    calendar_deadlines = get_calendar_deadlines()
+    overdue_tasks = get_overdue_tasks()
+    failed_tasks = get_failed_tasks_count()
+
     log(f"  - Cron errors: {len(cron_errors)}")
     log(f"  - Stuck sessions: {stuck_count}")
     log(f"  - Today tasks: {len(today_tasks)}")
-    
+    log(f"  - Calendar deadlines: {len(calendar_deadlines)}")
+    log(f"  - Overdue tasks: {len(overdue_tasks)}")
+    log(f"  - Failed tasks: {failed_tasks}")
+
     # Output JSON for cron payload to process
     output = {
         "skip": False,
@@ -253,6 +331,9 @@ def main():
             "stuckSessions": stuck_count,
             "todayTasks": today_tasks,
             "conversationContext": conversation_context,
+            "calendarDeadlines": calendar_deadlines,
+            "overdueTasks": overdue_tasks,
+            "failedTasksCount": failed_tasks,
             "timestamp": datetime.now().isoformat(),
             "lookbackHours": LOOKBACK_HOURS
         },

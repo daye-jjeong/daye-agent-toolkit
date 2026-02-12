@@ -78,7 +78,7 @@ Hybrid pipeline: deterministic data fetch (0 tokens) + LLM analysis (200-400 tok
 | 0 8 * * * | 모닝 브리핑 (일정 fetch + 분석) | `scripts/fetch_schedule.py` + `schedule_advisor.py` |
 | 0 14 * * * | 오후 체크인 | `scripts/fetch_schedule.py` + `schedule_advisor.py` |
 | */30 8-20 * * * | P0 알림 | `scripts/fetch_schedule.py` + `schedule_advisor.py` |
-| 0 7 * * * | 일일 일정 텔레그램 브리핑 | `scripts/daily_brief.py` |
+| 0 9 * * * | 모닝 브리핑 (일정 + 목표 질문) | `scripts/daily_brief.py` |
 
 ## 스크립트
 
@@ -86,7 +86,7 @@ Hybrid pipeline: deterministic data fetch (0 tokens) + LLM analysis (200-400 tok
 |------|------|------|
 | `schedule_advisor.py` | 일정 분석 + 브리핑/알림 생성 (LLM 파이프라인) | Tier 2 |
 | `scripts/fetch_schedule.py` | Google/iCloud 캘린더 데이터 fetch (JSON 출력) | Tier 1 |
-| `scripts/daily_brief.py` | 일일 일정 텔레그램 브리핑 | Tier 1 |
+| `scripts/daily_brief.py` | 모닝 브리핑: 일정 + 목표 질문 통합 (goal-planner에서 흡수) | Tier 1 |
 
 ## See Also
 
