@@ -84,7 +84,7 @@ python {baseDir}/scripts/weekly_report.py
 ## Check-in Frontmatter
 
 ```yaml
-type: check_in
+type: check-in
 date: 2026-02-11
 sleep_hours: 7
 sleep_quality: 8

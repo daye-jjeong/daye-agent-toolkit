@@ -107,4 +107,3 @@ Common issues: API key not found, rate limiting (429), request timeouts.
 
 - API audit: `API_AUDIT.md`
 - Endpoint migration: `ENDPOINT_MIGRATION_AUDIT.md`
-- Migration guide: `docs/notion_integration_audit_2026-02-03.md`

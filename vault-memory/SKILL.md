@@ -51,6 +51,7 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 | `vault-memory:meeting-note` | [meeting-note.md](meeting-note.md) | 미팅 노트 구조화 |
 | `vault-memory:inbox-process` | [inbox-process.md](inbox-process.md) | +inbox/ 정리 |
 | `vault-memory:weekly-review` | [weekly-review.md](weekly-review.md) | 주간 회고 |
+| `vault-memory:compound` | [compound.md](compound.md) | 야간 자동 compound review — 세션 리뷰 + 장기 기억 반영 |
 
 ### Reference
 
