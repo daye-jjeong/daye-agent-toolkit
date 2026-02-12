@@ -253,7 +253,7 @@ def get_overdue_tasks() -> List[str]:
 def get_failed_tasks_count() -> int:
     """Check failed tasks queue (absorbed from proactive_check.py)"""
     try:
-        queue_file = WORKSPACE / "memory" / "failed_tasks_queue.json"
+        queue_file = WORKSPACE / "memory" / "state" / "failed_tasks_queue.json"
         if not queue_file.exists():
             return 0
         with open(queue_file) as f:
