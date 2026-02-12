@@ -6,9 +6,9 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 # Pantry Manager Skill
 
-**Version:** 0.1.0 | **Updated:** 2026-02-03 | **Status:** Experimental
+**Version:** 0.2.0 | **Updated:** 2026-02-12 | **Status:** Experimental
 
-식재료 관리 자동화 스킬. Notion DB 기반 재고 관리, 유통기한 알림, 장보기 목록, 레시피 추천.
+식재료 관리 자동화 스킬. Obsidian vault 기반 재고 관리, 유통기한 알림, 장보기 목록, 레시피 추천.
 
 ## 트리거
 
@@ -22,13 +22,11 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 ## 설치 & 설정
 
-Notion DB(Pantry) 생성 + API 키 + Python 의존성 필요.
-
-**상세**: `{baseDir}/references/setup-guide.md` 참고
+Python3만 필요. 별도 API 키 불필요.
 
 ## Core Workflow
 
-1. **추가**: 식재료 정보를 Notion DB에 등록 (이름, 카테고리, 수량, 유통기한, 위치)
+1. **추가**: 식재료 정보를 vault에 등록 (이름, 카테고리, 수량, 유통기한, 위치)
 2. **조회**: 전체/카테고리별/위치별 식재료 목록 조회
 3. **유통기한 체크**: 임박(3일 이내) + 만료 식재료 알림
 4. **장보기 목록**: 부족/만료 항목 기반 자동 생성
@@ -39,6 +37,7 @@ Notion DB(Pantry) 생성 + API 키 + Python 의존성 필요.
 
 | Script | Purpose |
 |--------|---------|
+| `pantry_io.py` | Vault 기반 식재료 I/O 모듈 |
 | `add_item.py` | 식재료 추가 |
 | `list_items.py` | 목록 조회 (--category, --location) |
 | `check_expiry.py` | 유통기한 체크 |
@@ -53,12 +52,32 @@ Notion DB(Pantry) 생성 + API 키 + Python 의존성 필요.
 - 매일 09:00: 유통기한 체크 -> Telegram 알림
 - 매주 일 20:00: 냉장고 정리 체크 -> Telegram 알림
 
-## API Keys
-
-- **Notion API:** `~/.config/notion/api_key_daye_personal` (NEW HOME)
-- **OpenAI API:** 시스템 환경변수 (레시피 추천 + 이미지 파싱용)
-
 ## Data Storage
 
-- **Notion DB:** 모든 식재료 데이터
+- **Vault:** `~/clawd/memory/pantry/items/` (각 식재료 = 개별 .md, YAML frontmatter)
+- **환경변수:** `PANTRY_VAULT` (기본값: `~/clawd/memory`)
 - **로컬 캐시:** `~/.cache/pantry-manager/` (임시 리포트, 이미지 파싱 결과)
+
+## Frontmatter Schema
+
+```yaml
+type: pantry-item
+name: 당근
+category: 채소
+quantity: 5
+unit: 개
+location: 냉장
+purchase_date: 2026-02-10
+expiry_date: 2026-02-20
+status: 재고 있음
+updated: 2026-02-12
+```
+
+## Dataview 쿼리 예시
+
+```dataview
+TABLE name, category, quantity, unit, location, expiry_date, status
+FROM "pantry/items"
+WHERE type = "pantry-item"
+SORT expiry_date ASC
+```

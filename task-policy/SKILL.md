@@ -7,7 +7,7 @@ user-invocable: false
 # Task Policy
 
 태스크 생성, 분류, 실행의 전체 정책과 가드레일을 관리하는 스킬. 하위에 guardrails, triage 서브스킬 포함.
-Storage: Obsidian vault (`~/mingming-vault/projects/`).
+Storage: Obsidian vault (`~/clawd/memory/projects/`).
 
 ## 핵심 정책
 - **태스크 생성**: 사용자 확인(opt-in) 후에만 생성

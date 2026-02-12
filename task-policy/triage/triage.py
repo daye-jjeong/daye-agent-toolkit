@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Task Triage - Auto-classify user requests into Epic/Project/Task.
-Storage: Obsidian vault (~/mingming-vault/projects/).
+Storage: Obsidian vault (~/clawd/memory/projects/).
 
 Usage:
     python3 triage.py "user request" [--execute] [--auto-approve]

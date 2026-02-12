@@ -1,13 +1,13 @@
 ---
 name: task-dashboard
-description: 프로젝트 tasks.yml + goals YAML → 인터랙티브 HTML 대시보드
+description: 프로젝트 태스크(t-{project}-NNN.md) + goals YAML → 인터랙티브 HTML 대시보드
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Task Dashboard Skill
 
 ## Description
-프로젝트별 tasks.yml과 goals YAML 데이터를 결합하여 인터랙티브 HTML 대시보드를 생성합니다.
+프로젝트별 태스크 파일(t-{project}-NNN.md)과 goals YAML을 결합하여 인터랙티브 HTML 대시보드를 생성합니다.
 
 ## Version
 0.3.0

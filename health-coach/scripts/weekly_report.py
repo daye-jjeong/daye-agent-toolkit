@@ -3,7 +3,7 @@
 Generate weekly health report from Obsidian vault data.
 
 Reads last 7 days of check-ins, exercises, and symptoms from
-~/mingming-vault/health/ and computes summary statistics.
+~/clawd/memory/health/ and computes summary statistics.
 stdlib only.
 """
 

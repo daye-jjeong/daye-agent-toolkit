@@ -83,6 +83,27 @@ HEARTBEAT.md에 cron으로 분리해야 할 내용이 섞여있는지 검사.
 - deprecated된 이름이나 경로 (사용자가 지정한 감시 목록 기반)
 - 예: `jarvis-`, `task-os`, `notion_uploader` 등 마이그레이션 완료된 참조
 
+### 8. MEMORY.md 범위 (Memory Scope)
+MEMORY.md에 시스템 설정/정책이 혼입되었는지 검사.
+
+**원칙:** MEMORY.md는 *다예에 대한* 개인 장기 기억 전용. 시스템 설정은 AGENTS.md/TOOLS.md/CLAUDE.md가 담당.
+
+**검출 대상 — 섹션 헤더 (warning):**
+- `## 운영 원칙`, `## 기록 원칙` → AGENTS.md
+- `## 보안 원칙` → AGENTS.md § 3
+- `## 키/인증 관리` → TOOLS.md
+- `## 워크스페이스 구조` → CLAUDE.md
+- `## 텔레그램 밍밍이` → TOOLS.md § Telegram
+- `## 세션 정책/관리/보호` → AGENTS.md § 2
+
+**검출 대상 — 콘텐츠 (info):**
+- 디렉토리 트리 구조도 (`├──`, `└──`)
+- 키 스토어 경로 (`~/.config/jarvis/keys/`)
+- OpenClaw 설정값 (`agents.defaults.`)
+- 도구 접근 등급 (`Tier 1/2/3`)
+- 세션 보호 정책 (`sessions_spawn`, `메인 세션 = 대화 전용`)
+- SOT 정의 (`SOT ... vault`)
+
 ## 실행 방법
 
 ### 자동 스크립트
@@ -99,6 +120,7 @@ python3 scripts/lint_docs.py --check models      # 모델 이름만
 python3 scripts/lint_docs.py --check duplicates   # 중복만
 python3 scripts/lint_docs.py --check projects     # 프로젝트 구조만
 python3 scripts/lint_docs.py --check stale        # 레거시만
+python3 scripts/lint_docs.py --check memory_scope # MEMORY.md 범위만
 
 # 전체 실행 (기본)
 python3 scripts/lint_docs.py --check all

@@ -1,6 +1,6 @@
 ---
 name: task-policy-guardrails
-description: Hard gate + auto-enforcement for deliverable accessibility (Notion upload) in Task Policy workflow
+description: Hard gate + auto-enforcement for deliverable accessibility (vault save) in Task Policy workflow
 version: 1.0.0
 status: Implemented
 ---
@@ -9,7 +9,7 @@ status: Implemented
 
 **Status:** ✅ Implemented (2026-02-04)  
 **Version:** 1.0.0  
-**Purpose:** Enforce Notion Task linkage + deliverable upload for all work operations
+**Purpose:** Enforce vault Task linkage + deliverable save for all work operations
 
 ---
 
@@ -40,7 +40,7 @@ from skills.task_policy_guardrails.lib.gates import post_work_gate
 result = post_work_gate(
     session_id=session_id,
     final_output=subagent_report,
-    auto_upload=True  # Auto-upload local files to Notion
+    auto_upload=True  # Auto-save local files to vault
 )
 
 if result["passed"]:
@@ -64,9 +64,9 @@ else:
 ### Gate 2: Post-Work Validation (WARNING → BLOCKING)
 - ✅ **Deliverable detection** - Extract URLs from work output
 - ✅ **Accessibility check** - Reject local-only paths
-- ✅ **Auto-upload** - Convert local files to Notion child pages
+- ✅ **Auto-save** - Save local files to vault deliverables directory
 - ✅ **Task update** - Add deliverable links to Task '산출물' section
-- ✅ **Korean-by-default** - All uploads in Korean with proper footer
+- ✅ **Korean-by-default** - All deliverables in Korean with proper footer
 
 ### Monitoring & Audit
 - ✅ **Violations log** - JSONL append-only audit trail
@@ -86,7 +86,7 @@ skills/task-policy-guardrails/lib/
 ├── validator.py             # Task URL + deliverable validation
 ├── state.py                 # State file CRUD
 ├── deliverable_checker.py   # Extract & check deliverables
-├── notion_uploader.py       # Auto-upload to Notion
+├── vault_writer.py          # Save deliverables to vault
 ├── logger.py                # Violations logging
 └── gates.py                 # Main enforcement gates
 ```
@@ -169,7 +169,7 @@ result = post_work_gate(
     created_files=["./docs/complete_guide.md"],
     auto_upload=True  # Enable auto-upload
 )
-# → 📤 Auto-uploaded 1 deliverables to Notion
+# → 📤 Auto-saved 1 deliverable to vault
 # → ✅ Task updated with deliverable link
 ```
 
@@ -192,7 +192,7 @@ result = pre_work_gate(
 ### Environment Variables
 
 - `GUARDRAILS_ENABLED=true` (default: true)
-- `NOTION_API_KEY_PATH=~/.config/notion/api_key_daye_personal`
+- `TASK_VAULT=~/clawd/memory` (default vault path)
 
 ### Tunable Parameters
 
@@ -315,8 +315,8 @@ def spawn_subagent(task, model, label, **kwargs):
 
 **Cause:** Task URL not accessible  
 **Fix:** 
-- Verify Task exists in NEW HOME Notion workspace
-- Check integration permissions
+- Verify Task exists in vault (`~/clawd/memory/projects/`)
+- Check file path is accessible
 - Ensure Task is not archived
 
 ### "Deliverable validation failed: local path not accessible"
@@ -324,7 +324,7 @@ def spawn_subagent(task, model, label, **kwargs):
 **Cause:** Subagent returned local file path instead of accessible URL  
 **Fix:**
 - Enable `auto_upload=True` in `post_work_gate()`
-- Or manually upload file to Notion and update Task
+- Or manually copy file to vault deliverables/ and update Task
 
 ### Auto-upload fails
 
@@ -340,7 +340,7 @@ def spawn_subagent(task, model, label, **kwargs):
 **ALL deliverables MUST be in Korean unless user explicitly requests English.**
 
 **Enforcement:**
-- Notion uploader defaults to Korean footer (`FOOTER_TEMPLATE_KO`)
+- Vault writer defaults to Korean footer (`FOOTER_TEMPLATE_KO`)
 - Task bodies use Korean template (from `skills/task-policy/POLICY.md`)
 - Auto-generated reports in Korean
 
@@ -362,7 +362,7 @@ upload_deliverable_to_notion(
 - `lib/validator.py` - Validation logic (157 lines)
 - `lib/state.py` - State file management (230 lines)
 - `lib/deliverable_checker.py` - Deliverable extraction (207 lines)
-- `lib/notion_uploader.py` - Notion upload automation (201 lines)
+- `lib/vault_writer.py` - Vault deliverable writer (169 lines)
 - `lib/logger.py` - Violations logging (153 lines)
 - `lib/gates.py` - Main enforcement gates (373 lines)
 

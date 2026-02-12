@@ -132,10 +132,20 @@
 - 투자 리서치 결과
 - 시장 분석, 어닝 캘린더
 - 리서치 프롬프트 템플릿
+- 대시보드, 데이터 시각화
+
+**포맷 선택 (내용에 맞게):**
+| 유형 | 포맷 |
+|------|------|
+| 대시보드, 시각화, 인터랙티브 | `.html` |
+| 정식 보고서, 공유용 | `.pdf` |
+| 리서치 노트, 편집 필요 | `.md` |
+
+Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 
 ---
 
-### memory/projects/{type}--{name}/ — 프로젝트 태스크
+### memory/projects/{type}/{name}/ — 프로젝트 태스크
 **위치:** `memory/projects/{work|personal}--{name}/`
 **성격:** 프로젝트별 태스크 추적. repo 연결, 진행 로그 포함.
 
@@ -255,32 +265,51 @@
 
 ## 알림
 
-### 태스크 상태 변경 알림
+### 아키텍처
 
-태스크 상태가 변경되면 텔레그램으로 알림:
+```
+태스크 파일 변경 (Claude Code / Obsidian Sync)
+    │
+    ↓  Obsidian Shell Commands "File content modified" 감지
+    │
+    ↓  python3 ~/clawd/scripts/notify_task_change.py "{{file_path}}"
+    │
+    ↓  변경 파싱 + 쿨다운 체크 (30초 내 중복 방지)
+    │
+    ↓  clawdbot agent --message "요약" --channel telegram --deliver
+    │
+    ↓  OpenClaw이 수신 → 필요시 후속 작업
+```
 
-| 이벤트 | 메시지 |
-|--------|--------|
-| 시작 | `🔄 t-ronik-001 시작 (by claude-code)` |
-| 완료 | `✅ t-ronik-001 완료 (by openclaw): 캘리 프로세스 정리` |
-| 차단 | `🚫 t-ronik-001 blocked: API 키 필요` |
-| 핸드오프 | `🔀 t-ronik-001 핸드오프 → openclaw` |
-| 마감 임박 | `⏰ t-ronik-004 마감 내일 (2/12), subtask 1/2 완료` |
+### Obsidian Shell Commands 설정
 
-**구현:**
-- Claude Code: `session_end.py` hook에서 tasks.yml 변경 감지 → 알림 스크립트 호출
-- OpenClaw: task-update 워크플로우 내에서 직접 텔레그램 전송
-- 알림 스크립트: `scripts/notify_task_update.py` (TODO: 구현 필요)
+1. 플러그인 설치: Shell Commands
+2. 셸 커맨드 등록: `python3 ~/clawd/scripts/notify_task_change.py "{{file_path}}"`
+3. 이벤트: "File content modified"
+4. 경로 필터: `projects/**/*` (tasks.yml, project.yml, t-*.md)
 
-### 크로스 플랫폼 알림
+### 알림 스크립트
 
-다른 플랫폼이 작업한 내용을 알려주는 알림:
+**경로**: `scripts/notify_task_change.py`
 
-| 상황 | 알림 |
-|------|------|
-| OpenClaw이 태스크 완료 → Claude Code 세션 시작 | resume에서 자동 표시 |
-| Claude Code이 태스크 완료 → OpenClaw 세션 시작 | resume에서 자동 표시 |
-| 긴급 핸드오프 | 텔레그램 즉시 알림 |
+알림 메시지 형식:
+```
+📋 work--ronik tasks.yml 변경됨
+  ✅ t-ronik-001: 캘리봇 기획 재정리 완료
+  🔄 t-ronik-004: PM봇 태스크 형식 검증 — openclaw: Notion DB 구조 확인 완료
+```
+
+전달 경로:
+1. `clawdbot agent` → OpenClaw (primary)
+2. Telegram 직접 전송 (fallback)
+
+### 크로스 플랫폼 컨텍스트 복원
+
+| 상황 | 메커니즘 |
+|------|----------|
+| OpenClaw 작업 → Claude Code 세션 시작 | resume에서 활성 태스크 스캔, 다른 플랫폼 작업 하이라이트 |
+| Claude Code 작업 → OpenClaw 세션 시작 | Obsidian webhook → clawdbot agent → OpenClaw 수신 |
+| 긴급 핸드오프 | Obsidian webhook → 즉시 알림 |
 
 ---
 

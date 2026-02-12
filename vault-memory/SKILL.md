@@ -58,7 +58,7 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 | 시스템 정책 | `~/clawd/AGENTS.md` |
 | 장기 기억 | `memory/MEMORY.md` |
 | 세션 로그 | `memory/YYYY-MM-DD.md` (flat) |
-| 프로젝트/태스크 | `memory/projects/{type}--{name}/` |
+| 프로젝트/태스크 | `memory/projects/{type}/{name}/` |
 | 태스크 템플릿 | `memory/projects/config/task-template.yml` |
 | 목표 | `memory/goals/{daily,weekly,monthly}/` |
 | 설계 문서 | `memory/docs/` |

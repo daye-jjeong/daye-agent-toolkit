@@ -66,8 +66,8 @@ def extract_deliverables(text: str, file_paths: List[str] = None) -> List[Dict]:
             "source": "markdown_link"
         })
 
-    # Pattern 4: Vault file paths (~/mingming-vault/...)
-    vault_pattern = r"(~/mingming-vault/[^\s\)]+)"
+    # Pattern 4: Vault file paths (~/clawd/memory/...)
+    vault_pattern = r"(~/clawd/memory/[^\s\)]+)"
     vault_paths = re.findall(vault_pattern, text)
     for vpath in vault_paths:
         if vpath not in [d["url"] for d in deliverables]:
@@ -233,7 +233,7 @@ if __name__ == "__main__":
     - vault 페이지: [[ai-trends-report]]
     - 웹 링크: https://example.com/report.pdf
     - 로컬 문서: [가이드](./docs/guide.md)
-    - vault 경로: ~/mingming-vault/projects/work/ronik/deliverables/report.md
+    - vault 경로: ~/clawd/memory/projects/work/ronik/deliverables/report.md
 
     ## 참고
     추가 자료는 /Users/dayejeong/clawd/output/data.csv 참조

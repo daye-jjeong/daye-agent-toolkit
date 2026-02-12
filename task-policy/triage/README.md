@@ -85,15 +85,9 @@ python3 automation_logger.py log "Morning Brief" success "브리프 전송 완�
 python3 automation_logger.py list --limit 10
 ```
 
-### 4. Notion 뷰 설정 (`notion_view_setup.py` + 가이드)
-**출력:** `NOTION_VIEW_GUIDE.md` - TASKS.md 스타일 Board 뷰 설정 가이드
-
-**주요 내용:**
-- Status → Category 매핑 (Active/Waiting On/Someday/Done)
-- Board 뷰 생성 단계별 가이드
-- 필터/정렬/그룹화 설정
-- 일일/주간 운영 루틴
-- 자동화 통합 방법
+### 4. Vault 기반 태스크 관리
+태스크는 `~/clawd/memory/projects/` 하위에 `t-{project}-NNN.md` 파일로 저장.
+Notion 뷰 설정 스크립트는 제거됨 (vault로 이관 완료).
 
 ## 🚀 통합 워크플로우
 
@@ -164,7 +158,7 @@ def morning_brief_cron():
 - [x] `AUTOMATION_INTEGRATION.md`: 통합 가이드
 
 ### C) Notion 뷰 개선 ✅
-- [x] `notion_view_setup.py`: DB 분석 스크립트
+- [x] Vault 기반 태스크 I/O (`task_io.py`)
 - [x] `NOTION_VIEW_GUIDE.md`: TASKS.md 스타일 설정 가이드
 - [x] Status → Category 매핑 정의
 - [x] 일일/주간 운영 루틴 문서화

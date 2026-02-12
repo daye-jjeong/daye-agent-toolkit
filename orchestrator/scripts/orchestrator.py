@@ -348,7 +348,7 @@ def execute_orchestrator_task(
 
     # TODO: Implement actual task decomposition (for now, mock)
     # In real implementation, this would use LLM to decompose task
-    # Note: Task SOT is now projects/{folder}/tasks.yml (migrated from Notion)
+    # Note: Task SOT is now memory/projects/{type}/{name}/t-{prefix}-NNN.md
     subtasks = [
         {"name": "Setup", "task": "Initialize environment", "complexity": "simple"},
         {"name": "Main Work", "task": request, "complexity": "moderate"},
@@ -390,7 +390,7 @@ def execute_orchestrator_task(
         title=deliverable.get("type", "Work").title(),
         goal=request[:80],  # First 80 chars as goal
         steps=[st["name"] for st in subtasks],
-        deliverable=f"{deliverable.get('type', 'output')} → {deliverable.get('destination', 'notion')}",
+        deliverable=f"{deliverable.get('type', 'output')} → {deliverable.get('destination', 'vault')}",
         eta_min=total_eta,
         tokens_in_k=total_tokens_in,
         tokens_out_k=total_tokens_out,

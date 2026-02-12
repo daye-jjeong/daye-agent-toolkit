@@ -2,7 +2,7 @@
 task_io.py -- Obsidian vault 기반 태스크 I/O 모듈.
 
 task-policy 스킬의 guardrails / triage 공통 사용.
-~/mingming-vault/projects/ 아래에 Dataview-queryable markdown 파일을 읽고 쓴다.
+~/clawd/memory/projects/ 아래에 Dataview-queryable markdown 파일을 읽고 쓴다.
 
 기존 vault 컨벤션 준수:
   - 프로젝트: projects/{type}/{project-name}/_project.md
@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-VAULT_DIR = Path(os.environ.get("TASK_VAULT", "~/mingming-vault")).expanduser()
+VAULT_DIR = Path(os.environ.get("TASK_VAULT", "~/clawd/memory")).expanduser()
 PROJECTS_DIR = VAULT_DIR / "projects"
 GUARDRAILS_DIR = Path.home() / ".clawdbot" / "guardrails"
 

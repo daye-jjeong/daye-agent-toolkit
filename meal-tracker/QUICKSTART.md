@@ -60,7 +60,7 @@ python3 scripts/log_meal.py \
 
 ```bash
 # 오늘 기록 확인
-ls ~/mingming-vault/meals/$(date +%Y-%m-%d)*.md
+ls ~/clawd/memory/meals/$(date +%Y-%m-%d)*.md
 ```
 
 ## 문제 해결
@@ -77,7 +77,7 @@ python3 ~/clawd/skills/meal-tracker/scripts/meal_reminder.py lunch
 ### 기록이 안 남아요
 ```bash
 # vault 디렉토리 확인
-ls -lh ~/mingming-vault/meals/
+ls -lh ~/clawd/memory/meals/
 
 # 수동 기록 테스트
 python3 ~/clawd/skills/meal-tracker/scripts/log_meal.py \

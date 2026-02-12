@@ -53,7 +53,7 @@ def parse_items_simple(text):
 def main():
     parser = argparse.ArgumentParser(description="영수증/장바구니 이미지 파싱")
     parser.add_argument("--image", required=True, help="이미지 파일 경로")
-    parser.add_argument("--auto-add", action="store_true", help="자동으로 Notion에 추가")
+    parser.add_argument("--auto-add", action="store_true", help="자동으로 vault에 추가")
     
     args = parser.parse_args()
     

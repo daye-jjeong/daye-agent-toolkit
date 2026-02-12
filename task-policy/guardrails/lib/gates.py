@@ -151,7 +151,7 @@ def pre_work_gate(
         raise GuardrailsViolation(
             f"Task not accessible: {validation['error']}\n"
             f"Ref: {task_ref}\n"
-            f"Action: Check Task exists in vault (~/mingming-vault/projects/)"
+            f"Action: Check Task exists in vault (~/clawd/memory/projects/)"
         )
 
     # Step 6: All checks passed - create state and allow

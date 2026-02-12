@@ -18,7 +18,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 ## 저장소
 
-**Obsidian vault:** `~/mingming-vault/meals/`
+**Obsidian vault:** `~/clawd/memory/meals/`
 
 식사 기록은 Dataview-queryable frontmatter를 가진 마크다운 파일로 저장됩니다.
 
@@ -135,7 +135,7 @@ Health Coach가 이를 기반으로 조언을 제공합니다.
 meals 디렉토리는 첫 기록 시 자동 생성됩니다. 수동 생성:
 
 ```bash
-mkdir -p ~/mingming-vault/meals
+mkdir -p ~/clawd/memory/meals
 ```
 
 ### 알림이 안 올 때

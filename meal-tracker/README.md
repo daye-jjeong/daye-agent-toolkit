@@ -18,7 +18,7 @@
 
 ### 2. 식사 기록
 - 메뉴, 양, 시간 기록
-- Obsidian vault (~/mingming-vault/meals/) 저장
+- Obsidian vault (~/clawd/memory/meals/) 저장
 - Dataview-queryable frontmatter
 - 거른 식사 추적
 
@@ -48,7 +48,7 @@ meal-tracker/
 
 ## Obsidian vault 구조
 
-**디렉토리:** `~/mingming-vault/meals/`
+**디렉토리:** `~/clawd/memory/meals/`
 
 각 식사 기록은 frontmatter가 포함된 마크다운 파일로 저장됩니다:
 

@@ -2,7 +2,7 @@
 health_io.py -- Obsidian vault 기반 건강 데이터 I/O 모듈.
 
 health-tracker / health-coach 공통 사용.
-~/mingming-vault/health/ 아래에 Dataview-queryable markdown 파일을 읽고 쓴다.
+~/clawd/memory/health/ 아래에 Dataview-queryable markdown 파일을 읽고 쓴다.
 stdlib만 사용.
 """
 
@@ -11,7 +11,7 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-VAULT_DIR = Path(os.environ.get("HEALTH_VAULT", "~/mingming-vault")).expanduser()
+VAULT_DIR = Path(os.environ.get("HEALTH_VAULT", "~/clawd/memory")).expanduser()
 HEALTH_DIR = VAULT_DIR / "health"
 
 CATEGORIES = {

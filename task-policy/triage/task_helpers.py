@@ -2,7 +2,7 @@
 """
 Task Property Helpers
 Auto-update Task properties according to POLICY.md.
-Storage: Obsidian vault (~/mingming-vault/projects/).
+Storage: Obsidian vault (~/clawd/memory/projects/).
 """
 
 import sys

@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Automate the classification and creation of work items in Notion's Task Policy, implementing the policy defined in AGENTS.md § 7 and § 8.
+Automate the classification and creation of work items in Obsidian vault, implementing the policy defined in AGENTS.md § 7 and § 8.
 
 ## Architecture
 
@@ -47,19 +47,19 @@ Automate the classification and creation of work items in Notion's Task Policy, 
                    │
                    ▼
 ┌─────────────────────────────────────────────┐
-│     Notion Creation                         │
-│  • Create page in Tasks DB                  │
+│     Vault Creation                           │
+│  • Create task .md in projects/              │
 │  • Set Start Date = today                   │
 │  • Prompt for Due Date                      │
 │  • Link to Project                          │
-│  • Create child page scaffold               │
+│  • YAML frontmatter + body scaffold         │
 └──────────────────┬──────────────────────────┘
                    │
                    ▼
 ┌─────────────────────────────────────────────┐
 │     Return Result                           │
-│  URL: https://notion.so/...                 │
-│  ID: page-id                                │
+│  Path: memory/projects/.../t-xxx-NNN.md     │
+│  ID: t-xxx-NNN                              │
 │  Status: Created                            │
 └─────────────────────────────────────────────┘
 ```
@@ -120,22 +120,22 @@ classification = classify_request("user request")
 # Shows preview, NO writes
 
 # Explicit execution
-result = create_notion_entry(classification, dry_run=False)
+result = create_vault_entry(classification, dry_run=False)
 ```
 
 ### 2. Approval Gate
 
 ```python
 if not auto_approve:
-    approve = input("Proceed with Notion creation? (y/N): ")
+    approve = input("Proceed with task creation? (y/N): ")
     if approve not in ['y', 'yes', '진행', '진행해']:
         return {"approved": False}
 ```
 
 ### 3. Validation
 
-- Check Notion API access before writes
-- Validate DB IDs exist
+- Validate vault directory accessible
+- Check for duplicate task IDs
 - Check for duplicate titles
 - Rollback on error
 
@@ -145,7 +145,7 @@ All operations logged to `~/.clawdbot/agents/main/logs/task-triage.log`:
 ```
 2026-02-03 12:00:00 | CLASSIFY | "토스 API 문서 리뷰" → Task (90%)
 2026-02-03 12:00:05 | APPROVE  | User confirmed
-2026-02-03 12:00:10 | CREATE   | Task created: https://notion.so/...
+2026-02-03 12:00:10 | CREATE   | Task created: t-proj-001
 ```
 
 ## Integration Points
@@ -163,7 +163,7 @@ def handle_user_work_request(message):
         
         # 3. Spawn sub-agent with Task URL
         spawn_subagent(
-            task=f"Task URL: {result['notion_entry']['url']}\n{message}",
+            task=f"Task ID: {result['task_id']}\n{message}",
             model="anthropic/claude-sonnet-4-5"
         )
 ```
@@ -187,9 +187,7 @@ Edit `config.json`:
 
 ```json
 {
-  "notion_api_key_path": "~/.config/notion/api_key_daye_personal",
-  "tasks_db_id": "8e0e8902-0c60-4438-8bbf-abe10d474b9b",
-  "projects_db_id": "92f50099-1567-4f34-9827-c197238971f6",
+  "vault_path": "~/clawd/memory",
   "dry_run_default": true,
   "auto_approve_keywords": ["진행해", "do it", "approve"],
   "similarity_threshold": 0.8,
@@ -203,24 +201,15 @@ Edit `config.json`:
 
 ## Error Handling
 
-### Notion API Errors
+### Vault I/O Errors
 
 ```python
 try:
-    response = notion.pages.create(...)
-except APIResponseError as e:
-    if e.code == "validation_error":
-        # Invalid property format
-        log_error(f"Invalid Notion properties: {e}")
-        return fallback_to_default_template()
-    elif e.code == "unauthorized":
-        # Invalid API key
-        log_error("Notion API key invalid or expired")
-        return prompt_for_reauth()
-    else:
-        # Other errors
-        log_error(f"Notion API error: {e}")
-        return retry_with_backoff()
+    task_path = write_task(project_dir, task_data)
+except PermissionError:
+    log_error("Vault directory not writable")
+except FileExistsError:
+    log_error("Duplicate task ID detected")
 ```
 
 ### Classification Confidence < 50%
@@ -253,8 +242,8 @@ python3 -m pytest skills/task-triage/tests/test_classifier.py
 ### Integration Tests
 
 ```bash
-# Test Notion integration (dry-run)
-python3 skills/task-triage/tests/test_notion_dry_run.py
+# Test vault integration (dry-run)
+python3 skills/task-triage/tests/test_vault_dry_run.py
 
 # Test full pipeline
 python3 skills/task-triage/tests/test_end_to_end.py
@@ -279,8 +268,8 @@ python3 skills/task-triage/triage.py "애매한 요청" --override-classificatio
 ## Performance
 
 - **Classification**: < 100ms (no LLM calls, rule-based)
-- **Notion creation**: ~500ms (API call)
-- **Total**: < 1s for full pipeline
+- **Vault write**: < 10ms (local I/O)
+- **Total**: < 200ms for full pipeline
 
 ## Token Cost
 
@@ -305,12 +294,12 @@ If skill causes issues:
 mv skills/task-triage skills/task-triage.disabled
 
 # Manual Task creation
-python3 scripts/create_notion_task.py --manual
+python3 skills/task-manager/task_manager.py create --name "manual task"
 ```
 
 ## See Also
 
 - **Policy**: AGENTS.md § 7 (Task-Centric Policy)
 - **Hierarchy**: AGENTS.md § 8 (Epic-Project-Task Structure)
-- **Notion Page**: Task Policy v1 > Auto-Classification Rules
+- **Rules**: `triage/CLASSIFICATION_RULES.md`
 - **Integration Check**: scripts/check_integrations.py

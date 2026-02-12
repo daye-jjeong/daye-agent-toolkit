@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 doc-lint: 시스템 .md 파일 정합성 검사기
-Usage: python3 lint_docs.py [--check all|refs|skills|models|duplicates|projects|stale] [--format text|json]
+Usage: python3 lint_docs.py [--check all|refs|skills|models|duplicates|projects|stale|freshness] [--format text|json]
 """
 
 import os
@@ -11,6 +11,7 @@ import json
 import argparse
 from pathlib import Path
 from collections import defaultdict
+from datetime import date, timedelta
 
 # ─── 설정 ───────────────────────────────────────────────────────────────
 
@@ -22,21 +23,22 @@ SYSTEM_MD_FILES = [
     "HEARTBEAT.md", "IDENTITY.md", "TOOLS.md"
 ]
 
-# 활성 모델 목록 (AGENTS.md § 2.2 기준)
+# 활성 모델 목록 (AGENTS.md § 2.2 기준, 2026-02-12)
 ACTIVE_MODELS = [
-    "gpt-5.2", "gpt-5.2-codex",
-    "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5",
+    "gpt-5.3-codex", "gpt-5.2", "gpt-5.2-codex",
+    "claude-opus-4-6", "claude-sonnet-4-5", "claude-haiku-4-5",
     "gemini-3-pro-preview", "gemini-3-flash-preview",
+    "gemini-3-pro", "gemini-3-flash",
     # provider 포함 형태
-    "openai-codex/gpt-5.2", "openai-codex/gpt-5.2-codex",
-    "anthropic/claude-opus-4-5", "anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5",
+    "openai-codex/gpt-5.3-codex", "openai-codex/gpt-5.2", "openai-codex/gpt-5.2-codex",
+    "anthropic/claude-opus-4-6", "anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5",
     "google-gemini-cli/gemini-3-pro-preview", "google-gemini-cli/gemini-3-flash-preview",
 ]
 
 # 레거시 참조 감시 목록
 STALE_PATTERNS = [
     {
-        "pattern": r"jarvis-(?!HQ)",  # jarvis-HQ는 텔레그램 그룹이라 제외
+        "pattern": r"jarvis-(?!HQ)",
         "label": "jarvis- prefix",
         "context": "스킬 prefix로 사용된 경우 (task-policy, banksalad-import 등으로 변경됨)",
         "severity": "warning",
@@ -54,10 +56,22 @@ STALE_PATTERNS = [
         "severity": "warning",
     },
     {
-        "pattern": r"claude-opus-4-6",
-        "label": "claude-opus-4-6 (잘못된 모델명)",
-        "context": "올바른 이름: claude-opus-4-5",
-        "severity": "error",
+        "pattern": r"\btasks\.yml\b",
+        "label": "tasks.yml (레거시 태스크 형식)",
+        "context": "per-task MD로 변경됨 (t-{project}-NNN.md)",
+        "severity": "warning",
+    },
+    {
+        "pattern": r"\bmingming-skills\b",
+        "label": "mingming-skills",
+        "context": "daye-agent-toolkit으로 변경됨",
+        "severity": "warning",
+    },
+    {
+        "pattern": r"\bclaude-skills\b",
+        "label": "claude-skills",
+        "context": "daye-agent-toolkit으로 변경됨",
+        "severity": "warning",
     },
     {
         "pattern": r"gemini-2\.5",
@@ -65,14 +79,163 @@ STALE_PATTERNS = [
         "context": "사용 금지 모델 — AGENTS.md § 2.2 참조",
         "severity": "error",
     },
+    {
+        "pattern": r"claude-opus-4-5(?!\d)",
+        "label": "claude-opus-4-5 (구 모델명)",
+        "context": "올바른 이름: claude-opus-4-6",
+        "severity": "error",
+    },
+    {
+        "pattern": r"\bgpt-5\.2\b(?!-codex).*\bprimary\b|\bprimary\b.*\bgpt-5\.2\b(?!-codex)",
+        "label": "gpt-5.2 as primary (구 설정)",
+        "context": "primary는 gpt-5.3-codex로 변경됨",
+        "severity": "warning",
+    },
 ]
 
 # 잘못된 모델 이름 패턴
 INVALID_MODEL_PATTERNS = [
-    r"claude-opus-4-6",
+    r"claude-opus-4-5(?!\d)",
     r"claude-sonnet-4-6",
     r"gemini-2\.5",
     r"gpt-4(?!\.)",  # gpt-4 단독 (gpt-4o는 OK)
+    r"\bgpt-5\.2\b(?![\s\-])",  # gpt-5.2 단독 (gpt-5.2-codex는 OK) — 모델 목록 내부는 제외
+]
+
+# MEMORY.md 최신성 검사용 — deprecated 키워드/패턴
+MEMORY_STALE_PATTERNS = [
+    {
+        "pattern": r"gpt-5\.2(?!-codex).*(?:primary|기본|메인)",
+        "label": "gpt-5.2 as primary",
+        "context": "primary는 gpt-5.3-codex. MEMORY.md 업데이트 필요",
+    },
+    {
+        "pattern": r"claude-opus-4-5",
+        "label": "claude-opus-4-5",
+        "context": "현재 모델: claude-opus-4-6",
+    },
+    {
+        "pattern": r"mingming-skills",
+        "label": "mingming-skills 레포명",
+        "context": "daye-agent-toolkit으로 변경됨",
+    },
+    {
+        "pattern": r"\btasks\.yml\b",
+        "label": "tasks.yml 참조",
+        "context": "per-task MD(t-{project}-NNN.md)로 변경됨",
+    },
+    {
+        "pattern": r"projects/_config/structure\.yml",
+        "label": "projects/_config/structure.yml",
+        "context": "memory/projects/config/로 이동됨",
+    },
+    {
+        "pattern": r"projects/_goals/",
+        "label": "projects/_goals/ 경로",
+        "context": "memory/goals/로 이동됨",
+    },
+    {
+        "pattern": r"\b~/clawd/projects/\b",
+        "label": "~/clawd/projects/ (레거시 경로)",
+        "context": "memory/projects/로 이동됨",
+    },
+]
+
+# AGENTS.md 최신성 검사용
+AGENTS_STALE_PATTERNS = [
+    {
+        "pattern": r"gpt-5\.2(?![\-\s]*codex).*(?:Primary|primary|기본)",
+        "label": "gpt-5.2 as primary",
+        "context": "primary는 gpt-5.3-codex로 변경됨",
+    },
+    {
+        "pattern": r"memory/(?!projects|goals|state|docs|policy|reports|archive|finance|format|VAULT|MEMORY|\+inbox|YYYY)[a-z_]+\.json",
+        "label": "memory/ 루트의 JSON 참조",
+        "context": "상태 파일은 memory/state/로 이동됨",
+    },
+    {
+        "pattern": r"projects/\*/tasks\.yml",
+        "label": "projects/*/tasks.yml 참조",
+        "context": "per-task MD(t-{project}-NNN.md)로 변경됨",
+    },
+]
+
+# MEMORY.md 범위 검사 — 시스템 설정이 개인 메모리에 혼입되었는지 감지
+MEMORY_SCOPE_PATTERNS = [
+    # 섹션 헤더 (시스템 설정 섹션이 MEMORY.md에 있으면 안 됨)
+    {
+        "pattern": r"^##\s+(?:운영|기록)\s*원칙",
+        "label": "운영/기록 원칙 섹션",
+        "belongs_in": "AGENTS.md",
+        "is_header": True,
+    },
+    {
+        "pattern": r"^##\s+보안\s*원칙",
+        "label": "보안 원칙 섹션",
+        "belongs_in": "AGENTS.md § 3",
+        "is_header": True,
+    },
+    {
+        "pattern": r"^##\s+키/인증\s*관리",
+        "label": "키/인증 관리 섹션",
+        "belongs_in": "TOOLS.md",
+        "is_header": True,
+    },
+    {
+        "pattern": r"^##\s+워크스페이스.*구조",
+        "label": "워크스페이스 구조 섹션",
+        "belongs_in": "CLAUDE.md",
+        "is_header": True,
+    },
+    {
+        "pattern": r"^##\s+텔레그램\s+밍밍이",
+        "label": "텔레그램 설정 섹션",
+        "belongs_in": "TOOLS.md § Telegram",
+        "is_header": True,
+    },
+    {
+        "pattern": r"^##\s+(?:세션|session)\s*(?:정책|관리|보호)",
+        "label": "세션 관리 정책 섹션",
+        "belongs_in": "AGENTS.md § 2",
+        "is_header": True,
+    },
+    # 콘텐츠 패턴 (시스템 설정 내용이 MEMORY.md 본문에 있으면 안 됨)
+    {
+        "pattern": r"(?:├──|└──|│\s+[├└])",
+        "label": "디렉토리 트리 구조도",
+        "belongs_in": "CLAUDE.md",
+        "is_header": False,
+    },
+    {
+        "pattern": r"~/.config/jarvis/keys/",
+        "label": "키 스토어 경로",
+        "belongs_in": "TOOLS.md",
+        "is_header": False,
+    },
+    {
+        "pattern": r"\bagents\.defaults\.",
+        "label": "OpenClaw 설정값",
+        "belongs_in": "config/ 또는 AGENTS.md",
+        "is_header": False,
+    },
+    {
+        "pattern": r"Tier\s+[123]\s*[:(]|도구\s*접근\s*등급",
+        "label": "도구 접근 등급 정책",
+        "belongs_in": "AGENTS.md § 2.1",
+        "is_header": False,
+    },
+    {
+        "pattern": r"\bsessions_spawn\b|메인\s*세션\s*=\s*대화\s*전용",
+        "label": "세션 보호 정책",
+        "belongs_in": "AGENTS.md § 2",
+        "is_header": False,
+    },
+    {
+        "pattern": r"\bSOT\b.*(?:memory|vault)|vault.*\bSOT\b",
+        "label": "SOT 정의",
+        "belongs_in": "AGENTS.md § 7.3",
+        "is_header": False,
+    },
 ]
 
 # ─── 유틸리티 ───────────────────────────────────────────────────────────
@@ -144,8 +307,8 @@ def get_skill_dirs():
 
 
 def get_project_dirs():
-    """projects/ 내 실제 디렉토리 목록 반환."""
-    projects_dir = CLAWD_ROOT / "projects"
+    """memory/projects/ 내 실제 디렉토리 목록 반환."""
+    projects_dir = CLAWD_ROOT / "memory" / "projects"
     if not projects_dir.exists():
         return []
     return [d.name for d in projects_dir.iterdir() if d.is_dir()]
@@ -243,7 +406,7 @@ def check_skills(issues):
                         "SKILL_NOT_FOUND", "error",
                         rel_name, line_num,
                         f"스킬 참조: skills/{skill_name}/",
-                        f"skills/ 디렉토리에 '{skill_name}' 없음. 존재하는 스킬: {', '.join(sorted(existing_skills)[:5])}..."
+                        f"skills/ 디렉토리에 '{skill_name}' 없음"
                     ))
 
     return checked, ok
@@ -284,7 +447,6 @@ def check_duplicates(issues):
     for md_file in get_system_md_files():
         lines = read_file_lines(md_file)
         rel_name = str(md_file.relative_to(CLAWD_ROOT))
-        # 코드 블록과 빈 줄 제외한 일반 텍스트 라인
         text_lines = []
         in_block = False
         for num, text in lines:
@@ -310,12 +472,10 @@ def check_duplicates(issues):
             lines_a = [t for _, t in file_contents[files[i]]]
             lines_b = [t for _, t in file_contents[files[j]]]
 
-            # 슬라이딩 윈도우로 연속 중복 블록 찾기
             for a_start in range(len(lines_a) - MIN_DUPLICATE_LINES + 1):
                 window = lines_a[a_start:a_start + MIN_DUPLICATE_LINES]
                 for b_start in range(len(lines_b) - MIN_DUPLICATE_LINES + 1):
                     if lines_b[b_start:b_start + MIN_DUPLICATE_LINES] == window:
-                        # 라인 번호 추적
                         a_line = file_contents[files[i]][a_start][0]
                         b_line = file_contents[files[j]][b_start][0]
                         found += 1
@@ -326,20 +486,20 @@ def check_duplicates(issues):
                             f"중복 블록 ({MIN_DUPLICATE_LINES}줄+): \"{preview}\"",
                             f"동일 내용이 {files[j]}:{b_line}에도 존재"
                         ))
-                        break  # 같은 파일 쌍에서 하나만
+                        break
 
     return len(checked_pairs), found
 
 
 def check_projects(issues):
-    """프로젝트 구조 정합성 검사."""
-    projects_dir = CLAWD_ROOT / "projects"
+    """프로젝트 구조 정합성 검사 (memory/projects/)."""
+    projects_dir = CLAWD_ROOT / "memory" / "projects"
     if not projects_dir.exists():
         return 0, 0
 
     checked = 0
     ok = 0
-    special_dirs = {"_config", "_goals", "_archive"}
+    special_dirs = {"config", "_archive"}
 
     for d in sorted(projects_dir.iterdir()):
         if not d.is_dir():
@@ -353,26 +513,26 @@ def check_projects(issues):
         if "--" not in d.name:
             issues.append(Issue(
                 "PROJECT_NAMING", "warning",
-                f"projects/{d.name}", None,
+                f"memory/projects/{d.name}", None,
                 f"프로젝트 이름이 '{{type}}--{{name}}' 형식이 아님",
                 "예: work--ronik, personal--health"
             ))
         else:
-            # 필수 파일 확인
+            # 필수 파일 확인: project.yml + t-{project}-NNN.md 1개 이상
             has_project = (d / "project.yml").exists()
-            has_tasks = (d / "tasks.yml").exists()
+            task_files = list(d.glob("t-*.md"))
 
-            if has_project and has_tasks:
+            if has_project and task_files:
                 ok += 1
             else:
                 missing = []
                 if not has_project:
                     missing.append("project.yml")
-                if not has_tasks:
-                    missing.append("tasks.yml")
+                if not task_files:
+                    missing.append("t-{project}-NNN.md (태스크 파일 없음)")
                 issues.append(Issue(
                     "PROJECT_MISSING_FILE", "warning",
-                    f"projects/{d.name}", None,
+                    f"memory/projects/{d.name}", None,
                     f"필수 파일 누락: {', '.join(missing)}",
                     ""
                 ))
@@ -406,17 +566,104 @@ def check_stale(issues):
     return found
 
 
+def check_freshness(issues):
+    """MEMORY.md 및 AGENTS.md 내용 최신성 검사."""
+    found = 0
+
+    # MEMORY.md 검사
+    memory_file = CLAWD_ROOT / "MEMORY.md"
+    if memory_file.exists():
+        lines = read_file_lines(memory_file)
+        for line_num, line_text in lines:
+            if is_in_code_block(lines, line_num):
+                continue
+            for stale in MEMORY_STALE_PATTERNS:
+                match = re.search(stale["pattern"], line_text, re.IGNORECASE)
+                if match:
+                    found += 1
+                    issues.append(Issue(
+                        "STALE_CONTENT", "warning",
+                        "MEMORY.md", line_num,
+                        f"deprecated 정보: {match.group(0)} ({stale['label']})",
+                        stale["context"]
+                    ))
+
+    # AGENTS.md 검사
+    agents_file = CLAWD_ROOT / "AGENTS.md"
+    if agents_file.exists():
+        lines = read_file_lines(agents_file)
+        for line_num, line_text in lines:
+            if is_in_code_block(lines, line_num):
+                continue
+            for stale in AGENTS_STALE_PATTERNS:
+                match = re.search(stale["pattern"], line_text, re.IGNORECASE)
+                if match:
+                    found += 1
+                    issues.append(Issue(
+                        "STALE_CONTENT", "warning",
+                        "AGENTS.md", line_num,
+                        f"deprecated 정보: {match.group(0)} ({stale['label']})",
+                        stale["context"]
+                    ))
+
+    # MEMORY.md 범위 검사 (check_memory_scope에서 별도 수행하지만, freshness에서도 간단 체크)
+
+    # MEMORY.md 마지막 수정일 체크 (30일 이상 미수정 시 경고)
+    if memory_file.exists():
+        import stat
+        mtime = memory_file.stat().st_mtime
+        from datetime import datetime
+        last_mod = datetime.fromtimestamp(mtime).date()
+        days_old = (date.today() - last_mod).days
+        if days_old > 30:
+            found += 1
+            issues.append(Issue(
+                "STALE_CONTENT", "info",
+                "MEMORY.md", None,
+                f"MEMORY.md가 {days_old}일간 미수정",
+                "정기 리뷰/pruning 필요할 수 있음"
+            ))
+
+    return found
+
+
+def check_memory_scope(issues):
+    """MEMORY.md 범위 검사: 시스템 설정이 개인 메모리에 혼입되었는지."""
+    memory_file = CLAWD_ROOT / "MEMORY.md"
+    if not memory_file.exists():
+        return 0
+
+    lines = read_file_lines(memory_file)
+    found = 0
+
+    for line_num, line_text in lines:
+        if is_in_code_block(lines, line_num):
+            continue
+
+        for scope in MEMORY_SCOPE_PATTERNS:
+            match = re.search(scope["pattern"], line_text)
+            if match:
+                found += 1
+                severity = "warning" if scope.get("is_header") else "info"
+                issues.append(Issue(
+                    "MEMORY_SCOPE", severity,
+                    "MEMORY.md", line_num,
+                    f"시스템 설정 혼입: {match.group(0)} ({scope['label']})",
+                    f"→ {scope['belongs_in']}에 있어야 함"
+                ))
+
+    return found
+
+
 # ─── 출력 ───────────────────────────────────────────────────────────────
 
 def print_text_report(results, issues):
     """텍스트 형식 보고서."""
-    from datetime import date
     print(f"\n📋 Doc Lint Report — {date.today()}")
     print("━" * 45)
 
     for check_name, (checked, ok_or_found, label) in results.items():
-        if check_name in ("stale", "models", "duplicates"):
-            # 이슈 개수 기반 (found 값이 이슈 수)
+        if check_name in ("stale", "models", "duplicates", "freshness", "memory_scope"):
             icon = "✅" if ok_or_found == 0 else "⚠️"
             print(f"{icon} {label}: {ok_or_found} issue(s)")
         else:
@@ -473,7 +720,7 @@ def print_json_report(results, issues):
 def main():
     parser = argparse.ArgumentParser(description="시스템 .md 파일 정합성 검사")
     parser.add_argument("--check", default="all",
-                        choices=["all", "refs", "skills", "models", "duplicates", "projects", "stale"],
+                        choices=["all", "refs", "skills", "models", "duplicates", "projects", "stale", "freshness", "memory_scope"],
                         help="실행할 검사 유형")
     parser.add_argument("--format", default="text", choices=["text", "json"],
                         help="출력 형식")
@@ -516,6 +763,14 @@ def main():
     if checks in ("all", "stale"):
         found = check_stale(issues)
         results["stale"] = (0, found, "레거시 참조")
+
+    if checks in ("all", "freshness"):
+        found = check_freshness(issues)
+        results["freshness"] = (0, found, "내용 최신성")
+
+    if checks in ("all", "memory_scope"):
+        found = check_memory_scope(issues)
+        results["memory_scope"] = (0, found, "MEMORY.md 범위")
 
     if args.format == "json":
         print_json_report(results, issues)

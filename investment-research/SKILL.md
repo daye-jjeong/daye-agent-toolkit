@@ -3,7 +3,7 @@ name: investment-research
 description: 투자 종목 리서치 및 분석 워크플로우
 ---
 
-# Jarvis Investment Research
+# Investment Research
 
 
 **Version:** 0.1.0
@@ -53,17 +53,14 @@ Output constraints:
 - Deduplicate; mark conflicts
 - Keep “interpretation” to a short final section
 
-### 5) Notion write-back (personal workspace only)
-Use personal Notion (NEW HOME), and store under **DAYE HQ**.
+### 5) 결과 저장 (Obsidian vault)
+결과물은 `~/clawd/memory/reports/investment/` 에 마크다운으로 저장.
 
-**Canonical location (do not improvise):**
-- DAYE HQ: https://www.notion.so/dayejjeong/DAYE-HQ-2f768ba6942180b9865dc402d89bc6cf
-- DB (Runs): https://www.notion.so/83f20fcdfb2e4b3ca52465c458c2ff8f
-- DB (Claims): https://www.notion.so/b017443a47b7467c92ae62aeee8d6296
+**저장 위치:**
+- 리서치 결과: `memory/reports/investment/{ticker}_{date}.md`
+- Claims 기록: `memory/reports/investment/claims/`
 
-Store results as either:
-- Database row (preferred) with properties + structured body, or
-- A single page using the template below.
+Store results as a markdown file using the template below.
 
 **Page template (body)**
 1) Questions (Q1–Q3)

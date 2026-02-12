@@ -62,10 +62,10 @@ Implemented a complete guardrails system to enforce:
   - `check_deliverables()` - Validate + return action required
   - `detect_created_files()` - Scan work directory for new files
 
-#### 5. `lib/notion_uploader.py` - Auto-Upload to Notion
-- **Purpose:** Convert local deliverables to Notion child pages
+#### 5. `lib/vault_writer.py` - Save to Vault
+- **Purpose:** Save local deliverables to Obsidian vault
 - **Features:**
-  - Markdown to Notion blocks conversion
+  - Deliverable file copy to vault deliverables/
   - Korean-by-default footer with metadata
   - Auto-update Task '산출물' section
 - **Key functions:**
@@ -187,7 +187,7 @@ skills/task-policy-guardrails/
 │   ├── validator.py                     # Validation logic (157 lines)
 │   ├── state.py                         # State management (230 lines)
 │   ├── deliverable_checker.py           # Deliverable detection (207 lines)
-│   ├── notion_uploader.py               # Notion upload (201 lines)
+│   ├── vault_writer.py                  # Vault save (169 lines)
 │   ├── logger.py                        # Violations logging (153 lines)
 │   └── gates.py                         # Main enforcement (373 lines)
 ├── tests/

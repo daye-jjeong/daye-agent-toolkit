@@ -2,7 +2,7 @@
 """
 Vault Deliverable Writer
 Save deliverables to Obsidian vault with Korean-by-default + footer policy.
-Replaces notion_uploader.py.
+Obsidian vault 기반 산출물 저장.
 """
 
 import sys

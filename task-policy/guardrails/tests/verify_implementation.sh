@@ -45,7 +45,7 @@ REQUIRED_FILES=(
     "skills/task_policy_guardrails/lib/validator.py"
     "skills/task_policy_guardrails/lib/state.py"
     "skills/task_policy_guardrails/lib/deliverable_checker.py"
-    "skills/task_policy_guardrails/lib/notion_uploader.py"
+    "skills/task_policy_guardrails/lib/vault_writer.py"
     "skills/task_policy_guardrails/lib/logger.py"
     "skills/task_policy_guardrails/lib/gates.py"
 )

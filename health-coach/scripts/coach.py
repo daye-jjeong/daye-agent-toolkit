@@ -2,7 +2,7 @@
 """
 Health Coach - AI-powered health advisor.
 
-Obsidian vault (~/mingming-vault/health/) 에서 데이터를 읽어
+Obsidian vault (~/clawd/memory/health/) 에서 데이터를 읽어
 운동 루틴 추천, 증상 분석, 운동 가이드, 생활 조언을 제공한다.
 stdlib만 사용.
 """

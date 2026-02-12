@@ -21,7 +21,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ## Obsidian 저장 구조
 
 ```
-~/mingming-vault/health/
+~/clawd/memory/health/
   symptoms/          # 증상 기록
     2026-02-11_허리디스크.md
   exercises/         # 운동 기록

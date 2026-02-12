@@ -65,7 +65,7 @@ echo ""
 
 # 7. Obsidian vault 확인
 echo "Obsidian vault 확인:"
-vault_dir="$HOME/mingming-vault/meals"
+vault_dir="$HOME/clawd/memory/meals"
 if [ -d "$vault_dir" ]; then
   echo "[OK] vault 디렉토리 존재: $vault_dir"
   echo "최근 파일:"
