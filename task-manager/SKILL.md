@@ -144,6 +144,12 @@ Edit `skills/task-manager/index.js`:
 - `nextRetryAt`: ISO timestamp when next retry should occur
 - `lastError`: Error message from previous attempt
 
+## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/notify_task_change.py` | Obsidian Shell Commands 연동 — tasks.yml/project.yml 변경 시 Telegram 알림 | Tier 1 |
+
 ## Monitoring
 
 Logs output to stdout with timestamps:

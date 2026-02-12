@@ -94,6 +94,18 @@ Claude Code                    memory/projects/          OpenClaw
 - **repos** 필드로 코드 연결 (repo, branch, PR, commit)
 - **핸드오프**: progress_log에 `[HANDOFF → 플랫폼]` 메모
 
+## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/compound_review.py` | 야간 자동 세션 리뷰 — 세션 로그 파싱 → MEMORY.md/AGENTS.md 반영 | Tier 2 |
+
+### 자동화
+
+| 스케줄 | 스크립트 | 설명 |
+|--------|---------|------|
+| `30 22 * * *` | `compound_review.py` | 야간 compound review (매일 22:30) |
+
 ## 자동 기록
 
 - **SessionEnd hook** (Claude Code): `.jsonl` 파싱 → `memory/YYYY-MM-DD.md`에 세션 마커 append

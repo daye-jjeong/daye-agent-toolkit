@@ -106,6 +106,13 @@ python3 skills/prompt-guard/guard.py --dry-run --message "test"
 | 운영: 마이그레이션/롤백/트러블슈팅 | `{baseDir}/references/operations.md` |
 | 고급: 보안/언어지원/외부API/로드맵 | `{baseDir}/references/advanced.md` |
 
+## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/prompt_guard_scan.py` | 인바운드 메시지 패턴 매칭 스캐너 (CLI) | Tier 1 |
+| `scripts/guard_prompt_injection.sh` | 프롬프트 가드 셸 래퍼 | Tier 1 |
+
 ## See Also
 
 - **Policy:** AGENTS.md S 3 (Operational Rules - Safety)

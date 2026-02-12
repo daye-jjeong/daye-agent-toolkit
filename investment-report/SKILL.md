@@ -61,3 +61,10 @@ Example sections:
 - Top holdings TOP5 (name/broker/weight/return)
 - Top losers TOP5 (name/pnl/return)
 - Triggers: 1–2 lines
+
+## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/portfolio_report.py` | 뱅샐현황 시트 파싱 → JSON 요약 생성 | Tier 1 |
+| `scripts/render_report.py` | JSON → 텔레그램 메시지 렌더링 | Tier 1 |

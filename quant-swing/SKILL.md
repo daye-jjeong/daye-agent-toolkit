@@ -26,9 +26,13 @@ A research/ops skill to:
 - Sizing: risk-based per trade with total heat cap
 - Execution: **signal at close(t-1) -> trade at open(t)** (next-open)
 
-## Scripts
-- `/Users/dayejeong/clawd/portfolio/growth_swing_backtest.py`
-- `/Users/dayejeong/clawd/portfolio/growth_walkforward.py`
+## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/growth_swing_backtest.py` | Growth Breakout Momentum 백테스트 | Tier 1 |
+| `scripts/growth_walkforward.py` | Walk-forward 평가 (3y train / 1y test) | Tier 1 |
+| `scripts/mdb_backtest.py` | MDB 백테스트 | Tier 1 |
 
 ## Example runs
 

@@ -67,7 +67,21 @@ projects/_goals/
 
 **상세**: `{baseDir}/references/auto-draft-rules.md` 참고
 
+## 자동화
+
+| 스케줄 | 작업 | 스크립트 |
+|--------|------|---------|
+| 0 8 * * * | 일간 목표 텔레그램 브리핑 | `scripts/daily_goal_brief.py` |
+| 30 9 * * * | 오늘 목표 질문 프롬프트 | `scripts/daily_goals_prompt.py` |
+
 ## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/daily_goal_brief.py` | 일간 목표 YAML 읽어 텔레그램 브리핑 전송 | Tier 1 |
+| `scripts/daily_goals_prompt.py` | 오늘 목표 질문 텔레그램 메시지 전송 | Tier 1 |
+
+### CLI
 
 ```bash
 python3 create_goal.py monthly|weekly|daily [--date YYYY-MM-DD] [--dry-run]

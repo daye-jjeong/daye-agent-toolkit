@@ -62,6 +62,16 @@ python news_brief.py --feeds rss_feeds.txt --keywords keywords.txt --max-items 1
 |--------|---------|----------|
 | `news_brief.py` | RSS fetch + dedup + filter | `--feeds`, `--keywords`, `--max-items`, `--dedupe-threshold` |
 | `analyzer.py` | LLM impact analysis + formatting | stdin JSON |
+| `ai_trends_ingest.py` | AI 트렌드 Notion DB 적재 + 브리핑 페이지 생성 | stdin JSON |
+
+## References (AI Trends Team)
+
+| 파일 | 용도 |
+|------|------|
+| `references/ai_trends_team/executor.md` | AI Trends 실행자 프롬프트 |
+| `references/ai_trends_team/researcher.md` | AI Trends 리서처 프롬프트 |
+| `references/ai_trends_team/writer.md` | AI Trends 작성자 프롬프트 |
+| `references/ai_trends_team/rss_sources.json` | AI Trends RSS 소스 목록 |
 
 **상세**: `{baseDir}/references/scripts-detail.md` 참고
 

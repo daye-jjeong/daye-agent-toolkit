@@ -1,0 +1,63 @@
+{
+  "sources": [
+    {
+      "name": "OpenAI Blog",
+      "url": "https://openai.com/blog/rss.xml",
+      "category": "Models",
+      "priority": "high"
+    },
+    {
+      "name": "Anthropic Blog",
+      "url": "https://www.anthropic.com/news",
+      "category": "Models",
+      "priority": "high",
+      "note": "No RSS feed, use web_fetch"
+    },
+    {
+      "name": "Google AI Blog",
+      "url": "https://blog.google/technology/ai/rss/",
+      "category": "Models",
+      "priority": "high"
+    },
+    {
+      "name": "Hugging Face Blog",
+      "url": "https://huggingface.co/blog/feed.xml",
+      "category": "Open-source",
+      "priority": "high"
+    },
+    {
+      "name": "LangChain Blog",
+      "url": "https://blog.langchain.dev/rss/",
+      "category": "Tools",
+      "priority": "medium"
+    },
+    {
+      "name": "AI News (TechCrunch)",
+      "url": "https://techcrunch.com/tag/artificial-intelligence/feed/",
+      "category": "Business",
+      "priority": "medium"
+    },
+    {
+      "name": "The Verge AI",
+      "url": "https://www.theverge.com/ai-artificial-intelligence/rss/index.xml",
+      "category": "Business",
+      "priority": "medium"
+    },
+    {
+      "name": "Ars Technica AI",
+      "url": "https://arstechnica.com/tag/artificial-intelligence/feed/",
+      "category": "Business",
+      "priority": "low"
+    }
+  ],
+  "fallback_keywords": [
+    "GPT-5",
+    "Claude",
+    "Gemini",
+    "LLM",
+    "AI agents",
+    "open-source AI",
+    "AI regulation",
+    "AI safety"
+  ]
+}

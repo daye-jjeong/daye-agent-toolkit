@@ -67,8 +67,18 @@ clawd의 기존 시스템 파일(HEARTBEAT.md, SOUL.md, format.md)에 통합되�
 
 ---
 
-## Scripts
+## 자동화
 
-| 스크립트 | 용도 |
-|---------|------|
-| `scripts/security-audit.sh` | 자격증명, 시크릿 노출, 주입 방어 체크 |
+| 스케줄 | 작업 | 스크립트 |
+|--------|------|---------|
+| */30 9-22 * * * | 능동적 체크 (캘린더, 백로그, 시스템) | `scripts/proactive_cron.sh` → `scripts/proactive_check.py` |
+| 0 10,14,18 * * * | 자동 제안 (점검과 분리) | `scripts/proactive_suggestions.py` |
+
+## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/proactive_check.py` | 캘린더/백로그/시스템/메모 주기적 체크 + 알림 | Tier 1 |
+| `scripts/proactive_suggestions.py` | 자동 제안 생성 (JSON 출력) | Tier 1 |
+| `scripts/proactive_cron.sh` | proactive_check.py 크론 래퍼 | Tier 1 |
+| `scripts/security-audit.sh` | 자격증명, 시크릿 노출, 주입 방어 체크 | Tier 1 |

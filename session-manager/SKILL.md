@@ -68,3 +68,12 @@ Returns: `{"success", "session_id", "model_used", "attempts", "fallback_chain", 
 - **설정 변경**: `spawn_with_fallback.py`의 `DEFAULT_FALLBACK_ORDER` 수정
 
 **상세**: `{baseDir}/references/operations.md` 참고
+
+## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/subagent_watchdog_v2.js` | 서브에이전트 워치독 v2 (Node.js) | Tier 1 |
+| `scripts/subagent_watchdog.js` | 서브에이전트 워치독 v1 (Node.js) | Tier 1 |
+| `scripts/watchdog-subagent.py` | 서브에이전트 워치독 (Python) | Tier 1 |
+| `scripts/watchdog-unresponsive.js` | 응답 없는 세션 감지/처리 (Node.js) | Tier 1 |

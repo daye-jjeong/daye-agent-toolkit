@@ -71,7 +71,22 @@ Hybrid pipeline: deterministic data fetch (0 tokens) + LLM analysis (200-400 tok
 
 **상세 (pipeline diagram, input JSON format, design rationale, migration notes)**: `{baseDir}/references/architecture-detail.md` 참고
 
+## 자동화
+
+| 스케줄 | 작업 | 스크립트 |
+|--------|------|---------|
+| 0 8 * * * | 모닝 브리핑 (일정 fetch + 분석) | `scripts/fetch_schedule.py` + `schedule_advisor.py` |
+| 0 14 * * * | 오후 체크인 | `scripts/fetch_schedule.py` + `schedule_advisor.py` |
+| */30 8-20 * * * | P0 알림 | `scripts/fetch_schedule.py` + `schedule_advisor.py` |
+| 0 7 * * * | 일일 일정 텔레그램 브리핑 | `scripts/daily_brief.py` |
+
+## 스크립트
+
+| 파일 | 용도 | 티어 |
+|------|------|------|
+| `scripts/fetch_schedule.py` | Google/iCloud 캘린더 데이터 fetch (JSON 출력) | Tier 1 |
+| `scripts/daily_brief.py` | 일일 일정 텔레그램 브리핑 | Tier 1 |
+
 ## See Also
 
-- **scripts/fetch_schedule.py:** Data fetching component
 - **AGENTS.md:** Three-tier architecture policy
