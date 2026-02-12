@@ -1,0 +1,16 @@
+{
+  "name": "model-health-orchestrator",
+  "description": "모델 헬스 체크, 폴백 로직, 쿼터 리스크 평가를 수행하는 오케스트레이터",
+  "version": "1.0.0",
+  "author": "Daye Jeong",
+  "tags": ["monitoring", "health-check", "orchestrator", "reliability"],
+  "capabilities": {
+    "inputs": ["openclaw-status", "auth-profiles", "gateway-logs", "task-queue"],
+    "outputs": ["json"],
+    "routing": "recommend-only"
+  },
+  "dependencies": {
+    "required": ["openclaw", "jq"],
+    "optional": ["python3"]
+  }
+}

@@ -3,7 +3,7 @@
 Compound Review — 야간 자동 세션 리뷰 + 장기 기억 반영
 
 Tier 2 (Hybrid): 규칙 기반 추출 + 선택적 LLM 판단
-Cron: 30 22 * * * python3 ~/clawd/scripts/compound_review.py
+Cron: 30 22 * * * python3 ~/clawd/skills/vault-memory/scripts/compound_review.py
 
 워크플로우:
 1. 오늘 세션 로그 파싱
@@ -21,7 +21,7 @@ import fcntl
 from datetime import datetime, date
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path.home() / "clawd"
 MEMORY_DIR = BASE_DIR / "memory"
 MEMORY_MD = BASE_DIR / "MEMORY.md"
 AGENTS_MD = BASE_DIR / "AGENTS.md"
