@@ -53,11 +53,14 @@ def render_item_md(item: dict) -> str:
         parts.append(f"### {headline}")
 
     # Meta line
+    published = item.get("published", "")
     meta: list[str] = []
     if source:
         meta.append(source)
     if tag:
         meta.append(f"`{tag}`")
+    if published:
+        meta.append(published)
     if meta:
         parts.append(f"_{' · '.join(meta)}_")
 
@@ -131,6 +134,30 @@ def render_vault_md(data: dict) -> str:
     if highlight:
         lines.append(f"> ★ **오늘의 핵심**: {highlight}")
         lines.append("")
+
+    # Weather
+    weather = data.get("weather")
+    if weather:
+        loc = weather.get("location", "")
+        temp = weather.get("current_temp", "?")
+        feels = weather.get("feels_like", "?")
+        high = weather.get("high", "?")
+        low = weather.get("low", "?")
+        cond = weather.get("condition", "")
+        humidity = weather.get("humidity", "?")
+        wind = weather.get("wind", "")
+        outfit = weather.get("outfit", {}).get("summary", "")
+        lines.append(f"## {loc} 날씨")
+        lines.append("")
+        lines.append(f"| 현재 | 체감 | 최고/최저 | 하늘 | 습도 | 바람 |")
+        lines.append(f"|------|------|-----------|------|------|------|")
+        lines.append(f"| {temp}° | {feels}° | {high}°/{low}° | {cond} | {humidity}% | {wind} |")
+        lines.append("")
+        if outfit:
+            lines.append(f"👔 **옷차림**: {outfit}")
+            lines.append("")
+
+    if highlight or weather:
         lines.append("---")
         lines.append("")
 
@@ -146,6 +173,7 @@ def render_vault_md(data: dict) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Save news articles to vault")
     ap.add_argument("--input", help="JSON input file (default: stdin)")
+    ap.add_argument("--weather", help="Weather JSON file from fetch_weather.py")
     ap.add_argument(
         "--vault-dir",
         default=DEFAULT_VAULT,
@@ -158,6 +186,10 @@ def main() -> None:
             data = json.load(f)
     else:
         data = json.load(sys.stdin)
+
+    if args.weather:
+        with open(args.weather, "r", encoding="utf-8") as f:
+            data["weather"] = json.load(f)
 
     date_str = data.get("date", datetime.now().strftime("%Y-%m-%d"))
     md = render_vault_md(data)

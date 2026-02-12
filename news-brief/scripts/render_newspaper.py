@@ -123,6 +123,7 @@ body{
   background:#f0ede8;color:#666;
   padding:.1rem .45rem;border-radius:3px;font-size:.7rem;
 }
+.item-meta .published{color:#aaa;font-size:.7rem}
 
 .item-summary{font-size:.92rem;color:#333;line-height:1.55}
 .item-why{
@@ -159,6 +160,36 @@ body{
   font-size:1.05rem;line-height:1.5;color:#333;
 }
 
+/* ── Weather ── */
+.weather-box{
+  margin:0 2rem;padding:1.2rem 1.5rem;
+  background:linear-gradient(135deg,#f8f9fb 0%,#eef1f5 100%);
+  border:1px solid #e0ddd8;border-radius:6px;
+}
+.weather-row{
+  display:flex;justify-content:space-between;
+  align-items:center;flex-wrap:wrap;gap:.8rem;
+}
+.weather-main{display:flex;align-items:baseline;gap:.6rem}
+.weather-temp{
+  font-family:'Noto Serif KR',Georgia,serif;
+  font-size:2.2rem;font-weight:700;line-height:1;
+}
+.weather-feels{font-size:.8rem;color:#888}
+.weather-cond{font-size:.92rem;color:#555}
+.weather-detail{font-size:.78rem;color:#888;line-height:1.5}
+.weather-outfit{
+  margin-top:.8rem;padding-top:.8rem;
+  border-top:1px solid #e0ddd8;
+  font-size:.88rem;color:#444;
+}
+.weather-outfit strong{color:#1a5276}
+.weather-label{
+  font-size:.68rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.2em;
+  color:#888;margin-bottom:.6rem;
+}
+
 /* ── Footer ── */
 .colophon{
   text-align:center;padding:1.2rem;
@@ -183,11 +214,47 @@ def korean_date(date_str: str) -> str:
     return f"{d.year}년 {d.month}월 {d.day}일 {WEEKDAYS[d.weekday()]}요일"
 
 
+def render_weather(weather: dict) -> str:
+    """Render weather box HTML from fetch_weather.py output."""
+    loc = escape(weather.get("location", ""))
+    temp = weather.get("current_temp", "?")
+    feels = weather.get("feels_like", "?")
+    high = weather.get("high", "?")
+    low = weather.get("low", "?")
+    cond = escape(weather.get("condition", ""))
+    humidity = weather.get("humidity", "?")
+    wind = escape(weather.get("wind", ""))
+    outfit = weather.get("outfit", {})
+
+    outfit_summary = escape(outfit.get("summary", ""))
+
+    return f"""\
+    <div class="weather-box">
+      <p class="weather-label">{loc} 날씨</p>
+      <div class="weather-row">
+        <div>
+          <div class="weather-main">
+            <span class="weather-temp">{temp}°</span>
+            <span class="weather-feels">체감 {feels}°</span>
+          </div>
+          <div class="weather-cond">{cond} · 최고 {high}° / 최저 {low}°</div>
+        </div>
+        <div class="weather-detail">
+          습도 {humidity}%<br>바람 {wind}
+        </div>
+      </div>
+      <div class="weather-outfit">
+        👔 <strong>오늘의 옷차림</strong> — {outfit_summary}
+      </div>
+    </div>"""
+
+
 def render_item(item: dict) -> str:
     h = escape(item.get("headline", ""))
     url = escape(item.get("url", "#"))
     source = escape(item.get("source", ""))
     tag = escape(item.get("tag", ""))
+    published = escape(item.get("published", ""))
 
     parts: list[str] = ['<article class="item">']
     parts.append(
@@ -200,6 +267,8 @@ def render_item(item: dict) -> str:
         meta.append(f'<span class="source">{source}</span>')
     if tag:
         meta.append(f'<span class="tag">{tag}</span>')
+    if published:
+        meta.append(f'<span class="published">{published}</span>')
     if meta:
         parts.append(f'  <div class="item-meta">{" ".join(meta)}</div>')
 
@@ -249,9 +318,13 @@ def render_section(section: dict) -> str:
     return "\n".join(parts)
 
 
-def render(data: dict) -> str:
+def render(data: dict, weather: dict | None = None) -> str:
     date_str = data.get("date", datetime.now().strftime("%Y-%m-%d"))
     kdate = korean_date(date_str)
+
+    weather_html = ""
+    if weather:
+        weather_html = render_weather(weather)
 
     sections_html = "\n".join(
         render_section(s) for s in data.get("sections", []) if s.get("items")
@@ -289,11 +362,13 @@ def render(data: dict) -> str:
       <div class="rule-bottom"></div>
     </header>
 
+{weather_html}
+
+{highlight_html}
+
     <main>
 {sections_html}
     </main>
-
-{highlight_html}
 
     <footer class="colophon">
       © {datetime.now().year} 밍밍 데일리 — AI-powered briefing
@@ -306,6 +381,7 @@ def render(data: dict) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Render news JSON → newspaper HTML")
     ap.add_argument("--input", help="JSON input file (default: stdin)")
+    ap.add_argument("--weather", help="Weather JSON file from fetch_weather.py")
     ap.add_argument("--output", help="HTML output file (default: stdout)")
     args = ap.parse_args()
 
@@ -315,7 +391,12 @@ def main() -> None:
     else:
         data = json.load(sys.stdin)
 
-    html = render(data)
+    weather = None
+    if args.weather:
+        with open(args.weather, "r", encoding="utf-8") as f:
+            weather = json.load(f)
+
+    html = render(data, weather=weather)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:

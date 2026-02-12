@@ -14,8 +14,9 @@ import argparse
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 import feedparser
@@ -82,6 +83,45 @@ def fetch_items(feeds: list[str]) -> list[Item]:
     return items
 
 
+def parse_pub_date(raw: str | None) -> datetime | None:
+    """Try to parse RSS published/updated date string."""
+    if not raw:
+        return None
+    # RFC 2822 (most RSS feeds)
+    try:
+        return parsedate_to_datetime(raw)
+    except Exception:
+        pass
+    # ISO 8601 (Atom feeds)
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(raw.strip(), fmt)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except ValueError:
+            continue
+    return None
+
+
+def filter_by_time(items: list[Item], since_hours: float) -> list[Item]:
+    """Keep only items published within the last `since_hours` hours."""
+    if since_hours <= 0:
+        return items
+    now = datetime.now(timezone.utc)
+    out: list[Item] = []
+    for it in items:
+        dt = parse_pub_date(it.published)
+        if dt is None:
+            # No date info — keep it (benefit of doubt)
+            out.append(it)
+            continue
+        age_hours = (now - dt).total_seconds() / 3600
+        if age_hours <= since_hours:
+            out.append(it)
+    return out
+
+
 def filter_by_keywords(items: list[Item], keywords: list[str]) -> list[Item]:
     if not keywords:
         return items
@@ -124,6 +164,8 @@ def main():
     ap.add_argument("--feeds", required=True, help="Path to rss_feeds.txt")
     ap.add_argument("--keywords", required=False, help="Path to keywords.txt")
     ap.add_argument("--max-items", type=int, default=5)
+    ap.add_argument("--since", type=float, default=0,
+                    help="Only include items published within this many hours (0=no filter)")
     ap.add_argument("--dedupe-threshold", type=float, default=0.86)
     args = ap.parse_args()
 
@@ -131,6 +173,8 @@ def main():
     keywords = load_list(args.keywords) if args.keywords else []
 
     items = fetch_items(feeds)
+    if args.since > 0:
+        items = filter_by_time(items, args.since)
     items = filter_by_keywords(items, keywords)
 
     # naive sort: keep order as fetched (RSS order tends to be recent-first)

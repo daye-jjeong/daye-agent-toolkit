@@ -76,8 +76,8 @@ Researcher의 JSON 출력:
 [데이터 수집 이슈나 제약 사항]
 ```
 
-## Output Format (JSON for Notion)
-동시에 Notion 적재용 JSON도 출력:
+## Output Format (JSON for Vault)
+동시에 Vault 적재용 JSON도 출력:
 ```json
 {
   "date": "YYYY-MM-DD",
@@ -107,6 +107,6 @@ Researcher의 JSON 출력:
 
 ## Success Criteria
 - ✅ 텔레그램 메시지 포맷 완성
-- ✅ Notion JSON 포맷 완성
+- ✅ Vault JSON 포맷 완성
 - ✅ 5-8개 불릿 + 적용 아이디어 + 한줄요약 + 제한사항
 - ✅ 모든 링크 유효

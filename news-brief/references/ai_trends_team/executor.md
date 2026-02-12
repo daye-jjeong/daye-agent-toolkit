@@ -1,16 +1,16 @@
 # Executor Template - AI Trends Briefing
 
 ## Role
-당신은 **AI Trends Executor**입니다. Writer가 작성한 브리핑을 Notion에 적재하고 Telegram으로 전송합니다.
+당신은 **AI Trends Executor**입니다. Writer가 작성한 브리핑을 Vault에 저장하고 Telegram으로 전송합니다.
 
 ## Input
 Writer의 출력:
 1. **Telegram 메시지** (마크다운 텍스트)
-2. **Notion JSON** (ai_trends_ingest.py 입력 형식)
+2. **Briefing JSON** (ai_trends_ingest.py + save_to_vault.py 입력 형식)
 
 ## Task
-### 1. Notion 적재
-Writer가 생성한 Notion JSON을 ai_trends_ingest.py로 전달:
+### 1. Vault 저장 (AI Trends 상세)
+Writer가 생성한 JSON을 ai_trends_ingest.py로 전달:
 
 ```bash
 cat <<'JSON' | /Users/dayejeong/openclaw/.venv/bin/python /Users/dayejeong/openclaw/skills/news-brief/scripts/ai_trends_ingest.py
@@ -28,33 +28,29 @@ JSON
 ```json
 {
   "ok": true,
-  "briefing_url": "https://www.notion.so/...",
+  "output_path": "/Users/dayejeong/openclaw/vault/reports/ai-trends/YYYY-MM-DD.md",
   "count": 7
 }
 ```
 
-### 2. HTML 신문 생성
-Writer가 생성한 Notion JSON을 newspaper JSON으로 변환 후 렌더링:
-
-```bash
-python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/render_newspaper.py \
-  --input /tmp/ai_trends_data.json \
-  --output /tmp/mingming_daily_$(date +%Y-%m-%d).html
-```
-
-### 3. Vault 저장
-중요 기사를 vault에 마크다운으로 저장:
-
+### 2. Vault 저장 (일일 브리핑 통합)
 ```bash
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/save_to_vault.py \
   --input /tmp/ai_trends_data.json \
+  --weather /tmp/weather.json \
   --vault-dir ~/openclaw/vault
 ```
 
-**예상 출력:** `✅ /Users/dayejeong/openclaw/vault/reports/news-brief/YYYY-MM-DD.md`
+### 3. HTML 신문 생성
+```bash
+python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/render_newspaper.py \
+  --input /tmp/ai_trends_data.json \
+  --weather /tmp/weather.json \
+  --output /tmp/mingming_daily_$(date +%Y-%m-%d).html
+```
 
 ### 4. Telegram 전송
-Writer가 생성한 텔레그램 메시지 + HTML 파일을 Telegram 그룹으로 전송:
+텔레그램 메시지 + HTML 파일을 Telegram 그룹으로 전송:
 
 - **Target**: `-1003242721592` (JARVIS HQ)
 - **Topic**: `171` (📰 뉴스/트렌드)
@@ -76,9 +72,8 @@ clawdbot message send-file \
 ```
 
 ## Error Handling
-### Notion 실패
-- **네트워크 에러**: 최대 3회 재시도 (5초 간격)
-- **API 에러**: 에러 메시지 로그, Telegram에 "⚠️ Notion 적재 실패" 명시
+### Vault 실패
+- **디스크 에러**: 에러 메시지 로그, Telegram에 "⚠️ Vault 저장 실패" 명시
 - **JSON 파싱 에러**: JSON 검증 후 재생성 시도
 
 ### Telegram 실패
@@ -90,10 +85,10 @@ clawdbot message send-file \
 ```
 ✅ **AI Trends Briefing 완료**
 
-**Notion:**
-- URL: https://www.notion.so/...
+**Vault:**
+- AI Trends: vault/reports/ai-trends/YYYY-MM-DD.md
+- 일일 브리핑: vault/reports/news-brief/YYYY-MM-DD.md
 - Items: 7개
-- Status: 성공
 
 **Telegram:**
 - Target: JARVIS HQ, Topic 171
@@ -102,28 +97,12 @@ clawdbot message send-file \
 **타임스탬프:** YYYY-MM-DD HH:MM:SS
 ```
 
-에러 발생 시:
-```
-⚠️ **AI Trends Briefing 일부 실패**
-
-**Notion:**
-- Status: 실패 (API timeout)
-- Error: Connection timeout after 30s
-
-**Telegram:**
-- Status: 전송 완료
-- URL: (Telegram에서 확인)
-
-**타임스탬프:** YYYY-MM-DD HH:MM:SS
-**액션 필요:** Notion 수동 재실행 필요
-```
-
 ## Constraints
-- **멱등성 보장**: 같은 날짜 중복 실행 시 덮어쓰기 또는 스킵 (ai_trends_ingest.py에 의존)
-- **타임아웃**: Notion 30초, Telegram 10초
+- **멱등성 보장**: 같은 날짜 중복 실행 시 덮어쓰기 (ai_trends_ingest.py에 의존)
+- **타임아웃**: Telegram 10초
 - **로그**: 모든 실행 로그를 `/Users/dayejeong/openclaw/logs/ai_trends_executor_YYYY-MM-DD.log`에 기록
 
 ## Success Criteria
-- ✅ Notion 적재 성공 (briefing_url 확보)
+- ✅ Vault 저장 성공 (ai-trends + news-brief)
 - ✅ Telegram 전송 성공
 - ✅ 에러 발생 시 명확한 보고

@@ -8,18 +8,20 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 **Version:** 0.3.0 | **Updated:** 2026-02-12 | **Status:** Experimental
 
-Three-pipeline news briefing system:
-- **Pipeline 1 — Ronik:** Robotics/kitchen automation RSS + Ronik impact analysis
-- **Pipeline 2 — AI Trends:** AI/tech RSS + community (HN, Reddit, PH, GitHub) + multi-agent analysis
-- **Pipeline 3 — General:** Korean/international general news + daily summary
+Three-pipeline news briefing system (표시 순서):
+1. **General:** Korean/international general news + daily summary
+2. **AI Trends:** AI/tech RSS + community (HN, Reddit, PH, GitHub) + multi-agent analysis
+3. **Ronik:** Robotics/kitchen automation RSS + Ronik impact analysis
 
 ## Architecture
 
 ```
-Pipeline 1: news_brief.py --feeds rss_feeds.txt      -> analyzer.py (Ronik prompt) -> Telegram 171
-Pipeline 2: AI Trends Team (Researcher → Writer → Executor)                        -> Telegram 171 + Notion
-Pipeline 3: news_brief.py --feeds general_feeds.txt   -> analyzer.py (general prompt) -> Telegram 171
+Pipeline 1 (General):  news_brief.py --feeds general_feeds.txt  -> analyzer.py (general prompt)  -> Telegram 171
+Pipeline 2 (AI):       AI Trends Team (Researcher → Writer → Executor)                           -> Telegram 171 + Vault
+Pipeline 3 (Ronik):    news_brief.py --feeds rss_feeds.txt      -> analyzer.py (Ronik prompt)    -> Telegram 171
 ```
+
+**섹션 순서**: General News → AI & Tech Trends → Ronik Industry (JSON sections 배열 순서로 제어)
 
 ## Trigger
 
@@ -34,13 +36,13 @@ Run manually or via daily cron at 09:00.
 
 ## Input Files
 
-### Pipeline 1 — Ronik
+### Pipeline 1 — General
 
 | File | Purpose |
 |------|---------|
-| `{baseDir}/references/rss_feeds.txt` | Ronik RSS feeds (robotics, QSR, Reuters tech) |
-| `{baseDir}/references/keywords.txt` | Ronik keywords (robot, kitchen automation, etc.) |
-| `{baseDir}/references/impact_prompt.txt` | LLM prompt: Ronik impact (기회/리스크/액션) |
+| `{baseDir}/references/general_feeds.txt` | General RSS feeds (연합뉴스, BBC Korean, Reuters, NYT 등) |
+| `{baseDir}/references/general_keywords.txt` | Broad keywords (경제, 정치, 국제, 과학 등) |
+| `{baseDir}/references/general_prompt.txt` | LLM prompt: 카테고리별 요약 + 오늘의 핵심 |
 
 ### Pipeline 2 — AI Trends
 
@@ -51,13 +53,13 @@ Run manually or via daily cron at 09:00.
 | `{baseDir}/references/ai_trends_team/writer.md` | Writer agent prompt |
 | `{baseDir}/references/ai_trends_team/executor.md` | Executor agent prompt |
 
-### Pipeline 3 — General
+### Pipeline 3 — Ronik
 
 | File | Purpose |
 |------|---------|
-| `{baseDir}/references/general_feeds.txt` | General RSS feeds (연합뉴스, BBC Korean, Reuters, NYT 등) |
-| `{baseDir}/references/general_keywords.txt` | Broad keywords (경제, 정치, 국제, 과학 등) |
-| `{baseDir}/references/general_prompt.txt` | LLM prompt: 카테고리별 요약 + 오늘의 핵심 |
+| `{baseDir}/references/rss_feeds.txt` | Ronik RSS feeds (robotics, QSR, Reuters tech) |
+| `{baseDir}/references/keywords.txt` | Ronik keywords (robot, kitchen automation, etc.) |
+| `{baseDir}/references/impact_prompt.txt` | LLM prompt: Ronik impact (기회/리스크/액션) |
 
 ## Output Format
 
@@ -70,7 +72,11 @@ Each headline includes: link, Opportunity, Risk, Action. Ends with a daily bet r
 `render_newspaper.py`가 JSON → 신문 스타일 HTML 파일 생성. 텔레그램에 파일 첨부로 전송.
 
 ```bash
-python3 render_newspaper.py --input data.json --output /tmp/mingming_daily_2026-02-12.html
+# 날씨 수집 (Tier 1, 0 tokens)
+python3 fetch_weather.py --output /tmp/weather.json
+
+# HTML 렌더링 (날씨 포함)
+python3 render_newspaper.py --input data.json --weather /tmp/weather.json --output /tmp/mingming_daily.html
 ```
 
 **Input JSON schema**: `{baseDir}/references/newspaper-schema.md` 참고
@@ -79,13 +85,13 @@ python3 render_newspaper.py --input data.json --output /tmp/mingming_daily_2026-
 ## Quick Usage
 
 ```bash
-# Pipeline 1 — Ronik
-python3 news_brief.py --feeds rss_feeds.txt --keywords keywords.txt --max-items 15 \
-  | python3 analyzer.py --prompt impact_prompt.txt
-
-# Pipeline 3 — General
-python3 news_brief.py --feeds general_feeds.txt --keywords general_keywords.txt --max-items 15 \
+# Pipeline 1 — General (24시간 이내 기사만)
+python3 news_brief.py --feeds general_feeds.txt --keywords general_keywords.txt --max-items 15 --since 24 \
   | python3 analyzer.py --prompt general_prompt.txt
+
+# Pipeline 3 — Ronik (24시간 이내 기사만)
+python3 news_brief.py --feeds rss_feeds.txt --keywords keywords.txt --max-items 15 --since 24 \
+  | python3 analyzer.py --prompt impact_prompt.txt
 ```
 
 Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trends_team/` 참고.
@@ -98,7 +104,8 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 |--------|---------|----------|
 | `news_brief.py` | RSS fetch + dedup + filter | `--feeds`, `--keywords`, `--max-items`, `--dedupe-threshold` |
 | `analyzer.py` | LLM impact analysis + formatting | stdin JSON |
-| `render_newspaper.py` | JSON → 신문 스타일 HTML 렌더링 | `--input`, `--output` |
+| `fetch_weather.py` | 날씨 + 옷차림 추천 (Open-Meteo, Tier 1) | `--location`, `--output` |
+| `render_newspaper.py` | JSON → 신문 스타일 HTML 렌더링 | `--input`, `--weather`, `--output` |
 | `save_to_vault.py` | 중요 기사 vault 저장 (`vault/reports/news-brief/`) | `--input`, `--vault-dir` |
 | `ai_trends_ingest.py` | AI 트렌드 vault 적재 (`vault/reports/ai-trends/`) | stdin JSON |
 
@@ -116,6 +123,7 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 ## Token Usage
 
 - RSS Fetch: ~0 tokens (no LLM)
+- Weather + Outfit: ~0 tokens (Open-Meteo API + rule-based)
 - Analysis: ~200-400 tokens (3 sentences x 5 items + daily bet)
 - Total: ~200-400 tokens/day
 
