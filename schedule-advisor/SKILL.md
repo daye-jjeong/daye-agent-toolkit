@@ -43,7 +43,7 @@ Runs via cron (brief/check/remind modes) or manual invocation.
 
 ```bash
 # Fetch + analyze
-python3 ~/clawd/scripts/fetch_schedule.py today | \
+python3 ~/clawd/skills/schedule-advisor/scripts/fetch_schedule.py today | \
   python3 ~/clawd/skills/schedule-advisor/schedule_advisor.py brief
 ```
 

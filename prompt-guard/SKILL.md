@@ -119,4 +119,4 @@ python3 skills/prompt-guard/guard.py --dry-run --message "test"
 
 - **Policy:** AGENTS.md S 3 (Operational Rules - Safety)
 - **Integration:** AGENTS.md S 2 (Session Protection - Message preprocessing)
-- **Validation:** `scripts/validate_deliverable_accessibility.py`
+- **Validation:** (archived)

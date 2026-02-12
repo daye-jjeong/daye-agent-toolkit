@@ -484,7 +484,7 @@ def main():
     
     # Check if skill exists
     prompt_guard_skill = os.path.expanduser("~/clawd/skills/prompt-guard/guard.py")
-    prompt_guard_scanner = os.path.expanduser("~/clawd/scripts/prompt_guard_scan.py")
+    prompt_guard_scanner = os.path.expanduser("~/clawd/skills/prompt-guard/scripts/prompt_guard_scan.py")
     
     if not os.path.exists(prompt_guard_skill) and not os.path.exists(prompt_guard_scanner):
         print(f"- ❌ **Prompt Guard**: Not installed")
@@ -492,7 +492,7 @@ def main():
     else:
         print(f"- ✅ **Prompt Guard**: Installed")
         if os.path.exists(prompt_guard_scanner):
-            print(f"  - Scanner: ~/clawd/scripts/prompt_guard_scan.py")
+            print(f"  - Scanner: ~/clawd/skills/prompt-guard/scripts/prompt_guard_scan.py")
         if os.path.exists(prompt_guard_skill):
             print(f"  - Skill: ~/clawd/skills/prompt-guard/guard.py")
         

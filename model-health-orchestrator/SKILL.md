@@ -26,6 +26,11 @@ argument-hint: |
 - **auth-profiles cooldownUntil**: 모델별 쿨다운 타임스탬프
 - **Gateway logs**: `rate_limit`, `FailoverError`, "all models in cooldown" 패턴
 - **failed_tasks_queue** (선택): 실패한 태스크 큐 (재시도 대상)
+- **Real Inference Probes** (v2): 각 provider별 실제 추론 경로 테스트
+  - OpenAI OAuth: `/v1/chat/completions` (minimal payload)
+  - OpenAI API Key: `/v1/embeddings` (minimal payload)
+  - Anthropic: `/v1/messages` (minimal payload, token auth 지원)
+  - Gemini: `generateContent` (OAuth access token)
 
 ### 2. 출력 스키마 (JSON)
 
@@ -54,11 +59,20 @@ argument-hint: |
 ```
 
 **필드 설명(요청사항 반영):**
-- `providers.<provider>.health`: **프로바이더별 health**
+- `providers.<provider>.health`: **프로바이더별 health** (inference 성공 여부 기반)
 - `providers.<provider>.quota_status`: **프로바이더별 quota 상태**
 - `providers.<provider>.quota_source`: quota가 `direct`(직접)인지 `estimated`(추정)인지
+- `providers.<provider>.ping_ok`: 실제 inference probe 성공 여부 (not /v1/models ping)
+- `providers.<provider>.ping_endpoint`: 성공한 inference endpoint (예: "completions", "messages")
 - `providers.<provider>.note`: 판단 근거/제약 설명
 - `quota_confidence`, `direct_quota_available`는 보조 지표로 유지 (참고용)
+
+**v2 변경사항 (2026-02-12):**
+- ✅ Health는 실제 inference 성공 여부로 판정 (/v1/models ping 아님)
+- ✅ Anthropic token auth (from auth-profiles type=token) first-class 지원
+- ✅ Admin key 없어도 Anthropic health 체크 가능 (quota는 estimated)
+- ✅ Quota API 실패가 health를 degraded로 만들지 않음 (note/source에만 기록)
+- ✅ 모든 probes는 minimal tokens, short timeout (safe & low-cost)
 
 ---
 
@@ -107,7 +121,7 @@ else: return "low"
 - 동일 상태 유지 시 알림 금지 (상태 변화에만 반응)
 - `should_alert: false`로 기본 설정, 조건 충족 시만 `true`
 
-**상태 저장:** `.state/model_health_last_state.json` (이전 상태 비교용)
+**상태 저장:** `memory/state/model_health_unified.json` (이전 상태 비교용)
 
 **상세 매트릭스:** `references/thresholds.md` § Alert Matrix 참조
 

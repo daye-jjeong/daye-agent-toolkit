@@ -29,9 +29,9 @@ except ImportError:
 # Config
 # ──────────────────────────────────────────────
 CLAWD_ROOT = Path.home() / "clawd"
-PROJECTS_ROOT = CLAWD_ROOT / "projects"
-GOALS_ROOT = PROJECTS_ROOT / "_goals"
-FETCH_SCHEDULE = CLAWD_ROOT / "scripts" / "fetch_schedule.py"
+PROJECTS_ROOT = CLAWD_ROOT / "memory" / "projects"
+GOALS_ROOT = CLAWD_ROOT / "memory" / "goals"
+FETCH_SCHEDULE = CLAWD_ROOT / "skills" / "schedule-advisor" / "scripts" / "fetch_schedule.py"
 
 TELEGRAM_GROUP = "-1003242721592"
 TELEGRAM_THREAD = "167"
@@ -206,7 +206,7 @@ def send_telegram(message: str) -> bool:
 def draft_monthly(target_date: datetime, dry_run: bool = False) -> Dict:
     """월간 목표 템플릿 생성."""
     month_str = target_date.strftime("%Y-%m")
-    file_path = GOALS_ROOT / f"{month_str}.yml"
+    file_path = GOALS_ROOT / "monthly" / f"{month_str}.yml"
 
     existing = load_yaml(file_path)
     if existing:
@@ -217,7 +217,7 @@ def draft_monthly(target_date: datetime, dry_run: bool = False) -> Dict:
 
     # 지난달 데이터 참조
     prev_month = target_date.replace(day=1) - timedelta(days=1)
-    prev_data = load_yaml(GOALS_ROOT / f"{prev_month.strftime('%Y-%m')}.yml")
+    prev_data = load_yaml(GOALS_ROOT / "monthly" / f"{prev_month.strftime('%Y-%m')}.yml")
 
     # 프로젝트 목록 스캔
     projects = []
@@ -284,7 +284,7 @@ def draft_weekly(target_date: datetime, dry_run: bool = False) -> Dict:
     """주간 목표 자동 드래프트 (월간에서 파생)."""
     week_str = get_week_string(target_date)
     period_str = get_week_period(target_date)
-    file_path = GOALS_ROOT / f"{week_str}.yml"
+    file_path = GOALS_ROOT / "weekly" / f"{week_str}.yml"
 
     existing = load_yaml(file_path)
     if existing and not dry_run:
@@ -294,7 +294,7 @@ def draft_weekly(target_date: datetime, dry_run: bool = False) -> Dict:
 
     # 월간 목표 로드
     month_str = target_date.strftime("%Y-%m")
-    monthly = load_yaml(GOALS_ROOT / f"{month_str}.yml")
+    monthly = load_yaml(GOALS_ROOT / "monthly" / f"{month_str}.yml")
 
     # 캘린더 이벤트 (이번주)
     events = fetch_calendar_events("week")
@@ -381,7 +381,7 @@ def draft_daily(
     """일간 목표 자동 드래프트 (주간 + 캘린더 기반)."""
     date_str = target_date.strftime("%Y-%m-%d")
     dow = WEEKDAY_KO[target_date.weekday()]
-    file_path = GOALS_ROOT / f"{date_str}.yml"
+    file_path = GOALS_ROOT / "daily" / f"{date_str}.yml"
 
     existing = load_yaml(file_path)
     if existing and not dry_run:
@@ -390,9 +390,9 @@ def draft_daily(
 
     # 주간/월간 목표 로드
     week_str = get_week_string(target_date)
-    weekly = load_yaml(GOALS_ROOT / f"{week_str}.yml")
+    weekly = load_yaml(GOALS_ROOT / "weekly" / f"{week_str}.yml")
     month_str = target_date.strftime("%Y-%m")
-    monthly = load_yaml(GOALS_ROOT / f"{month_str}.yml")
+    monthly = load_yaml(GOALS_ROOT / "monthly" / f"{month_str}.yml")
 
     # 오늘 캘린더
     events = fetch_calendar_events("today")
@@ -540,11 +540,11 @@ def draft_daily(
 def show_retro(target_date: datetime, retro_type: str):
     """회고용 데이터 출력."""
     if retro_type == "daily":
-        path = GOALS_ROOT / f"{target_date.strftime('%Y-%m-%d')}.yml"
+        path = GOALS_ROOT / "daily" / f"{target_date.strftime('%Y-%m-%d')}.yml"
     elif retro_type == "weekly":
-        path = GOALS_ROOT / f"{get_week_string(target_date)}.yml"
+        path = GOALS_ROOT / "weekly" / f"{get_week_string(target_date)}.yml"
     elif retro_type == "monthly":
-        path = GOALS_ROOT / f"{target_date.strftime('%Y-%m')}.yml"
+        path = GOALS_ROOT / "monthly" / f"{target_date.strftime('%Y-%m')}.yml"
     else:
         print(f"❌ 알 수 없는 타입: {retro_type}")
         return

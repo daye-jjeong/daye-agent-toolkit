@@ -13,7 +13,7 @@ Writer의 출력:
 Writer가 생성한 Notion JSON을 ai_trends_ingest.py로 전달:
 
 ```bash
-cat <<'JSON' | /Users/dayejeong/clawd/.venv/bin/python /Users/dayejeong/clawd/scripts/notion/ai_trends_ingest.py
+cat <<'JSON' | /Users/dayejeong/clawd/.venv/bin/python /Users/dayejeong/clawd/skills/news-brief/scripts/ai_trends_ingest.py
 {
   "date": "YYYY-MM-DD",
   "title": "AI Trends Briefing — YYYY-MM-DD",

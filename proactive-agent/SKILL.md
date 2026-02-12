@@ -78,6 +78,4 @@ clawd의 기존 시스템 파일(HEARTBEAT.md, SOUL.md, format.md)에 통합되�
 | 파일 | 용도 | 티어 |
 |------|------|------|
 | `scripts/proactive_suggestions.py` | 통합 제안 생성: 크론에러/세션/태스크/캘린더/백로그/시스템 체크 (JSON 출력) | Tier 1 |
-| `scripts/proactive_check.py` | ~~deprecated~~ — proactive_suggestions.py에 흡수 | - |
-| `scripts/proactive_cron.sh` | ~~deprecated~~ — proactive_check.py 래퍼 (미사용) | - |
 | `scripts/security-audit.sh` | 자격증명, 시크릿 노출, 주입 방어 체크 | Tier 1 |

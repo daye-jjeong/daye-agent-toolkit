@@ -64,7 +64,6 @@ Returns: `{"success", "session_id", "model_used", "attempts", "fallback_chain", 
 ## Operations
 
 - **로그 조회**: `tail -n 20 ~/.clawdbot/agents/main/logs/fallback_decisions.jsonl | jq`
-- **테스트**: `python3 tests/test_session_fallback.py`
 - **설정 변경**: `spawn_with_fallback.py`의 `DEFAULT_FALLBACK_ORDER` 수정
 
 **상세**: `{baseDir}/references/operations.md` 참고
@@ -77,3 +76,4 @@ Returns: `{"success", "session_id", "model_used", "attempts", "fallback_chain", 
 | `scripts/subagent_watchdog.js` | 서브에이전트 워치독 v1 (Node.js) | Tier 1 |
 | `scripts/watchdog-subagent.py` | 서브에이전트 워치독 (Python) | Tier 1 |
 | `scripts/watchdog-unresponsive.js` | 응답 없는 세션 감지/처리 (Node.js) | Tier 1 |
+| `spawn_with_fallback.py` | 서브에이전트 fallback spawn 로직 | Tier 1 |

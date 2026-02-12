@@ -8,10 +8,10 @@ This skill demonstrates the **three-tier hybrid pattern** introduced in Feb 2026
 
 ```bash
 # Test data fetching (should output JSON)
-python3 scripts/fetch_schedule.py today
+python3 skills/schedule-advisor/scripts/fetch_schedule.py today
 
 # Test full pipeline (fetch → analyze)
-python3 scripts/fetch_schedule.py today | \
+python3 skills/schedule-advisor/scripts/fetch_schedule.py today | \
   python3 skills/schedule-advisor/schedule_advisor.py brief
 ```
 
@@ -24,7 +24,7 @@ python3 scripts/fetch_schedule.py today | \
 
 **New (hybrid pipeline):**
 ```cron
-0 8 * * * /Users/dayejeong/clawd/scripts/fetch_schedule.py --today | /Users/dayejeong/clawd/skills/schedule-advisor/schedule_advisor.py brief
+0 8 * * * /Users/dayejeong/clawd/skills/schedule-advisor/scripts/fetch_schedule.py --today | /Users/dayejeong/clawd/skills/schedule-advisor/schedule_advisor.py brief
 ```
 
 ## Architecture Benefits

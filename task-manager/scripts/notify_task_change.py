@@ -7,7 +7,7 @@ Obsidian Shell Commands 플러그인의 "File content modified" 이벤트로 호
 No external dependencies — stdlib only.
 
 Usage (Obsidian Shell Commands):
-    python3 ~/clawd/scripts/notify_task_change.py "{{event_file_path}}"
+    python3 ~/clawd/skills/task-manager/scripts/notify_task_change.py "{{event_file_path}}"
 
 Flow:
     Obsidian detects file change → this script → clawdbot agent → OpenClaw

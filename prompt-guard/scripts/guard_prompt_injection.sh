@@ -17,7 +17,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_DIR="$SCRIPT_DIR/../skills/prompt-guard"
+SKILL_DIR="$SCRIPT_DIR/.."
 GUARD_SCRIPT="$SKILL_DIR/guard.py"
 
 # Check if guard script exists

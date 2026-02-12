@@ -5,6 +5,9 @@ description: OpenClaw 공식 문서 스마트 접근 — 스니펫 캐시 → �
 
 # OpenClaw Docs
 
+**Status:** Setup Required — 데이터 레이어(`data/docs-snippets/`, `data/docs-index.json`) 미생성 상태.
+초기 셋업: `mkdir -p ~/clawd/data/docs-snippets ~/clawd/data/docs-cache && echo '{}' > ~/clawd/data/docs-index.json`
+
 OpenClaw 공식 문서(docs.openclaw.ai)를 효율적으로 조회하는 스킬.
 토큰 절약을 위한 3계층 구조: 스니펫(0) → 인덱스(0) → fetch(8-12k).
 

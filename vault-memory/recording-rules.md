@@ -272,7 +272,7 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
     │
     ↓  Obsidian Shell Commands "File content modified" 감지
     │
-    ↓  python3 ~/clawd/scripts/notify_task_change.py "{{file_path}}"
+    ↓  python3 ~/clawd/skills/task-manager/scripts/notify_task_change.py "{{file_path}}"
     │
     ↓  변경 파싱 + 쿨다운 체크 (30초 내 중복 방지)
     │
@@ -284,13 +284,13 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 ### Obsidian Shell Commands 설정
 
 1. 플러그인 설치: Shell Commands
-2. 셸 커맨드 등록: `python3 ~/clawd/scripts/notify_task_change.py "{{file_path}}"`
+2. 셸 커맨드 등록: `python3 ~/clawd/skills/task-manager/scripts/notify_task_change.py "{{file_path}}"`
 3. 이벤트: "File content modified"
 4. 경로 필터: `projects/**/*` (tasks.yml, project.yml, t-*.md)
 
 ### 알림 스크립트
 
-**경로**: `scripts/notify_task_change.py`
+**경로**: `skills/task-manager/scripts/notify_task_change.py`
 
 알림 메시지 형식:
 ```
