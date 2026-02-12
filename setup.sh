@@ -1,14 +1,18 @@
 #!/bin/bash
 # setup.sh — daye-agent-toolkit 환경 설치 스크립트
 #
-# skills.json 매니페스트를 읽어서:
-#   - 로컬 SKILL.md 스킬 → ~/.claude/skills/ symlink
-#   - 외부 마켓플레이스 등록 + 플러그인 설치
-#   - 이 레포를 Claude Code 마켓플레이스에 등록
+# Claude Code:
+#   1. 환경 설정 (인터랙티브: vault 경로, 모델, 플러그인 선택)
+#   2. 마켓플레이스 등록 + 플러그인 설치
+#   3. 로컬 스킬 symlink
+#
+# OpenClaw:
+#   git clone + 스킬 enable + cron (비대화)
 #
 # Usage:
-#   ./setup.sh                # Claude Code 환경 설치
-#   ./setup.sh --openclaw     # OpenClaw PC: 기존 skills 제거 → git clone
+#   ./setup.sh                # Claude Code 전체 셋업 (인터랙티브)
+#   ./setup.sh --skip-env     # CC 환경 설정 건너뛰고 스킬만 설치
+#   ./setup.sh --openclaw     # OpenClaw PC: clone + enable + cron
 #   ./setup.sh --clean        # symlink 제거
 #   ./setup.sh --status       # 현재 설치 상태 확인
 
@@ -195,8 +199,29 @@ for skill in data.get('local_skills', []):
 fi
 
 # ── main: Claude Code 설치 ───────────────────────
-echo "=== daye-agent-toolkit setup ==="
+echo "=== daye-agent-toolkit setup (Claude Code) ==="
 echo ""
+
+# 0. 환경 설정 (인터랙티브)
+SETUP_ENV="$REPO_DIR/_cc/setup_env.py"
+if [ "${1:-}" != "--skip-env" ]; then
+  if [ -f "$HOME/.claude/settings.json" ]; then
+    echo "── 환경 설정 ──"
+    echo "기존 ~/.claude/settings.json 발견."
+    read -p "환경을 다시 설정할까요? [y/N]: " reconfigure
+    echo ""
+    if [ "$reconfigure" = "y" ] || [ "$reconfigure" = "Y" ]; then
+      python3 "$SETUP_ENV"
+      echo ""
+    else
+      echo "→ 환경 설정 건너뜀"
+      echo ""
+    fi
+  else
+    python3 "$SETUP_ENV"
+    echo ""
+  fi
+fi
 
 # 1. 이 레포를 마켓플레이스에 등록
 echo "── 마켓플레이스 등록 ──"
@@ -267,3 +292,10 @@ done
 
 echo ""
 echo "=== Done! Claude Code를 재시작하면 반영됩니다. ==="
+echo ""
+echo "설정 파일:"
+echo "  ~/.claude/settings.json    (hooks, permissions, plugins, model)"
+echo "  ~/.claude/cc-config.json   (vault 경로 등 머신별 설정)"
+echo ""
+echo "재설정: ./setup.sh"
+echo "스킬만: ./setup.sh --skip-env"
