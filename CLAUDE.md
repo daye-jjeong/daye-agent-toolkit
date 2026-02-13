@@ -18,7 +18,7 @@
 |------|------|
 | mermaid-diagrams | Mermaid 다이어그램 생성 가이드 |
 | professional-communication | 업무 커뮤니케이션 가이드 |
-| skill-forge | SKILL.md 생성/최적화/감사 |
+| skill-forge | SKILL.md 생성/최적화/감사/검증 |
 
 ### Claude Code + OpenClaw 양쪽 (12개) — `.claude-skill` 있음, OpenClaw enabled
 
