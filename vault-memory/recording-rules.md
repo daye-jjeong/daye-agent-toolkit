@@ -5,7 +5,7 @@
 ## 파일별 기록 대상
 
 ### AGENTS.md — 시스템 정책/행동 규칙
-**위치:** `~/openclaw/AGENTS.md`
+**위치:** `agents/{orchestrator}/AGENTS.md`
 **성격:** 살아있는 문서. AI가 작업할 때 매번 참조하는 운영 매뉴얼.
 
 **기록 대상:**
@@ -57,7 +57,7 @@
 
 ---
 
-### memory/YYYY-MM-DD.md — 일일 세션 로그
+### vault/YYYY-MM-DD.md — 일일 세션 로그
 **위치:** `vault/` 루트 (flat)
 **성격:** 그 날 무슨 일이 있었는지. 검색 가능한 일지.
 
@@ -72,7 +72,7 @@
 **기록 트리거:**
 - `vault-memory:compress` 호출 (세션 종료 시)
 - `vault-session-save` cron (30분 자동)
-- SessionEnd hook (자동 마커)
+- CC 플러그인 `session-end.ts` hook (자동 마커)
 
 **기록하지 않는 것:**
 - 대화 원문/타임스탬프
@@ -145,42 +145,93 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 
 ---
 
-### vault/projects/{type}/{name}/ — 프로젝트 태스크
-**위치:** `vault/projects/{work|personal}--{name}/`
-**성격:** 프로젝트별 태스크 추적. repo 연결, 진행 로그 포함.
+### vault/state/tasks.json — 태스크 SOT
+**위치:** `vault/state/tasks.json`
+**성격:** 전체 스쿼드의 작업 추적. 단일 JSON 파일이 모든 태스크의 SOT.
 
-**파일 구조:**
-- `project.yml` — 프로젝트 메타 (이름, 상태, 목표, 태그)
-- `tasks.yml` — 태스크 목록 (SOT)
+**스키마:**
+```json
+{
+  "tasks": [
+    {
+      "ticket_id": "t-ronik-004",
+      "status": "IN_PROGRESS",
+      "assignee": "@ara",
+      "priority": "high",
+      "created_by": "@mingming",
+      "created_at": "2026-02-13T14:30:00+09:00",
+      "input_context": {
+        "goal": "경쟁사 3곳 가격 인하 영향 분석"
+      },
+      "timeout_minutes": 30,
+      "output_path": "vault/deliverables/t-ronik-004/",
+      "completed_at": null
+    }
+  ]
+}
+```
 
-**기록 대상 (tasks.yml):**
-- **status 변경** — todo → in_progress → done | blocked
-- **subtask 완료** — 개별 subtask status 업데이트
-- **progress_log** — 작업 내용 요약 (append-only, 최신이 위)
-  - `date`: 작업 날짜
-  - `by`: claude-code | openclaw | daye
-  - `summary`: 1-2줄 작업 요약
-  - `files_changed`: 수정한 파일 목록
-- **repos** — 관련 코드 연결
-  - `repo`: GitHub repo (owner/name)
-  - `branch`: 작업 브랜치
-  - `prs`: 관련 PR 번호
-  - `commits`: 주요 커밋 SHA
+**기록 대상:**
+- **status 변경** — PENDING → IN_PROGRESS → REVIEW_READY → DONE
+- **assignee 변경** — 태스크 재할당
+- **output_path** — 산출물 경로 기록
+- **completed_at** — 완료 시각
 
-**기록 트리거:**
-- 태스크 시작/완료 시 (status 변경)
-- 코드 작업 후 (progress_log + repos 업데이트)
+**기록 트리거 (squad CLI):**
+- `squad task add` — 새 태스크 생성 (PENDING)
+- `squad task start {id}` — 태스크 시작 (IN_PROGRESS)
+- `squad task done {id}` — 태스크 완료 (DONE)
+- `squad task switch {id}` — 담당 에이전트 전환
+- `squad task list` — 현재 태스크 목록 조회
 - compress 시 프로젝트 관련 작업이 감지되면 자동 업데이트 제안
-- 커밋 메시지에 `[t-xxx-nnn]` 포함 시 해당 태스크에 commit 기록
 
 **기록하지 않는 것:**
 - 세션 대화 내용 (세션 로그에 기록)
 - 중간 디버깅 과정 (최종 결과만)
+- 진행 활동 상세 (threads.jsonl에 기록)
 
 **교차 참조:**
-- 태스크 → 목표: `linked_goals`에 `[[위키링크]]`
-- 목표 → 태스크: 본문에 `[[t-xxx-nnn]]`
+- 태스크 → 목표: `input_context`에 `linked_goals`
+- 태스크 → 스레드: `ticket_id`로 threads.jsonl 필터
 - 커밋 → 태스크: 커밋 메시지에 `[t-xxx-nnn]`
+
+---
+
+### vault/state/threads.jsonl — 활동 스레드
+**위치:** `vault/state/threads.jsonl`
+**성격:** 태스크 진행 기록, 에이전트 간 소통, 인사이트 공유. append-only JSONL.
+
+**스키마 (1줄 = 1메시지):**
+```json
+{
+  "id": "msg-20260213-143000-ara",
+  "author": "ara",
+  "created_at": "2026-02-13T14:30:00+09:00",
+  "task_id": "t-ronik-004",
+  "mentions": ["yujin"],
+  "tags": ["insight"],
+  "content": "경쟁사 3곳 가격 분석 완료. @yujin 포트폴리오 영향도 확인 필요.",
+  "attachments": [],
+  "thread_id": null
+}
+```
+
+**기록 대상:**
+- 태스크 진행 보고 (task_id 연결)
+- 에이전트 간 크로스도메인 요청 (mentions)
+- 인사이트/알림 공유 (tags: insight, alert, report)
+- 핸드오프 메시지
+
+**기록 트리거 (squad CLI):**
+- `squad thread add --task-id {id}` — 태스크 진행 기록
+- `squad thread add` — 일반 메시지 (task_id 없이)
+- `squad thread broadcast` — 전체 스쿼드 공지
+- `squad thread list` — 최근 스레드 조회
+- `squad thread list --task-id {id}` — 특정 태스크 스레드 조회
+
+**기록하지 않는 것:**
+- 세션 대화 전문
+- 디버깅 중간 과정
 
 ---
 
@@ -189,8 +240,9 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 ```
 세션 중 작업 발생
     │
-    ├─ 프로젝트 작업? ─────── → tasks.yml (status + progress_log + repos)
-    │                            + 세션 로그 (compress)
+    ├─ 태스크 작업? ──────────── → tasks.json (squad task start/done)
+    │                              + threads.jsonl (squad thread add --task-id)
+    │                              + 세션 로그 (compress)
     │
     ├─ 일회성 결정? ─────────── → 세션 로그 (compress)
     │
@@ -202,22 +254,22 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
     └─ 산출물? ──────────────── → reports/ 또는 docs/
 ```
 
-### 프로젝트 작업 기록 흐름 (상세)
+### 태스크 작업 기록 흐름 (상세)
 
 ```
 코드 작업 완료
     │
-    ├─ 1. tasks.yml status 업데이트
-    │     └─ subtask 완료 처리
+    ├─ 1. squad task start {id}
+    │     └─ status: PENDING → IN_PROGRESS
     │
-    ├─ 2. progress_log append
-    │     └─ date, by, summary, files_changed
+    ├─ 2. squad thread add --task-id {id}
+    │     └─ 작업 내용, 발견사항, 크로스도메인 요청 기록
     │
-    ├─ 3. repos 필드 업데이트
-    │     └─ branch, commits, prs
+    ├─ 3. squad task done {id}
+    │     └─ status → DONE, output_path 기록
     │
     └─ 4. 세션 로그에 요약 기록
-          └─ "t-ronik-001: 캘리 프로세스 as-is 정리 완료"
+          └─ "t-ronik-004: 경쟁사 가격 분석 완료"
 ```
 
 ## 플랫폼별 트리거
@@ -226,16 +278,16 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 
 | 이벤트 | 트리거 | 메커니즘 |
 |--------|--------|----------|
-| 세션 종료 | 자동 | `SessionEnd` hook → `memory/YYYY-MM-DD.md`에 세션 마커 append |
+| 세션 종료 | 자동 | CC 플러그인 `session-end.ts` → `vault/YYYY-MM-DD.md`에 세션 마커 append |
 | 세션 압축 | 수동 | `/vault-memory:compress` Skill 호출 → 세션 마커를 AI 분석으로 보강 |
-| 프로젝트 작업 | 정책 | 태스크 시작/완료 시 tasks.yml 업데이트 + progress_log + repos 기록 |
-| 에이전트 완료 | 정책 | 메인 세션이 Task 결과 수신 후 세션 로그 + 관련 tasks.yml 업데이트 |
+| 태스크 작업 | 정책 | `squad task start/done` + `squad thread add --task-id` |
+| 에이전트 완료 | 정책 | 메인 세션이 Task 결과 수신 후 세션 로그 + tasks.json 업데이트 |
 | 정책 동기화 | 수동 | compress 후 정책 키워드 감지 시 sync-agents 제안 |
 | 장기 보존 | 수동 | `/vault-memory:preserve` Skill 호출 |
 
-**Claude Code hook 파일**: `.claude/hooks/session_end.py`
-- `.jsonl` transcript 파싱 → 수정 파일, 실행 명령, 에러 추출
-- `memory/YYYY-MM-DD.md`에 세션 마커 자동 append
+**Claude Code hook 파일**: `src/plugins/cc/hooks/session-end.ts`
+- 세션 종료 시 수정 파일, 실행 명령, 에러 추출
+- `vault/YYYY-MM-DD.md`에 세션 마커 자동 append
 - compress가 나중에 이 마커를 보강(enrich)
 
 ### OpenClaw
@@ -244,8 +296,8 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 |--------|--------|----------|
 | 세션 종료 | 대화 지시 | "세션 저장해", "compress", "오늘 정리" → compress 워크플로우 실행 |
 | 자동 저장 | 크론 | `vault-session-save` (30분 주기) → 기본 세션 마커 append |
-| 프로젝트 작업 | 정책 | 태스크 시작/완료 시 tasks.yml 업데이트 + progress_log + repos 기록 |
-| 에이전트 완료 | 정책 | orchestrator가 worker 완료 수신 후 세션 로그 + 관련 tasks.yml 업데이트 |
+| 태스크 작업 | 정책 | `squad task start/done` + `squad thread add --task-id` |
+| 에이전트 완료 | 정책 | orchestrator가 worker 완료 수신 후 세션 로그 + tasks.json 업데이트 |
 | 정책 동기화 | 대화 지시 | "정책 동기화", "agents 업데이트" → sync-agents 워크플로우 |
 | 장기 보존 | 대화 지시 | "기억해줘", "MEMORY에 저장" → preserve 워크플로우 |
 
@@ -257,7 +309,7 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 ### 공통 규칙
 
 - **기록 포맷**: `vault/format.md` 규격 (양쪽 동일)
-- **기록 경로**: 양쪽 모두 `memory/YYYY-MM-DD.md` (flat)
+- **기록 경로**: 양쪽 모두 `vault/YYYY-MM-DD.md` (flat)
 - **세션 헤더**: `## 세션 HH:MM (플랫폼, session-id-8자리)` — 플랫폼은 `claude-code` 또는 `openclaw`
 - **충돌 방지**: 같은 날 양쪽에서 기록해도 세션 헤더로 구분
 
@@ -268,48 +320,41 @@ Obsidian 뷰: PDF 네이티브, HTML은 Custom Frames 플러그인.
 ### 아키텍처
 
 ```
-태스크 파일 변경 (Claude Code / Obsidian Sync)
+태스크 상태 변경 (squad task start/done)
     │
-    ↓  Obsidian Shell Commands "File content modified" 감지
+    ↓  squad thread add --task-id (threads.jsonl 기록)
     │
-    ↓  python3 ~/openclaw/skills/task-manager/scripts/notify_task_change.py "{{file_path}}"
+    ↓  squad thread broadcast (전체 공지 필요 시)
     │
-    ↓  변경 파싱 + 쿨다운 체크 (30초 내 중복 방지)
+    ↓  Telegram 직접 전송 (cron --announce --channel telegram --to)
     │
-    ↓  clawdbot agent --message "요약" --channel telegram --deliver
-    │
-    ↓  OpenClaw이 수신 → 필요시 후속 작업
+    ↓  board.md 자동 렌더 (squad board render)
 ```
 
-### Obsidian Shell Commands 설정
+### squad CLI 알림 설정
 
-1. 플러그인 설치: Shell Commands
-2. 셸 커맨드 등록: `python3 ~/openclaw/skills/task-manager/scripts/notify_task_change.py "{{file_path}}"`
-3. 이벤트: "File content modified"
-4. 경로 필터: `projects/**/*` (tasks.yml, project.yml, t-*.md)
+1. 태스크 진행 기록: `squad thread add --task-id {id} "작업 요약"`
+2. 전체 공지: `squad thread broadcast "공지 내용"`
+3. 보드 갱신: `squad board render` (tasks.json → board.md 자동 생성)
+4. Telegram 배송: cron job에 `--announce --channel telegram --to` 설정
 
-### 알림 스크립트
+### 알림 메시지 형식 (threads.jsonl)
 
-**경로**: `skills/task-manager/scripts/notify_task_change.py`
-
-알림 메시지 형식:
-```
-📋 work--ronik tasks.yml 변경됨
-  ✅ t-ronik-001: 캘리봇 기획 재정리 완료
-  🔄 t-ronik-004: PM봇 태스크 형식 검증 — openclaw: Notion DB 구조 확인 완료
+```json
+{"id":"msg-...","author":"ara","task_id":"t-ronik-004","tags":["insight"],"content":"t-ronik-004 분석 완료. 리포트: vault/deliverables/t-ronik-004/report.md"}
 ```
 
 전달 경로:
-1. `clawdbot agent` → OpenClaw (primary)
-2. Telegram 직접 전송 (fallback)
+1. `squad thread` → threads.jsonl (primary, 모든 에이전트가 스캔 시 확인)
+2. Telegram 직접 전송 (cron --announce, 사용자 알림)
 
 ### 크로스 플랫폼 컨텍스트 복원
 
 | 상황 | 메커니즘 |
 |------|----------|
-| OpenClaw 작업 → Claude Code 세션 시작 | resume에서 활성 태스크 스캔, 다른 플랫폼 작업 하이라이트 |
-| Claude Code 작업 → OpenClaw 세션 시작 | Obsidian webhook → clawdbot agent → OpenClaw 수신 |
-| 긴급 핸드오프 | Obsidian webhook → 즉시 알림 |
+| OpenClaw 작업 → Claude Code 세션 시작 | resume에서 tasks.json 스캔 + threads.jsonl 최근 활동 하이라이트 |
+| Claude Code 작업 → OpenClaw 세션 시작 | threads.jsonl + tasks.json 상태 변경 감지 → 컨텍스트 복원 |
+| 긴급 핸드오프 | `squad thread add --task-id` + 에이전트 간 a2a 메시징 |
 
 ---
 

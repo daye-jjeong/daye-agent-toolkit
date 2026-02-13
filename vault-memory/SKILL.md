@@ -5,7 +5,7 @@ description: Obsidian vault 메모리 + 태스크 관리
 
 # Vault Memory Plugin
 
-> Version: 0.3.0 | Status: Active | Updated: 2026-02-11
+> Version: 0.4.0 | Status: Active | Updated: 2026-02-13
 
 밍밍 공유 볼트(`vault/`) 기반 메모리 + 프로젝트 태스크 관리 플러그인.
 Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복원, 태스크 공유를 수행한다.
@@ -14,7 +14,7 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 
 **파일별 뭘 기록하는지**: [recording-rules.md](recording-rules.md)
 **기록 포맷 규격**: `vault/format.md`
-**태스크 템플릿**: `vault/.obsidian/templates/task-template.md`
+**태스크 SOT**: `vault/state/tasks.json` (`squad task` CLI로 관리)
 
 ## 서브커맨드
 
@@ -31,8 +31,8 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 
 | 커맨드 | 파일 | 설명 |
 |--------|------|------|
-| `vault-memory:task-create` | [task-create.md](task-create.md) | 태스크 생성 (description 필수) |
-| `vault-memory:task-update` | [task-update.md](task-update.md) | 태스크 수정 (status, progress, enrich) |
+| `vault-memory:task-create` | [task-create.md](task-create.md) | 태스크 생성 (`squad task add`) |
+| `vault-memory:task-update` | [task-update.md](task-update.md) | 태스크 수정 (`squad task start/done/switch`) |
 | `vault-memory:task-brief` | [task-brief.md](task-brief.md) | 프로젝트/태스크 현황 브리핑 |
 
 ### Goals
@@ -65,12 +65,15 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 |------|------|
 | 기록 규칙 | [recording-rules.md](recording-rules.md) |
 | 기록 포맷 | `vault/format.md` |
-| 시스템 정책 | `~/openclaw/AGENTS.md` |
+| 시스템 정책 | `agents/{orchestrator}/AGENTS.md` |
 | 장기 기억 | `MEMORY.md` |
-| 세션 로그 | `memory/YYYY-MM-DD.md` (flat) |
-| 프로젝트/태스크 | `vault/projects/{type}/{name}/` |
-| 태스크 템플릿 | `vault/projects/config/task-template.yml` |
+| 세션 로그 | `vault/YYYY-MM-DD.md` (flat) |
+| 태스크 SOT | `vault/state/tasks.json` |
+| 스레드/활동 | `vault/state/threads.jsonl` |
+| 에이전트 보드 | `vault/agents/board.md` (tasks.json 자동 렌더) |
+| 스쿼드 설정 | `squad.config.json` |
 | 목표 | `vault/goals/{daily,weekly,monthly}/` |
+| 산출물 | `vault/deliverables/{task-id}/` |
 | 설계 문서 | `vault/docs/` |
 | 정책 상세 | `vault/policy/` |
 | 산출물/리서치 | `vault/reports/` |
@@ -84,8 +87,9 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 ```
 세션 중 작업 발생
     │
-    ├─ 새 태스크? ────── → t-*.md (task-create, description 필수)
-    ├─ 프로젝트 작업? ── → t-*.md (task-update) + 세션 로그 (compress)
+    ├─ 새 태스크? ────── → squad task add (tasks.json에 등록)
+    ├─ 태스크 진행? ──── → squad task start + squad thread add --task-id
+    ├─ 태스크 완료? ──── → squad task done + 산출물 → deliverables/{task-id}/
     ├─ 목표 수립? ────── → goals/*.yml (goal-create, goal-planner가 내용 결정)
     ├─ 일회성 결정? ──── → 세션 로그 (compress)
     ├─ 반복 규칙? ────── → AGENTS.md (sync-agents)
@@ -97,17 +101,19 @@ Claude Code와 OpenClaw 양쪽에서 동일한 세션 기록, 컨텍스트 복�
 ## 크로스 플랫폼 태스크 공유
 
 ```
-Claude Code                    vault/projects/          OpenClaw
-    │                              │                        │
-    ├── task-update ──────→ t-*.md ←──────── task-update ──┤
-    ├── compress ─────────→ YYYY-MM-DD.md ←── compress ─────┤
-    └── resume ←──────────── 활성 태스크 ──────→ resume ─────┘
+Claude Code                  vault/state/               OpenClaw
+    │                            │                         │
+    ├── squad task ──────→ tasks.json ←──── squad task ────┤
+    ├── squad thread add ─→ threads.jsonl ←─ squad thread ─┤
+    ├── compress ────────→ YYYY-MM-DD.md ←── compress ─────┤
+    └── resume ←───────── 활성 태스크/스레드 ─────→ resume ─┘
 ```
 
-- **t-*.md** 개별 파일이 양쪽의 공유 태스크 단위
-- **## 진행 로그**로 누가 뭘 했는지 추적
-- **## 코드 변경**으로 코드 연결 (repo, branch, PR)
-- **핸드오프**: 진행 로그에 `[HANDOFF → 플랫폼]` 메모
+- **tasks.json**이 양쪽의 공유 태스크 SOT (단일 JSON 파일)
+- **threads.jsonl**로 누가 뭘 했는지 추적 (task_id로 태스크 연결)
+- **board.md**는 tasks.json에서 자동 렌더 (직접 편집 금지)
+- **산출물**: `vault/deliverables/{task-id}/` 또는 `output_path` 필드
+- **핸드오프**: `squad thread add --task-id {id}` 로 `[HANDOFF]` 메시지 기록
 
 ## 스크립트
 
@@ -123,9 +129,9 @@ Claude Code                    vault/projects/          OpenClaw
 
 ## 자동 기록
 
-- **SessionEnd hook** (Claude Code): `.jsonl` 파싱 → `memory/YYYY-MM-DD.md`에 세션 마커 append
+- **SessionEnd hook** (Claude Code): `src/plugins/cc/hooks/session-end.ts` — 세션 종료 시 `vault/YYYY-MM-DD.md`에 세션 마커 append
 - **vault-session-save cron** (OpenClaw): 30분마다 세션 대화 자동 기록
-- **compress → task-update 연계**: 프로젝트 작업 감지 시 t-*.md 업데이트 제안
+- **compress → task-update 연계**: 프로젝트 작업 감지 시 `squad task` 업데이트 + `squad thread add --task-id` 제안
 - **compress → sync-agents 연계**: 정책성 결정 감지 시 AGENTS.md 반영 제안
 - **compress → preserve 연계**: 장기 보관 가치 발견 시 MEMORY.md 저장 제안
-- **알림**: 태스크 상태 변경 시 텔레그램 알림 (recording-rules.md 참조)
+- **알림**: `squad thread broadcast` 또는 에이전트별 Telegram 토픽 직접 전송 (recording-rules.md 참조)
