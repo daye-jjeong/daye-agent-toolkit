@@ -148,6 +148,11 @@ CONDITIONAL:
 ## 작업 내용
 [Description of what needs to be done]
 
+## 의존성 (선택)
+- 부모 태스크: [parent_id]
+- 선행 태스크: [depends_on ticket IDs]
+- 산출물 경로: [output_ref path]
+
 ## 🔍 Progress Log (Internal)
 *Chronological checkpoints during execution. NOT user-facing.*
 
