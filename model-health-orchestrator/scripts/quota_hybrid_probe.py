@@ -103,6 +103,82 @@ def _load_oauth_profile(provider_key: str, fallback_profile: str):
         return None
 
 
+def probe_claude_code_subscription():
+    """
+    Claude Code subscription probe via macOS Keychain.
+    Reads OAuth token → calls usage API for subscription-level quota.
+    """
+    import subprocess as sp
+
+    result = {
+        "mode": "unavailable",
+        "note": "Claude Code subscription check",
+        "subscription": None,
+        "rate_tier": None,
+        "usage": None,
+        "ping_ok": False,
+        "ping_error": None,
+        "ping_endpoint": "oauth/usage",
+        "identity": {},
+    }
+
+    try:
+        raw = sp.check_output(
+            ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+            stderr=sp.DEVNULL,
+            text=True,
+        ).strip()
+        creds = json.loads(raw)
+        oauth = creds.get("claudeAiOauth", {})
+        token = oauth.get("accessToken", "")
+        if not token:
+            result["ping_error"] = "no_token"
+            return result
+
+        result["subscription"] = oauth.get("subscriptionType", "?")
+        result["rate_tier"] = oauth.get("rateLimitTier", "?")
+        result["identity"] = {
+            "subscription": result["subscription"],
+            "rate_tier": result["rate_tier"],
+        }
+
+        try:
+            usage = _http_get_json(
+                "https://api.anthropic.com/api/oauth/usage",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                    "anthropic-beta": "oauth-2025-04-20",
+                    "User-Agent": "claude-code/2.0.32",
+                },
+                timeout=8,
+            )
+            result["mode"] = "direct"
+            result["usage"] = usage
+            result["ping_ok"] = True
+            result["note"] = "Claude Code subscription usage OK"
+        except urllib.error.HTTPError as e:
+            result["ping_error"] = f"HTTP {e.code}"
+            try:
+                body = json.loads(e.read().decode())
+                msg = body.get("error", {}).get("message", str(body))
+            except Exception:
+                msg = str(e)
+            result["note"] = msg
+            # Token expired but subscription info is still valid
+            if result["subscription"] and result["subscription"] != "?":
+                result["mode"] = "estimated"
+        except Exception as e:
+            result["ping_error"] = type(e).__name__
+            result["note"] = str(e)
+
+    except (sp.CalledProcessError, FileNotFoundError):
+        result["ping_error"] = "keychain_unavailable"
+        result["note"] = "macOS Keychain 접근 불가"
+
+    return result
+
+
 def probe_openai_oauth_work():
     """
     OpenAI OAuth work probe - uses real chat/completions inference.
@@ -513,13 +589,37 @@ def compare_openai_identity(sources):
     }
 
 
+def _enrich_provider_meta(sources):
+    """Attach auth_mode / model_prefix to each probe result for downstream analysis."""
+    # Known provider metadata: (auth_mode, model_prefix)
+    # model_prefix is used to match cooldown flags → model blocking
+    META = {
+        "claude_code_subscription": ("oauth", "anthropic"),
+        "openai_oauth_work":        ("oauth", "openai-codex"),
+        "openai_key_embedding":     ("key",   "openai"),
+        "anthropic":                ("token", "anthropic"),
+        "gemini":                   ("oauth", "google-gemini-cli"),
+    }
+    for key, src in sources.items():
+        meta = META.get(key)
+        if meta:
+            src.setdefault("auth_mode", meta[0])
+            src.setdefault("model_prefix", meta[1])
+        else:
+            # Unknown provider: infer from key name
+            src.setdefault("auth_mode", "unknown")
+            src.setdefault("model_prefix", key.split("_")[0] if "_" in key else key)
+
+
 def main():
     sources = {
+        "claude_code_subscription": probe_claude_code_subscription(),
         "openai_oauth_work": probe_openai_oauth_work(),
         "openai_key_embedding": probe_openai_key_embedding(),
         "anthropic": probe_anthropic(),
         "gemini": probe_gemini(),
     }
+    _enrich_provider_meta(sources)
     direct_any = any(v.get("mode") == "direct" for v in sources.values())
     result = {
         "quota_sources": sources,

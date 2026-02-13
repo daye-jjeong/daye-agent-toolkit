@@ -28,6 +28,7 @@ MODEL_DISPLAY = {
 }
 
 PROVIDER_DISPLAY = {
+    "claude_code_subscription": "Claude Code (구독)",
     "openai_oauth_work": "OpenAI (OAuth)",
     "openai_key_embedding": "OpenAI (Key)",
     "anthropic": "Anthropic",
@@ -37,6 +38,7 @@ PROVIDER_DISPLAY = {
 HEALTH_ICON = {
     "healthy": "✅",
     "degraded": "⚠️",
+    "critical": "🔴",
     "down": "🔴",
     "unknown": "❓",
 }
@@ -105,16 +107,42 @@ def _fmt_tokens(tokens: int) -> str:
 
 # ── Provider analysis (unchanged) ─────────────────────────
 
-def _provider_cooldown_flags(cooldown_data: dict) -> dict:
-    flags = {"openai": False, "anthropic": False, "gemini": False}
+def _provider_cooldown_flags(cooldown_data: dict, quota_sources: dict) -> dict:
+    """Build cooldown flags keyed by provider_key (from quota_sources).
+
+    Each quota_source carries auth_mode + model_prefix set by the probe.
+    Cooldown profile names are matched to the most specific provider_key
+    using model_prefix, so oauth vs key on the same vendor are separated.
+    """
+    # Build a map: provider_key → model_prefix (from probe metadata)
+    prefix_map = {}  # provider_key → model_prefix
+    for pkey, src in (quota_sources or {}).items():
+        prefix_map[pkey] = (src.get("model_prefix") or pkey).lower()
+
+    # Initialize all flags to False
+    flags = {pkey: False for pkey in prefix_map}
+
+    # Match each cooldown profile to the best provider_key
     for profile_key in (cooldown_data or {}).keys():
         k = str(profile_key).lower()
-        if "openai" in k:
-            flags["openai"] = True
-        if "anthropic" in k or "claude" in k:
-            flags["anthropic"] = True
-        if "gemini" in k or "google" in k:
-            flags["gemini"] = True
+        # Find the provider whose model_prefix best matches
+        best_key = None
+        best_len = 0
+        for pkey, prefix in prefix_map.items():
+            if prefix in k and len(prefix) > best_len:
+                best_key = pkey
+                best_len = len(prefix)
+        if best_key:
+            flags[best_key] = True
+        else:
+            # Fallback: fuzzy match by vendor name fragments
+            for pkey in prefix_map:
+                pk = pkey.lower()
+                if ("openai" in k and "openai" in pk) or \
+                   (("anthropic" in k or "claude" in k) and "anthropic" in pk) or \
+                   (("gemini" in k or "google" in k) and "gemini" in pk):
+                    flags[pkey] = True
+
     return flags
 
 
@@ -297,12 +325,11 @@ def _format_unified_report(
     state_icon = HEALTH_ICON.get(health_state, "❓")
     lines.append(f"🏥 시스템: {state_icon} {state_label.get(health_state, health_state)}")
 
-    for p_key in ["openai_oauth_work", "openai_key_embedding", "anthropic", "gemini"]:
-        pv = providers.get(p_key, {})
+    for p_key, pv in providers.items():
         h = pv.get("health", "unknown")
         h_icon = HEALTH_ICON.get(h, "❓")
         q = pv.get("quota_status", "unknown")
-        p_name = PROVIDER_DISPLAY.get(p_key, p_key)
+        p_name = PROVIDER_DISPLAY.get(p_key, p_key.replace("_", " ").title())
         lines.append(f"• {p_name}: {h_icon} {h} | 쿼터 {q}")
 
     # ── Section 3: Summary ──
@@ -368,28 +395,45 @@ def analyze_health(data_json, state_file):
     session_groups = _group_sessions_by_model(sessions_raw)
 
     cooldown_models = list((cooldown_data or {}).keys())
-    all_models = [
+
+    # Derive known models from active sessions + well-known defaults
+    all_models = list({s.get("model") for s in sessions_raw if s.get("model")} | {
         "openai-codex/gpt-5.3-codex",
-        "openai-codex/gpt-5.2",
         "anthropic/claude-opus-4-6",
         "anthropic/claude-sonnet-4-5",
-        "google-gemini-cli/gemini-3-pro-preview",
         "anthropic/claude-haiku-4-5",
-    ]
+        "google-gemini-cli/gemini-3-pro-preview",
+    })
 
-    cooldown_flags = _provider_cooldown_flags(cooldown_data)
+    cooldown_flags = _provider_cooldown_flags(cooldown_data, quota_sources)
     prev_providers = prev_state.get("providers", {}) if isinstance(prev_state, dict) else {}
+
+    # Build prefix → blocked mapping from cooldown flags AND ping results
+    prefix_blocked = {}  # model_prefix → is_blocked
+    for pkey, src in (quota_sources or {}).items():
+        prefix = (src.get("model_prefix") or "").lower()
+        if prefix:
+            in_cooldown = cooldown_flags.get(pkey, False)
+            ping_failed = src.get("ping_ok") is False
+            is_blocked = in_cooldown or ping_failed
+            # Merge: blocked if ANY provider with this prefix is blocked
+            # but only if ALL providers with this prefix are blocked
+            if prefix not in prefix_blocked:
+                prefix_blocked[prefix] = is_blocked
+            else:
+                # Multiple providers share a prefix (e.g. anthropic oauth + token)
+                # Block only if ALL are down
+                prefix_blocked[prefix] = prefix_blocked[prefix] and is_blocked
 
     available_models = []
     for model in all_models:
         m = model.lower()
         blocked = False
-        if "openai" in m and cooldown_flags["openai"]:
-            blocked = True
-        if "anthropic" in m and cooldown_flags["anthropic"]:
-            blocked = True
-        if "gemini" in m and cooldown_flags["gemini"]:
-            blocked = True
+        # Check against each known prefix (longest match first)
+        for prefix in sorted(prefix_blocked, key=len, reverse=True):
+            if m.startswith(prefix) and prefix_blocked[prefix]:
+                blocked = True
+                break
         if not blocked:
             available_models.append(model)
 
@@ -404,6 +448,13 @@ def analyze_health(data_json, state_file):
 
     primary_model = "openai-codex/gpt-5.3-codex"
 
+    # Count providers with ping failures
+    ping_fail_count = sum(
+        1 for src in (quota_sources or {}).values()
+        if src.get("ping_ok") is False
+    )
+    total_providers = len(quota_sources or {})
+
     if all_cooldown or len(available_models) == 0:
         health_state = "critical"
         recommended_model = "google-gemini-cli/gemini-3-flash-preview"
@@ -413,6 +464,11 @@ def analyze_health(data_json, state_file):
         health_state = "degraded"
         recommended_model = available_models[0] if available_models else "anthropic/claude-haiku-4-5"
         reason = f"{len(cooldown_models)} cooldown profile(s), {len(available_models)} model(s) available"
+        next_action = "switch_fallback"
+    elif ping_fail_count > 0 and len(available_models) < len(all_models):
+        health_state = "degraded"
+        recommended_model = available_models[0] if available_models else primary_model
+        reason = f"{ping_fail_count}/{total_providers} provider(s) ping failed, {len(available_models)}/{len(all_models)} model(s) available"
         next_action = "switch_fallback"
     else:
         health_state = "healthy"
@@ -429,18 +485,12 @@ def analyze_health(data_json, state_file):
         fallback_active = True
         fallback_model = recommended_model
 
-    provider_defs = [
-        ("openai_oauth_work", "openai"),
-        ("openai_key_embedding", "openai"),
-        ("anthropic", "anthropic"),
-        ("gemini", "gemini"),
-    ]
-
+    # Dynamic provider iteration: use whatever quota_sources the probe returned
     providers = {}
-    for provider, cooldown_group in provider_defs:
-        src = quota_sources.get(provider, {"mode": "unavailable", "note": "No source info"})
+    for provider, src in (quota_sources or {}).items():
         mode = src.get("mode", "unavailable")
-        est_pct = _estimated_remaining_pct(rate_limit_count, cooldown_flags[cooldown_group], all_cooldown)
+        is_cooldown = cooldown_flags.get(provider, False)
+        est_pct = _estimated_remaining_pct(rate_limit_count, is_cooldown, all_cooldown)
 
         direct_used = src.get("quota_used")
         direct_limit = src.get("quota_limit")
@@ -454,13 +504,13 @@ def analyze_health(data_json, state_file):
             prev_providers.get(provider, {}),
             provider,
             rate_limit_count,
-            cooldown_flags[cooldown_group],
+            is_cooldown,
             all_cooldown,
         )
 
         providers[provider] = {
-            "health": _provider_health(provider, cooldown_flags[cooldown_group], all_cooldown, mode, ping_ok),
-            "quota_status": _provider_quota_status(rate_limit_count, cooldown_flags[cooldown_group], mode, all_cooldown),
+            "health": _provider_health(provider, is_cooldown, all_cooldown, mode, ping_ok),
+            "quota_status": _provider_quota_status(rate_limit_count, is_cooldown, mode, all_cooldown),
             "quota_source": mode,
             "quota_used": direct_used,
             "quota_limit": direct_limit,
@@ -479,7 +529,7 @@ def analyze_health(data_json, state_file):
 
     ping_fail_providers = [
         p for p, v in providers.items()
-        if v.get("ping_ok") is False and p in {"anthropic", "openai_oauth_work", "openai_key_embedding", "gemini"}
+        if v.get("ping_ok") is False
     ]
 
     # Token usage threshold trigger
