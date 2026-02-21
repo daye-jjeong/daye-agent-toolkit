@@ -11,6 +11,8 @@ This script does NOT attempt to be a crawler. Keep feeds curated.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -19,7 +21,11 @@ from difflib import SequenceMatcher
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 import feedparser
+
+from kst_utils import format_pub_kst, parse_pub_date
 
 
 @dataclass
@@ -81,27 +87,6 @@ def fetch_items(feeds: list[str]) -> list[Item]:
                 )
             )
     return items
-
-
-def parse_pub_date(raw: str | None) -> datetime | None:
-    """Try to parse RSS published/updated date string."""
-    if not raw:
-        return None
-    # RFC 2822 (most RSS feeds)
-    try:
-        return parsedate_to_datetime(raw)
-    except Exception:
-        pass
-    # ISO 8601 (Atom feeds)
-    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
-        try:
-            dt = datetime.strptime(raw.strip(), fmt)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt
-        except ValueError:
-            continue
-    return None
 
 
 def filter_by_time(items: list[Item], since_hours: float) -> list[Item]:
@@ -167,6 +152,8 @@ def main():
     ap.add_argument("--since", type=float, default=0,
                     help="Only include items published within this many hours (0=no filter)")
     ap.add_argument("--dedupe-threshold", type=float, default=0.86)
+    ap.add_argument("--output-format", choices=["text", "json"], default="text",
+                    help="Output format: text (Telegram) or json (for compose-newspaper.py)")
     args = ap.parse_args()
 
     feeds = load_list(args.feeds)
@@ -180,6 +167,22 @@ def main():
     # naive sort: keep order as fetched (RSS order tends to be recent-first)
     items = dedupe(items, threshold=args.dedupe_threshold)[: args.max_items]
 
+    # JSON output for compose-newspaper.py
+    if args.output_format == "json":
+        out = []
+        for it in items:
+            out.append({
+                "title": it.title,
+                "link": it.link,
+                "source": it.source,
+                "published": format_pub_kst(it.published),
+                "domain": domain(it.link),
+            })
+        json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
+        print()  # trailing newline
+        return
+
+    # Default text output (Telegram)
     today = datetime.now().strftime("%Y-%m-%d")
     lines: list[str] = []
     lines.append(f"[뉴스/트렌드] 로봇·조리자동화 데일리 브리프 — {today}")
@@ -197,12 +200,12 @@ def main():
     # Keep impact section as placeholders; LLM can rewrite, but this stays deterministic
     lines.append("- Ronik impact (초안)")
     for it in items:
-        lines.append(f"  - {it.title.split(' — ')[0][:60]}…")
+        lines.append(f"  - {it.title.split(' — ')[0][:60]}...")
         lines.append("    • 기회: (작성 필요)")
         lines.append("    • 리스크: (작성 필요)")
         lines.append("    • 액션: (작성 필요)")
 
-    lines.append("- Today’s bet: (작성 필요)")
+    lines.append("- Today's bet: (작성 필요)")
 
     print("\n".join(lines))
 

@@ -33,23 +33,41 @@ JSON
 }
 ```
 
-### 2. Vault 저장 (일일 브리핑 통합)
+### 2. 신문 데이터 조합 (compose-newspaper.py)
+General/Ronik 파이프라인 JSON이 있으면 AI Trends와 합침. Reddit/Community는 별도 섹션으로 분리됨.
+
+```bash
+python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/compose-newspaper.py \
+  --general /tmp/general.json \
+  --ai-trends /tmp/ai_trends_data.json \
+  --ronik /tmp/ronik.json \
+  --output /tmp/newspaper_data.json
+```
+
+AI Trends만 있을 경우:
+```bash
+python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/compose-newspaper.py \
+  --ai-trends /tmp/ai_trends_data.json \
+  --output /tmp/newspaper_data.json
+```
+
+### 3. Vault 저장 (일일 브리핑 통합)
 ```bash
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/save_to_vault.py \
-  --input /tmp/ai_trends_data.json \
+  --input /tmp/newspaper_data.json \
   --weather /tmp/weather.json \
   --vault-dir ~/openclaw/vault
 ```
 
-### 3. HTML 신문 생성
+### 4. HTML 신문 생성
 ```bash
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/render_newspaper.py \
-  --input /tmp/ai_trends_data.json \
+  --input /tmp/newspaper_data.json \
   --weather /tmp/weather.json \
   --output /tmp/mingming_daily_$(date +%Y-%m-%d).html
 ```
 
-### 4. Telegram 전송
+### 5. Telegram 전송
 텔레그램 메시지 + HTML 파일을 Telegram 그룹으로 전송:
 
 - **Target**: `-1003242721592` (JARVIS HQ)
@@ -103,6 +121,7 @@ clawdbot message send-file \
 - **로그**: 모든 실행 로그를 `/Users/dayejeong/openclaw/logs/ai_trends_executor_YYYY-MM-DD.log`에 기록
 
 ## Success Criteria
+- ✅ compose-newspaper.py 조합 성공
 - ✅ Vault 저장 성공 (ai-trends + news-brief)
 - ✅ Telegram 전송 성공
 - ✅ 에러 발생 시 명확한 보고

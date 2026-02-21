@@ -22,13 +22,18 @@ Migrated 2026-02-12: Notion → vault (vault/reports/ai-trends/)
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
-# Vault output directory
-VAULT_ROOT = Path.home() / "openclaw" / "vault" / "reports" / "ai-trends"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from kst_utils import KST, KST_FMT, format_pub_kst
+
+DEFAULT_VAULT = os.path.expanduser("~/openclaw/vault")
 
 
 def render_markdown(payload: dict) -> str:
@@ -39,10 +44,11 @@ def render_markdown(payload: dict) -> str:
     briefing = payload.get("briefing") or ""
     links = payload.get("links") or []
 
+    now_kst = datetime.now(KST).strftime(KST_FMT)
     lines = [
         f"# {title}",
         f"",
-        f"**Date:** {date_iso}  ",
+        f"**Date:** {date_iso} | **Generated:** {now_kst}  ",
         f"**Items:** {len(items)}",
         "",
     ]
@@ -104,15 +110,21 @@ def render_markdown(payload: dict) -> str:
 
 
 def main():
+    ap = argparse.ArgumentParser(description="Ingest AI trends into vault")
+    ap.add_argument("--vault-dir", default=DEFAULT_VAULT,
+                    help=f"Vault root directory (default: {DEFAULT_VAULT})")
+    args = ap.parse_args()
+
     payload = json.loads(sys.stdin.read() or "{}")
     date_iso = payload.get("date") or datetime.now().strftime("%Y-%m-%d")
 
     # Render markdown
     md_content = render_markdown(payload)
 
-    # Write to vault
-    VAULT_ROOT.mkdir(parents=True, exist_ok=True)
-    output_path = VAULT_ROOT / f"{date_iso}.md"
+    # Write to {vault-dir}/reports/ai-trends/YYYY-MM-DD.md
+    out_dir = Path(args.vault_dir) / "reports" / "ai-trends"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / f"{date_iso}.md"
     output_path.write_text(md_content, encoding="utf-8")
 
     print(json.dumps({

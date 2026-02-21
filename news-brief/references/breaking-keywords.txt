@@ -1,0 +1,52 @@
+# Breaking news high-signal keywords
+# Score: each match = +2 points
+# Alert threshold: score >= 5
+
+# Product launches
+launch
+launches
+released
+announces
+introducing
+unveils
+ships
+
+# Breaking / urgent
+breaking
+urgent
+emergency
+critical
+exclusive
+
+# Major events
+acquisition
+acquires
+merger
+IPO
+funding
+raises
+billion
+shutdown
+layoffs
+recall
+ban
+regulation
+
+# AI-specific high signals
+GPT-5
+GPT-6
+Claude
+Gemini
+o3
+o4
+AGI
+superintelligence
+open-source
+open source
+
+# Safety / policy
+AI safety
+executive order
+AI regulation
+AI ban
+deepfake

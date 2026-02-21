@@ -6,33 +6,37 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 # News Brief Skill
 
-**Version:** 0.3.0 | **Updated:** 2026-02-12 | **Status:** Experimental
+**Version:** 0.4.0 | **Updated:** 2026-02-21 | **Status:** Experimental
 
-Three-pipeline news briefing system (표시 순서):
+Four-pipeline news briefing system:
 1. **General:** Korean/international general news + daily summary
 2. **AI Trends:** AI/tech RSS + community (HN, Reddit, PH, GitHub) + multi-agent analysis
 3. **Ronik:** Robotics/kitchen automation RSS + Ronik impact analysis
+4. **Breaking:** 15분 간격 속보 알림 (keyword scoring, LLM 0 tokens)
 
 ## Architecture
 
 ```
-Pipeline 1 (General):  news_brief.py --feeds general_feeds.txt  -> analyzer.py (general prompt)  -> Telegram 171
-Pipeline 2 (AI):       AI Trends Team (Researcher → Writer → Executor)                           -> Telegram 171 + Vault
-Pipeline 3 (Ronik):    news_brief.py --feeds rss_feeds.txt      -> analyzer.py (Ronik prompt)    -> Telegram 171
+Pipeline 1 (General):  news_brief.py --output-format json  ─┐
+Pipeline 2 (AI):       AI Trends Team (3-agent)              ├→ compose-newspaper.py → render_newspaper.py → HTML
+Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┘                        save_to_vault.py    → Vault
+Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)                                                     → Telegram
 ```
 
-**섹션 순서**: General News → AI & Tech Trends → Ronik Industry (JSON sections 배열 순서로 제어)
+**시간 표시**: 모든 파이프라인 KST (kst_utils.py). 포맷: `2026-02-21 18:30 KST`
 
 ## Trigger
 
-Run manually or via daily cron at 09:00.
+- Pipeline 1-3: Daily cron 09:00 or manual
+- Pipeline 4: `*/15 * * * *` (15분 간격)
 
 ## Core Workflow
 
 1. `news_brief.py` fetches RSS feeds, filters by keywords, deduplicates
-2. Outputs JSON array: `[{title, link, source, published, domain}, ...]`
-3. `analyzer.py` receives JSON, scores Ronik impact per item
-4. Formats Telegram-ready markdown with prioritized headlines
+2. `--output-format json` outputs: `[{title, link, source, published (KST), domain}, ...]`
+3. `compose-newspaper.py` merges General + AI Trends + Ronik → newspaper schema
+4. `render_newspaper.py` renders combined JSON → HTML newspaper
+5. `save_to_vault.py` saves to vault as structured markdown
 
 ## Input Files
 
@@ -51,7 +55,7 @@ Run manually or via daily cron at 09:00.
 | `{baseDir}/references/ai_trends_team/rss_sources.json` | AI RSS + community sources (13개) |
 | `{baseDir}/references/ai_trends_team/researcher.md` | Researcher agent prompt |
 | `{baseDir}/references/ai_trends_team/writer.md` | Writer agent prompt |
-| `{baseDir}/references/ai_trends_team/executor.md` | Executor agent prompt |
+| `{baseDir}/references/ai_trends_team/executor.md` | Executor agent prompt (compose flow) |
 
 ### Pipeline 3 — Ronik
 
@@ -61,7 +65,14 @@ Run manually or via daily cron at 09:00.
 | `{baseDir}/references/keywords.txt` | Ronik keywords (robot, kitchen automation, etc.) |
 | `{baseDir}/references/impact_prompt.txt` | LLM prompt: Ronik impact (기회/리스크/액션) |
 
-## Output Format
+### Pipeline 4 — Breaking
+
+| File | Purpose |
+|------|---------|
+| `{baseDir}/references/breaking-keywords.txt` | 고신호 키워드 (launch, breaking 등) |
+| `{baseDir}/references/ai_trends_team/rss_sources.json` | RSS sources (Pipeline 2와 공유) |
+
+## Output
 
 ### Telegram (text)
 
@@ -85,13 +96,23 @@ python3 render_newspaper.py --input data.json --weather /tmp/weather.json --outp
 ## Quick Usage
 
 ```bash
-# Pipeline 1 — General (24시간 이내 기사만)
-python3 news_brief.py --feeds general_feeds.txt --keywords general_keywords.txt --max-items 15 --since 24 \
-  | python3 analyzer.py --prompt general_prompt.txt
+# Pipeline 1 — General (JSON output for compose)
+python3 news_brief.py --feeds general_feeds.txt --keywords general_keywords.txt \
+  --max-items 15 --since 24 --output-format json > /tmp/general.json
 
-# Pipeline 3 — Ronik (24시간 이내 기사만)
-python3 news_brief.py --feeds rss_feeds.txt --keywords keywords.txt --max-items 15 --since 24 \
-  | python3 analyzer.py --prompt impact_prompt.txt
+# Pipeline 3 — Ronik (JSON output for compose)
+python3 news_brief.py --feeds rss_feeds.txt --keywords keywords.txt \
+  --max-items 15 --since 24 --output-format json > /tmp/ronik.json
+
+# Compose + Render
+python3 compose-newspaper.py --general /tmp/general.json --ai-trends /tmp/ai_trends.json \
+  --ronik /tmp/ronik.json --output /tmp/composed.json
+python3 render_newspaper.py --input /tmp/composed.json --weather /tmp/weather.json \
+  --output /tmp/mingming_daily.html
+
+# Pipeline 4 — Breaking Alert (dry run)
+python3 breaking-alert.py --sources references/ai_trends_team/rss_sources.json \
+  --keywords references/breaking-keywords.txt --since 1 --dry-run
 ```
 
 Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trends_team/` 참고.
@@ -102,12 +123,15 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 
 | Script | Purpose | Key Args |
 |--------|---------|----------|
-| `news_brief.py` | RSS fetch + dedup + filter | `--feeds`, `--keywords`, `--max-items`, `--dedupe-threshold` |
+| `news_brief.py` | RSS fetch + dedup + filter | `--feeds`, `--keywords`, `--output-format json` |
+| `kst_utils.py` | KST 시간 변환 유틸 | (library, import only) |
+| `compose-newspaper.py` | 3-pipeline JSON 조합 | `--general`, `--ai-trends`, `--ronik`, `--output` |
+| `breaking-alert.py` | 속보 알림 (keyword scoring) | `--sources`, `--keywords`, `--since`, `--dry-run` |
 | `analyzer.py` | LLM impact analysis + formatting | stdin JSON |
-| `fetch_weather.py` | 날씨 + 옷차림 추천 (Open-Meteo, Tier 1) | `--location`, `--output` |
-| `render_newspaper.py` | JSON → 신문 스타일 HTML 렌더링 | `--input`, `--weather`, `--output` |
-| `save_to_vault.py` | 중요 기사 vault 저장 (`vault/reports/news-brief/`) | `--input`, `--vault-dir` |
-| `ai_trends_ingest.py` | AI 트렌드 vault 적재 (`vault/reports/ai-trends/`) | stdin JSON |
+| `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo, 0 tokens) | `--location`, `--output` |
+| `render_newspaper.py` | JSON → 신문 스타일 HTML | `--input`, `--weather`, `--output` |
+| `save_to_vault.py` | 기사 vault 저장 | `--input`, `--vault-dir` |
+| `ai_trends_ingest.py` | AI 트렌드 vault 적재 | stdin JSON, `--vault-dir` |
 
 ## References (AI Trends Team)
 
@@ -122,10 +146,17 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 
 ## Token Usage
 
-- RSS Fetch: ~0 tokens (no LLM)
-- Weather + Outfit: ~0 tokens (Open-Meteo API + rule-based)
+- RSS Fetch + Breaking Alert: ~0 tokens (no LLM)
+- Weather + Outfit: ~0 tokens (Open-Meteo + rule-based)
 - Analysis: ~200-400 tokens (3 sentences x 5 items + daily bet)
 - Total: ~200-400 tokens/day
+
+## Vault Storage
+
+| 저장 위치 | 내용 |
+|-----------|------|
+| `{vault-dir}/reports/news-brief/YYYY-MM-DD.md` | 일일 뉴스 브리핑 (전체) |
+| `{vault-dir}/reports/ai-trends/YYYY-MM-DD.md` | AI 트렌드 상세 |
 
 ## Implementation Status
 
@@ -133,36 +164,9 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 |-------|--------|-------------|
 | 1. RSS + Dedup | Complete | news_brief.py |
 | 2. LLM Scaffold | Complete | analyzer.py |
-| 3. LLM Integration | Pending | Full Claude API |
-| 4. Cron Deployment | Pending | Validation needed |
+| 3. Compose + KST | Complete | compose-newspaper.py, kst_utils.py |
+| 4. Breaking Alert | Complete | breaking-alert.py |
+| 5. LLM Integration | Pending | Full Claude API |
+| 6. Cron Deployment | Pending | Validation needed |
 
-**상세 (로드맵, 병합 이력, 폐기 안내)**: `{baseDir}/references/roadmap-history.md` 참고
-
-## References
-
-## Vault Storage
-
-중요 기사는 vault에 마크다운으로 저장:
-
-```bash
-# 전체 브리핑 저장
-echo '...' | python3 save_to_vault.py --vault-dir ~/openclaw/vault
-
-# 특정 파이프라인만
-python3 save_to_vault.py --input ai_trends.json --vault-dir ~/openclaw/vault
-```
-
-| 저장 위치 | 내용 |
-|-----------|------|
-| `vault/reports/news-brief/YYYY-MM-DD.md` | 일일 뉴스 브리핑 (전체) |
-| `vault/reports/ai-trends/` | AI 트렌드 상세 (ai_trends_ingest.py) |
-
-각 파일에 YAML frontmatter 포함: `type`, `date`, `articles`, `sections`, `tags`.
-
-## References
-
-- Feeds config: `{baseDir}/references/rss_feeds.txt`
-- Keywords: `{baseDir}/references/keywords.txt`
-- Prompt: `{baseDir}/references/impact_prompt.txt`
-- Telegram topic: 171 in JARVIS HQ group
-- Changelog: `{baseDir}/CHANGELOG.md`
+**상세 (로드맵, 병합 이력)**: `{baseDir}/references/roadmap-history.md` 참고
