@@ -27,6 +27,40 @@ import feedparser
 
 from kst_utils import format_pub_kst, parse_pub_date
 
+# Low-signal patterns filtered from general news
+NOISE_PATTERNS = re.compile(
+    r"\[부고\]|\[인사\]|부고|부음|별세|발인|빈소|조문|부친상|모친상|"
+    r"\[알림\]|\[공고\]|\[광고\]|\[스포츠\]|포토\]|사진\]",
+    re.IGNORECASE,
+)
+
+# Feed URL → category tag mapping
+_FEED_TAGS: list[tuple[str, str]] = [
+    ("reuters.com/reuters/business", "경제"),
+    ("yna.co.kr/rss/economy", "경제"),
+    ("reuters.com", "국제"),
+    ("nytimes.com", "국제"),
+    ("bbc", "국제"),
+    ("yna.co.kr", "국내"),
+    ("donga.com", "국내"),
+    ("hankyung.com", "국내"),
+]
+
+
+def _strip_html(s: str) -> str:
+    """Remove HTML tags and collapse whitespace."""
+    s = re.sub(r"<[^>]+>", "", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s[:200] if s else ""
+
+
+def detect_feed_tag(feed_url: str) -> str:
+    """Detect category tag from feed URL."""
+    for pattern, tag in _FEED_TAGS:
+        if pattern in feed_url:
+            return tag
+    return ""
+
 
 @dataclass
 class Item:
@@ -34,6 +68,8 @@ class Item:
     link: str
     source: str
     published: str | None
+    description: str = ""
+    tag: str = ""
 
 
 def norm_title(s: str) -> str:
@@ -73,17 +109,21 @@ def fetch_items(feeds: list[str]) -> list[Item]:
     for u in feeds:
         d = feedparser.parse(u)
         src = domain(u) or (d.feed.get("title") if hasattr(d, "feed") else "")
+        tag = detect_feed_tag(u)
         for e in d.entries[:30]:
             title = (e.get("title") or "").strip()
             link = (e.get("link") or "").strip()
             if not title or not link:
                 continue
+            desc = _strip_html(e.get("summary") or e.get("description") or "")
             items.append(
                 Item(
                     title=title,
                     link=link,
                     source=src or domain(link),
                     published=e.get("published") or e.get("updated"),
+                    description=desc,
+                    tag=tag,
                 )
             )
     return items
@@ -160,6 +200,8 @@ def main():
     keywords = load_list(args.keywords) if args.keywords else []
 
     items = fetch_items(feeds)
+    # Filter noise (부고, 인사, 광고 등)
+    items = [it for it in items if not NOISE_PATTERNS.search(it.title)]
     if args.since > 0:
         items = filter_by_time(items, args.since)
     items = filter_by_keywords(items, keywords)
@@ -171,13 +213,17 @@ def main():
     if args.output_format == "json":
         out = []
         for it in items:
-            out.append({
+            obj: dict = {
                 "title": it.title,
                 "link": it.link,
                 "source": it.source,
                 "published": format_pub_kst(it.published),
                 "domain": domain(it.link),
-            })
+                "tag": it.tag,
+            }
+            if it.description:
+                obj["description"] = it.description
+            out.append(obj)
         json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
         print()  # trailing newline
         return
