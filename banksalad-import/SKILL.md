@@ -98,6 +98,7 @@ tx_type: 지출
 category_l1: 식사
 merchant: 요기요
 payment: 토스 간편결제
+needs_review: true  # category_l1이 미분류이거나 비어있을 때
 source: banksalad
 import_key: "2026-02-09_11:54_-14500.0_요기요"
 ```

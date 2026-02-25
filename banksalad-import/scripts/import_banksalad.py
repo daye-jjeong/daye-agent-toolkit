@@ -185,6 +185,9 @@ def import_transactions(sheet_rows, dry_run=False):
             fm_lines.append(f"merchant: {content}")
         if payment:
             fm_lines.append(f"payment: {payment}")
+        needs_review = not cat1 or cat1 == "미분류"
+        if needs_review:
+            fm_lines.append("needs_review: true")
         fm_lines.extend([
             "source: banksalad",
             f'import_key: "{import_key}"',
