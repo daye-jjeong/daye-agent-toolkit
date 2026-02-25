@@ -84,10 +84,10 @@ Researcher의 JSON 출력:
   "title": "AI Trends Briefing — YYYY-MM-DD",
   "items": [
     {
-      "name": "제목 (한국어)",
+      "name": "제목 (반드시 한국어)",
       "category": "Models|Tools|Policy|Open-source|Business|Other",
       "summary": "요약 (한국어, 2-3문장)",
-      "why": "왜 중요한가? (1-2문장)",
+      "why": "왜 중요한가? (1-2문장, 한국어)",
       "source": "https://...",
       "tags": ["agent", "llm", ...]
     }
@@ -101,7 +101,7 @@ Researcher의 JSON 출력:
 
 ## Constraints
 - **텔레그램 메시지**: 10-15줄 이내 (과도하게 길지 않게)
-- **한국어 우선**: 제목/요약 모두 한국어
+- **⚠️ 한국어 필수**: name, summary, why 필드는 반드시 한국어. 영문 원문 제목이나 RSS description을 그대로 넣지 말 것. 반드시 한국어로 번역하여 작성.
 - **링크 필수**: 각 항목에 출처 URL 포함
 - **이모지 적절히**: 과하지 않게, 가독성 우선
 

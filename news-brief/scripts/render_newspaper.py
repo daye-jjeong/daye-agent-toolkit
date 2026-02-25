@@ -371,7 +371,7 @@ def render(data: dict, weather: dict | None = None) -> str:
     </main>
 
     <footer class="colophon">
-      © {datetime.now().year} 밍밍 데일리 — AI-powered briefing
+      © {datetime.now().year} 밍밍 데일리 — AI 뉴스 브리핑
     </footer>
   </div>
 </body>

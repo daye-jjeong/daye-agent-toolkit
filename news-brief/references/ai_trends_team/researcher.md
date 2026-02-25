@@ -25,16 +25,17 @@
    각 아이템을 다음 형식으로 변환:
    ```json
    {
-     "title": "제목 (한국어 번역 또는 원문)",
+     "title": "제목 (반드시 한국어로 번역)",
      "url": "https://...",
      "source": "소스명 (OpenAI Blog, TechCrunch 등)",
      "publishedAt": "YYYY-MM-DD",
      "summary_1line": "한국어 1줄 요약 (핵심만)",
-     "why_it_matters": "왜 중요한가? (비즈니스/기술 관점, 1-2문장)",
+     "why_it_matters": "왜 중요한가? (비즈니스/기술 관점, 1-2문장, 한국어)",
      "tags": ["agent", "llm", "open-source", ...],
      "category": "Models|Tools|Policy|Open-source|Business|Other"
    }
    ```
+   **⚠️ 언어 규칙**: title, summary_1line, why_it_matters는 반드시 한국어로 작성. 영문 원문을 그대로 넣지 말 것.
 
 ## Output Format
 **JSON만 출력** (마크다운 코드블록 없이):

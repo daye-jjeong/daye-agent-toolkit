@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from urllib.parse import urlparse
@@ -102,6 +103,31 @@ def map_ronik_items(items: list[dict]) -> list[dict]:
 
 # ── AI Trends pipeline ───────────────────────────────────────────────
 
+# Patterns that indicate raw RSS boilerplate (not real summaries)
+_HN_BOILERPLATE = re.compile(
+    r"Article URL:\s*https?://\S+\s*Comments URL:\s*https?://",
+    re.IGNORECASE,
+)
+_REDDIT_BOILERPLATE = re.compile(
+    r"(&#32;|&amp;#32;|\s)*submitted by\s+(&#32;|&amp;#32;|\s)*/u/\S+\s*\[link\]",
+    re.IGNORECASE,
+)
+
+
+def _clean_community_summary(summary: str) -> str:
+    """Strip HN/Reddit RSS boilerplate from summaries.
+
+    Returns empty string if the summary is entirely boilerplate.
+    """
+    if not summary:
+        return ""
+    if _HN_BOILERPLATE.search(summary):
+        return ""
+    if _REDDIT_BOILERPLATE.search(summary):
+        return ""
+    return summary
+
+
 def _is_reddit_community(item: dict) -> bool:
     cat = (item.get("category") or "").lower()
     source = (item.get("source") or "").lower()
@@ -118,7 +144,7 @@ def map_ai_trends_items(items: list[dict]) -> tuple[list[dict], list[dict]]:
             "source": _extract_domain(it.get("source", "")),
             "tag": it.get("category", ""),
             "published": format_pub_kst(it.get("published")),
-            "summary": it.get("summary", ""),
+            "summary": _clean_community_summary(it.get("summary", "")),
             "why": it.get("why", ""),
         }
         if _is_reddit_community(it):
@@ -164,31 +190,31 @@ def compose(
             if cat not in _GENERAL_SECTION_ORDER and items:
                 sections.append({"title": cat, "items": items})
 
-    # AI & Tech Trends (without Reddit/Community)
+    # AI·테크 (Reddit/커뮤니티 제외)
     reddit_items: list[dict] = []
     if ai_trends:
         ai_items = ai_trends.get("items") or []
         main_items, reddit_items = map_ai_trends_items(ai_items)
         if main_items:
             sections.append({
-                "title": "AI & Tech Trends",
+                "title": "🤖 AI·테크",
                 "items": main_items,
                 "insight": (ai_trends.get("briefing") or "")[:200],
             })
 
-    # Reddit & Community
+    # 커뮤니티 (Reddit, HN 등)
     if reddit_items:
         sections.append({
-            "title": "Reddit & Community",
+            "title": "💬 커뮤니티",
             "items": reddit_items,
         })
 
-    # Ronik Industry
+    # 로닉 산업
     if ronik:
         items = map_ronik_items(ronik)
         if items:
             sections.append({
-                "title": "Ronik Industry",
+                "title": "🏭 로닉 산업",
                 "items": items,
             })
 

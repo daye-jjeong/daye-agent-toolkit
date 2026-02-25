@@ -33,8 +33,17 @@ JSON
 }
 ```
 
-### 2. 신문 데이터 조합 (compose-newspaper.py)
-General/Ronik 파이프라인 JSON이 있으면 AI Trends와 합침. Reddit/Community는 별도 섹션으로 분리됨.
+### 2. 한국어 검증 및 신문 데이터 조합
+
+**⚠️ compose 전 필수 검증**: General/Ronik JSON(`/tmp/general.json`, `/tmp/ronik.json`)을 읽어서 영어 제목/요약이 있으면 한국어로 번역한 뒤 덮어쓴다. `title` → 한국어 번역, `description` → 한국어 요약. compose-newspaper.py는 번역 기능이 없으므로 **입력 JSON이 이미 한국어여야 한다**.
+
+예시 — 영어 제목이 포함된 경우:
+```
+원본: {"title": "Russia Remade Its Economy for War", "description": "About half of..."}
+수정: {"title": "러시아, 전쟁 위해 경제 재편…대가는 막대", "description": "연방 예산의 약 절반이 우크라이나 전쟁에 투입..."}
+```
+
+검증 완료 후 compose 실행:
 
 ```bash
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/compose-newspaper.py \
