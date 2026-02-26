@@ -18,9 +18,9 @@ Four-pipeline news briefing system:
 
 ```
 Pipeline 1 (General):  news_brief.py --output-format json  ─┐
-Pipeline 2 (AI):       AI Trends Team (3-agent)              ├→ compose-newspaper.py → render_newspaper.py → HTML
-Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┘                        save_to_vault.py    → Vault
-Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)                                                     → Telegram
+Pipeline 2 (AI):       AI Trends Team (3-agent)              ├→ compose-newspaper.py → enrich.py → render_newspaper.py → HTML
+Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┘                                     save_to_vault.py    → Vault
+Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)                                                                  → Telegram
 ```
 
 **시간 표시**: 모든 파이프라인 KST (kst_utils.py). 포맷: `2026-02-21 18:30 KST`
@@ -33,10 +33,11 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)                            
 ## Core Workflow
 
 1. `news_brief.py` fetches RSS feeds, filters by keywords, clusters by story (title similarity + entity overlap), scores by coverage/source tier/recency/entity density, ranks by score
-2. `--output-format json` outputs: `[{title, link, source, published (KST), domain}, ...]`
+2. `--output-format json` outputs: `[{title, link, source, published (KST), domain, score, coverage}, ...]`
 3. `compose-newspaper.py` merges General + AI Trends + Ronik → newspaper schema
-4. `render_newspaper.py` renders combined JSON → HTML newspaper
-5. `save_to_vault.py` saves to vault as structured markdown
+4. `enrich.py extract` → agent가 한국어 번역 + 요약(why) 생성 → `enrich.py apply`
+5. `render_newspaper.py` renders enriched JSON → HTML newspaper
+6. `save_to_vault.py` saves to vault as structured markdown
 
 ## Input Files
 
@@ -104,9 +105,13 @@ python3 news_brief.py --feeds general_feeds.txt --keywords general_keywords.txt 
 python3 news_brief.py --feeds rss_feeds.txt --keywords keywords.txt \
   --max-items 15 --since 24 --output-format json > /tmp/ronik.json
 
-# Compose + Render
+# Compose + Enrich + Render
 python3 compose-newspaper.py --general /tmp/general.json --ai-trends /tmp/ai_trends.json \
   --ronik /tmp/ronik.json --output /tmp/composed.json
+python3 enrich.py extract --input /tmp/composed.json > /tmp/to_enrich.json
+# Agent generates /tmp/enrichments.json (한국어 번역 + 요약)
+python3 enrich.py apply --input /tmp/composed.json \
+  --enrichments /tmp/enrichments.json --output /tmp/composed.json
 python3 render_newspaper.py --input /tmp/composed.json --weather /tmp/weather.json \
   --output /tmp/mingming_daily.html
 
@@ -126,6 +131,7 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 | `news_brief.py` | RSS fetch + cluster + score + rank | `--feeds`, `--keywords`, `--output-format json`, `--no-rank` |
 | `kst_utils.py` | KST 시간 변환 유틸 | (library, import only) |
 | `compose-newspaper.py` | 3-pipeline JSON 조합 | `--general`, `--ai-trends`, `--ronik`, `--output` |
+| `enrich.py` | 영어→한국어 번역 + 요약(why) 추가 | `extract --input`, `apply --input --enrichments` |
 | `breaking-alert.py` | 속보 알림 (tiered keyword + word boundary) | `--sources`, `--keywords`, `--since`, `--dry-run` |
 | `analyzer.py` | LLM impact analysis + formatting | stdin JSON |
 | `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo, 0 tokens) | `--location`, `--output` |
