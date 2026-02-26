@@ -56,7 +56,14 @@ python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/news_brief.py \
 수정: {"title": "러시아, 전쟁 위해 경제 재편…대가는 막대", "description": "연방 예산의 약 절반이 우크라이나 전쟁에 투입..."}
 ```
 
-검증 완료 후 compose 실행:
+검증 완료 후 **오늘의 핵심 한줄 요약을 작성**한 뒤 compose 실행:
+
+**⚠️ --highlight 필수**: 각 섹션(국내/경제/AI·테크/커뮤니티/로닉)의 핵심 뉴스를 `·`로 연결한 1-2줄 요약을 생성. 신문 상단 노란색 박스로 렌더링됨.
+
+예시:
+```
+"한은 금리 점도표 임기 내 도입 시사 · Anthropic Vercept 인수 · llama.cpp HF 합류 · Wayve 12억$ 투자"
+```
 
 ```bash
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/compose-newspaper.py \
@@ -64,6 +71,7 @@ python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/compose-newspaper.py
   --ai-trends /tmp/ai_trends_data.json \
   --ronik /tmp/ronik.json \
   --community /tmp/community.json \
+  --highlight "<오늘의 핵심 한줄 요약>" \
   --output /tmp/newspaper_data.json
 ```
 
@@ -72,6 +80,7 @@ AI Trends만 있을 경우:
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/compose-newspaper.py \
   --ai-trends /tmp/ai_trends_data.json \
   --community /tmp/community.json \
+  --highlight "<오늘의 핵심 한줄 요약>" \
   --output /tmp/newspaper_data.json
 ```
 
