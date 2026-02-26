@@ -25,11 +25,9 @@ import os
 import re
 import sys
 from datetime import datetime
-from urllib.parse import urlparse
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from kst_utils import format_pub_kst
+from kst_utils import extract_domain, format_pub_kst
 
 # General news category order
 _GENERAL_SECTION_ORDER = ["국제", "국내", "경제", "기타"]
@@ -128,47 +126,85 @@ def _clean_community_summary(summary: str) -> str:
     return summary
 
 
-def _is_reddit_community(item: dict) -> bool:
+# Community origin sources — Reddit만 커뮤니티 섹션 배치
+# HN은 AI·테크, PH는 Tools, GitHub Trending은 Open-source로 분류
+_COMMUNITY_ORIGINS = {
+    "reddit", "reddit r/artificial", "reddit r/machinelearning",
+}
+
+
+def _is_community(item: dict) -> bool:
+    """Check if item originates from a community source."""
+    origin = (item.get("origin_source") or "").lower()
+    if origin and origin in _COMMUNITY_ORIGINS:
+        return True
+    # Fallback: check category for backward compatibility
     cat = (item.get("category") or "").lower()
-    source = (item.get("source") or "").lower()
-    return cat == "community" or "reddit" in source
+    return cat == "community"
 
 
 def map_ai_trends_items(items: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Map AI Trends items → (main_items, reddit_items)."""
-    main, reddit = [], []
+    """Map AI Trends items → (main_items, community_items).
+
+    Supports two input formats:
+      - Writer vault format: name, url/source (URL), source_name, origin_source
+      - Researcher format (fallback): name/title, url, source_name, origin_source
+    """
+    main, community = [], []
     for it in items:
+        # URL: prefer explicit 'url', fallback to 'source' (writer vault format)
+        url = it.get("url") or it.get("source", "")
+        # Source name: prefer 'source_name', fallback to domain extraction
+        source_name = it.get("source_name") or extract_domain(url)
+
         mapped = {
-            "headline": it.get("name", ""),
-            "url": it.get("source", ""),
-            "source": _extract_domain(it.get("source", "")),
+            "headline": it.get("name") or it.get("title", ""),
+            "url": url,
+            "source": source_name,
             "tag": it.get("category", ""),
             "published": format_pub_kst(it.get("published")),
             "summary": _clean_community_summary(it.get("summary", "")),
             "why": it.get("why", ""),
+            "origin_source": it.get("origin_source", ""),
         }
-        if _is_reddit_community(it):
-            reddit.append(mapped)
+        if _is_community(it):
+            community.append(mapped)
         else:
             main.append(mapped)
-    return main, reddit
+    return main, community
 
-
-def _extract_domain(url: str) -> str:
-    if not url or not url.startswith("http"):
-        return url
-    try:
-        return urlparse(url).netloc.replace("www.", "")
-    except Exception:
-        return url
 
 
 # ── Compose ──────────────────────────────────────────────────────────
+
+def map_community_items(items: list[dict]) -> list[dict]:
+    """Map news_brief.py JSON items from community feeds (Reddit etc.)."""
+    out = []
+    for it in items:
+        headline = it.get("headline") or it.get("headline_ko") or it.get("title", "")
+        summary = it.get("summary") or it.get("description", "")
+        mapped = {
+            "headline": headline,
+            "url": it.get("url") or it.get("link", ""),
+            "source": it.get("source", "") or extract_domain(it.get("url") or it.get("link", "")),
+            "tag": "Community",
+            "published": it.get("published", ""),
+            "origin_source": it.get("origin_source", "Reddit"),
+        }
+        summary = _clean_community_summary(summary)
+        if summary:
+            mapped["summary"] = summary
+        if it.get("why"):
+            mapped["why"] = it["why"]
+        out.append(mapped)
+    return out
+
 
 def compose(
     general: list[dict] | None,
     ai_trends: dict | None,
     ronik: list[dict] | None,
+    community: list[dict] | None = None,
     highlight: str = "",
 ) -> dict:
     """Compose pipeline outputs into render_newspaper.py input schema."""
@@ -190,11 +226,11 @@ def compose(
             if cat not in _GENERAL_SECTION_ORDER and items:
                 sections.append({"title": cat, "items": items})
 
-    # AI·테크 (Reddit/커뮤니티 제외)
-    reddit_items: list[dict] = []
+    # AI·테크 (커뮤니티 제외)
+    ai_community_items: list[dict] = []
     if ai_trends:
         ai_items = ai_trends.get("items") or []
-        main_items, reddit_items = map_ai_trends_items(ai_items)
+        main_items, ai_community_items = map_ai_trends_items(ai_items)
         if main_items:
             sections.append({
                 "title": "🤖 AI·테크",
@@ -202,11 +238,15 @@ def compose(
                 "insight": (ai_trends.get("briefing") or "")[:200],
             })
 
-    # 커뮤니티 (Reddit, HN 등)
-    if reddit_items:
+    # 커뮤니티: news_brief.py 경유 Reddit + AI Trends 내 커뮤니티 아이템 합산
+    all_community = []
+    if community:
+        all_community.extend(map_community_items(community))
+    all_community.extend(ai_community_items)
+    if all_community:
         sections.append({
             "title": "💬 커뮤니티",
-            "items": reddit_items,
+            "items": all_community,
         })
 
     # 로닉 산업
@@ -235,19 +275,21 @@ def main() -> None:
     ap.add_argument("--general", help="General pipeline JSON")
     ap.add_argument("--ai-trends", help="AI Trends pipeline JSON")
     ap.add_argument("--ronik", help="Ronik pipeline JSON")
+    ap.add_argument("--community", help="Community pipeline JSON (Reddit via news_brief.py)")
     ap.add_argument("--highlight", default="", help="오늘의 핵심 한줄")
     ap.add_argument("--output", help="Output JSON file (default: stdout)")
     args = ap.parse_args()
 
-    if not any([args.general, args.ai_trends, args.ronik]):
+    if not any([args.general, args.ai_trends, args.ronik, args.community]):
         print("Error: at least one pipeline input required", file=sys.stderr)
         sys.exit(1)
 
     general = load_json(args.general) if args.general else None
     ai_trends = load_json(args.ai_trends) if args.ai_trends else None
     ronik = load_json(args.ronik) if args.ronik else None
+    community = load_json(args.community) if args.community else None
 
-    result = compose(general, ai_trends, ronik, highlight=args.highlight)
+    result = compose(general, ai_trends, ronik, community=community, highlight=args.highlight)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
