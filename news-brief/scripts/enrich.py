@@ -109,7 +109,7 @@ def extract(data: dict) -> dict:
             "- translate_headline: 한국어 제목 번역\n"
             "- rewrite_summary: 한국어 1-2문장 요약 "
             "(RSS 원문이 아닌 기사 핵심 내용)\n"
-            "- add_why: '→ 왜 중요한가' 1문장 (비즈니스/기술/사회 관점)\n\n"
+            "- add_why: '왜 중요한가' 1문장 (비즈니스/기술/사회 관점, '→' 접두사 붙이지 말 것)\n\n"
             "출력 형식 (JSON):\n"
             '{"0.0": {"headline": "...", "summary": "...", "why": "..."}, ...}'
         ),

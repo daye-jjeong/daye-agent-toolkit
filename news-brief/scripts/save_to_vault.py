@@ -76,7 +76,7 @@ def render_item_md(item: dict) -> str:
         summary = item.get("summary", "")
         if summary:
             parts.append(f"\n{summary}")
-        why = item.get("why", "")
+        why = item.get("why", "").lstrip("→ ").strip()
         if why:
             parts.append(f"\n> → {why}")
 

@@ -286,7 +286,7 @@ def render_item(item: dict) -> str:
         summary = item.get("summary", "")
         if summary:
             parts.append(f'  <p class="item-summary">{escape(summary)}</p>')
-        why = item.get("why", "")
+        why = item.get("why", "").lstrip("→ ").strip()
         if why:
             parts.append(f'  <p class="item-why">→ {escape(why)}</p>')
 
