@@ -1,0 +1,4 @@
+# Reddit AI/ML community feeds
+# WebFetch에서 reddit.com 차단 → news_brief.py(feedparser)로 수집
+https://www.reddit.com/r/artificial/.rss
+https://www.reddit.com/r/MachineLearning/.rss

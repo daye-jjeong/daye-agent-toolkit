@@ -33,9 +33,22 @@ JSON
 }
 ```
 
-### 2. 한국어 검증 및 신문 데이터 조합
+### 2. Reddit 커뮤니티 수집 (news_brief.py 경유)
 
-**⚠️ compose 전 필수 검증**: General/Ronik JSON(`/tmp/general.json`, `/tmp/ronik.json`)을 읽어서 영어 제목/요약이 있으면 한국어로 번역한 뒤 덮어쓴다. `title` → 한국어 번역, `description` → 한국어 요약. compose-newspaper.py는 번역 기능이 없으므로 **입력 JSON이 이미 한국어여야 한다**.
+Reddit RSS는 WebFetch에서 차단되므로 news_brief.py(feedparser)로 별도 수집:
+
+```bash
+python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/news_brief.py \
+  --feeds /Users/dayejeong/openclaw/skills/news-brief/references/community_feeds.txt \
+  --keywords /Users/dayejeong/openclaw/skills/news-brief/references/community_keywords.txt \
+  --max-items 10 --since 24 --output-format json > /tmp/community.json
+```
+
+수집된 커뮤니티 아이템도 영어면 한국어로 번역한다 (General/Ronik과 동일 규칙).
+
+### 3. 한국어 검증 및 신문 데이터 조합
+
+**⚠️ compose 전 필수 검증**: General/Ronik/Community JSON을 읽어서 영어 제목/요약이 있으면 한국어로 번역한 뒤 덮어쓴다. `title` → 한국어 번역, `description` → 한국어 요약. compose-newspaper.py는 번역 기능이 없으므로 **입력 JSON이 이미 한국어여야 한다**.
 
 예시 — 영어 제목이 포함된 경우:
 ```
@@ -50,6 +63,7 @@ python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/compose-newspaper.py
   --general /tmp/general.json \
   --ai-trends /tmp/ai_trends_data.json \
   --ronik /tmp/ronik.json \
+  --community /tmp/community.json \
   --output /tmp/newspaper_data.json
 ```
 
@@ -57,10 +71,11 @@ AI Trends만 있을 경우:
 ```bash
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/compose-newspaper.py \
   --ai-trends /tmp/ai_trends_data.json \
+  --community /tmp/community.json \
   --output /tmp/newspaper_data.json
 ```
 
-### 3. Vault 저장 (일일 브리핑 통합)
+### 4. Vault 저장 (일일 브리핑 통합)
 ```bash
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/save_to_vault.py \
   --input /tmp/newspaper_data.json \
@@ -68,7 +83,7 @@ python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/save_to_vault.py \
   --vault-dir ~/openclaw/vault
 ```
 
-### 4. HTML 신문 생성
+### 5. HTML 신문 생성
 ```bash
 python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/render_newspaper.py \
   --input /tmp/newspaper_data.json \
@@ -76,7 +91,7 @@ python3 /Users/dayejeong/openclaw/skills/news-brief/scripts/render_newspaper.py 
   --output /tmp/mingming_daily_$(date +%Y-%m-%d).html
 ```
 
-### 5. Telegram 전송
+### 6. Telegram 전송
 텔레그램 메시지 + HTML 파일을 Telegram 그룹으로 전송:
 
 - **Target**: `-1003242721592` (JARVIS HQ)

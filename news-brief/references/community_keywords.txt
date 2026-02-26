@@ -1,0 +1,17 @@
+# AI/ML keywords for Reddit community filtering
+# rss_sources.json의 fallback_keywords와 동기화
+GPT
+Claude
+Gemini
+LLM
+AI agent
+open-source
+regulation
+safety
+machine learning
+transformer
+fine-tuning
+RAG
+diffusion
+reasoning
+benchmark
