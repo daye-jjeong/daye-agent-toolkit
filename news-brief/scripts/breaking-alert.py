@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""Breaking news alert — keyword scoring + dedup, zero LLM tokens.
+"""Breaking news alert — tiered keyword scoring + word boundary + dedup.
 
-Checks RSS sources, scores items by keyword matches + source priority,
-and outputs Telegram alerts for high-scoring items (score >= 5).
+Checks RSS sources, scores items by tiered keyword matches + source priority,
+and outputs Telegram alerts for high-scoring items (score >= 7).
+
+Keywords are tiered:
+  - tier:high (+4) — standalone high-signal events (AGI, acquisition, etc.)
+  - tier:normal (+2) — need combination to trigger (launch, Claude, etc.)
+
+Word boundary matching prevents false positives (e.g. "ban" won't match "banned").
 
 Designed for 15-minute cron: */15 * * * *
 
@@ -23,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -37,21 +44,43 @@ from kst_utils import format_kst, parse_pub_date
 CACHE_DIR = Path(os.path.expanduser("~/.cache/news-brief"))
 SEEN_FILE = CACHE_DIR / "seen.json"
 PRUNE_HOURS = 48
-ALERT_THRESHOLD = 5
+ALERT_THRESHOLD = 7
 
-PRIORITY_SCORES = {"high": 3, "medium": 1, "low": 0}
+PRIORITY_SCORES = {"high": 2, "medium": 1, "low": 0}
+TIER_SCORES = {"high": 4, "normal": 2}
 
 
-def load_keywords(path: str) -> list[str]:
-    """Load keywords from file, one per line, skip comments."""
-    kws: list[str] = []
+def load_keywords(path: str) -> list[tuple[str, str]]:
+    """Load tiered keywords from file.
+
+    Parses '# tier:high' / '# tier:normal' section markers.
+    Returns list of (keyword, tier) tuples.
+    """
+    kws: list[tuple[str, str]] = []
+    current_tier = "normal"
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if not line or line.startswith("#"):
+            if not line:
                 continue
-            kws.append(line.lower())
+            if line.startswith("# tier:"):
+                current_tier = line.split("# tier:", 1)[1].strip().split()[0]
+                continue
+            if line.startswith("#"):
+                continue
+            kws.append((line.lower(), current_tier))
     return kws
+
+
+def _word_boundary_match(keyword: str, text: str) -> bool:
+    """Match keyword with word boundaries to avoid substring false positives.
+
+    Multi-word keywords (e.g. 'open source') use substring match.
+    Single-word keywords use \\b word boundary regex.
+    """
+    if " " in keyword or "-" in keyword:
+        return keyword in text
+    return bool(re.search(r"\b" + re.escape(keyword) + r"\b", text))
 
 
 def load_rss_sources(path: str) -> list[dict]:
@@ -99,19 +128,26 @@ def prune_seen(seen: dict[str, float]) -> dict[str, float]:
 
 # ── Scoring ──────────────────────────────────────────────────────────
 
-def score_item(title: str, source_priority: str, keywords: list[str]) -> int:
-    """Score an item by keyword matches + source priority.
+def score_item(
+    title: str, source_priority: str, keywords: list[tuple[str, str]]
+) -> tuple[int, list[str]]:
+    """Score an item by tiered keyword matches + source priority.
 
-    - Each keyword match in title: +2
-    - Source priority bonus: high=3, medium=1, low=0
-    - Title urgency signals: ALL CAPS word (+1), exclamation (+1)
+    - tier:high keyword match: +4
+    - tier:normal keyword match: +2
+    - Source priority bonus: high=2, medium=1, low=0
+    - Urgency signals: ALL CAPS word (+1), exclamation (+1)
+
+    Returns (score, matched_keywords).
     """
     score = PRIORITY_SCORES.get(source_priority, 0)
     title_lower = title.lower()
+    matched: list[str] = []
 
-    for kw in keywords:
-        if kw in title_lower:
-            score += 2
+    for kw, tier in keywords:
+        if _word_boundary_match(kw, title_lower):
+            score += TIER_SCORES.get(tier, 2)
+            matched.append(kw)
 
     # Urgency signals
     words = title.split()
@@ -121,14 +157,14 @@ def score_item(title: str, source_priority: str, keywords: list[str]) -> int:
     if "!" in title:
         score += 1
 
-    return score
+    return score, matched
 
 
 # ── Fetch + filter ───────────────────────────────────────────────────
 
 def fetch_and_score(
     sources: list[dict],
-    keywords: list[str],
+    keywords: list[tuple[str, str]],
     since_hours: float,
     seen: dict[str, float],
     threshold: int = ALERT_THRESHOLD,
@@ -168,13 +204,14 @@ def fetch_and_score(
                     continue
 
             # Score
-            sc = score_item(title, priority, keywords)
+            sc, matched = score_item(title, priority, keywords)
             if sc >= threshold:
                 alerts.append({
                     "title": title,
                     "link": link,
                     "source": source_name,
                     "score": sc,
+                    "matched": matched,
                     "published": format_kst(dt) if dt else "",
                 })
 
@@ -191,8 +228,10 @@ def format_telegram(alert: dict) -> str:
     source = alert["source"]
     pub = alert["published"]
     url = alert["link"]
+    matched = alert.get("matched", [])
     time_str = f" | {pub}" if pub else ""
-    return f"🚨 Breaking: {title}\nSource: {source}{time_str}\n{url}"
+    keywords_str = f"\nKeywords: {', '.join(matched)}" if matched else ""
+    return f"🚨 Breaking: {title}\nSource: {source}{time_str}{keywords_str}\n{url}"
 
 
 def main() -> None:

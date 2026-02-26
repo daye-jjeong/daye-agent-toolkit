@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate a deduplicated daily news/trends brief from RSS feeds.
+"""Generate a ranked daily news/trends brief from RSS feeds.
 
 - Prefers RSS (stable, low rate-limit) over web search.
-- Dedupe by normalized title similarity + same URL.
+- Clusters similar articles → scores by coverage, source tier, recency, entity density.
 - Produces compact text suitable for Slack/Telegram.
 
 This script does NOT attempt to be a crawler. Keep feeds curated.
@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
-from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -46,6 +46,27 @@ _FEED_TAGS: list[tuple[str, str]] = [
     ("hankyung.com", "국내"),
 ]
 
+# Feed URL → source authority tier (1=highest, 3=lowest)
+_SOURCE_TIERS: list[tuple[str, int]] = [
+    # Tier 1: Major wire services, top papers
+    ("reuters.com", 1),
+    ("nytimes.com", 1),
+    ("bbc", 1),
+    ("yna.co.kr", 1),
+    # Tier 2: Quality outlets
+    ("hankyung.com", 2),
+    ("donga.com", 2),
+    ("therobotreport.com", 2),
+    ("spectrum.ieee.org", 2),
+    ("techcrunch.com", 2),
+    ("qsrmagazine.com", 2),
+    ("restaurantbusinessonline.com", 2),
+    ("reutersagency.com", 2),
+]
+
+# Recency decay constant: half-life ~14 hours
+_DECAY_LAMBDA = 0.05
+
 
 def _strip_html(s: str) -> str:
     """Remove HTML tags and collapse whitespace."""
@@ -62,6 +83,14 @@ def detect_feed_tag(feed_url: str) -> str:
     return ""
 
 
+def detect_source_tier(feed_url: str) -> int:
+    """Detect source authority tier from feed URL."""
+    for pattern, tier in _SOURCE_TIERS:
+        if pattern in feed_url:
+            return tier
+    return 3
+
+
 @dataclass
 class Item:
     title: str
@@ -70,6 +99,9 @@ class Item:
     published: str | None
     description: str = ""
     tag: str = ""
+    source_tier: int = 2
+    score: float = 0.0
+    coverage: int = 1
 
 
 def norm_title(s: str) -> str:
@@ -110,6 +142,7 @@ def fetch_items(feeds: list[str]) -> list[Item]:
         d = feedparser.parse(u)
         src = domain(u) or (d.feed.get("title") if hasattr(d, "feed") else "")
         tag = detect_feed_tag(u)
+        tier = detect_source_tier(u)
         for e in d.entries[:30]:
             title = (e.get("title") or "").strip()
             link = (e.get("link") or "").strip()
@@ -124,6 +157,7 @@ def fetch_items(feeds: list[str]) -> list[Item]:
                     published=e.get("published") or e.get("updated"),
                     description=desc,
                     tag=tag,
+                    source_tier=tier,
                 )
             )
     return items
@@ -159,6 +193,226 @@ def filter_by_keywords(items: list[Item], keywords: list[str]) -> list[Item]:
     return out
 
 
+# ── Entity extraction ────────────────────────────────────────────────
+
+# Common Korean trailing particles (조사) to strip
+_KO_PARTICLES = re.compile(
+    r"(?:은|는|이|가|에|을|를|도|의|와|과|로|에서|으로|에게|까지|부터"
+    r"|만|라고|라며|에도|이라|에는|으로는|으로서|에게는|과는)$"
+)
+
+
+def extract_entities(title: str) -> set[str]:
+    """Extract entity candidates from a title.
+
+    Korean: 2+ character words after stripping trailing particles.
+    English: 3+ character words (lowercased).
+    No external NLP dependencies — heuristic extraction only.
+    """
+    entities: set[str] = set()
+    # Strip brackets, quotes, punctuation for cleaner extraction
+    t = re.sub(r"[\[\]()\"\"''·…「」『』〈〉《》%↑↓]", " ", title)
+
+    # Korean: extract 2+ char Hangul sequences, strip particles
+    for m in re.findall(r"[가-힣]{2,}", t):
+        if len(m) >= 3:
+            # Only strip particles from 3+ char words;
+            # 2-char words (한은, 금리, 미국) are kept as-is to avoid
+            # destroying abbreviations (한은 → 한 + 은(particle) → 삭제)
+            cleaned = _KO_PARTICLES.sub("", m)
+            if len(cleaned) >= 2:
+                entities.add(cleaned)
+        else:
+            entities.add(m)
+
+    # English: 3+ char words (proper nouns, terms)
+    for m in re.findall(r"[a-zA-Z]{3,}", t):
+        entities.add(m.lower())
+
+    return entities
+
+
+def _entity_overlap_count(ent_a: set[str], ent_b: set[str]) -> int:
+    """Count entity matches including substring containment.
+
+    "금리" matches "기준금리" or "시장금리" (substring relationship).
+    Each entity in B is matched at most once.
+    """
+    count = 0
+    used_b: set[str] = set()
+    for a in ent_a:
+        for b in ent_b:
+            if b in used_b:
+                continue
+            if a == b or (len(a) >= 2 and len(b) >= 2 and (a in b or b in a)):
+                count += 1
+                used_b.add(b)
+                break
+    return count
+
+
+def _should_cluster(
+    nt_a: str,
+    nt_b: str,
+    ent_a: set[str],
+    ent_b: set[str],
+    sim_threshold: float = 0.65,
+    min_entity_overlap: int = 2,
+) -> bool:
+    """Decide if two articles should be in the same cluster.
+
+    Two methods (either triggers clustering):
+    1. Title similarity >= threshold (catches near-duplicates)
+    2. Entity overlap >= min_entity_overlap (catches same-event different-angle)
+    """
+    # Method 1: title text similarity
+    if similar(nt_a, nt_b) >= sim_threshold:
+        return True
+    # Method 2: shared key entities
+    if len(ent_a) < 2 or len(ent_b) < 2:
+        return False
+    return _entity_overlap_count(ent_a, ent_b) >= min_entity_overlap
+
+
+# ── Clustering + Scoring ─────────────────────────────────────────────
+
+
+def cluster_by_story(
+    items: list[Item],
+    threshold: float = 0.65,
+    min_entity_overlap: int = 2,
+) -> list[list[Item]]:
+    """Group articles covering the same story.
+
+    Two-signal clustering:
+    1. Normalized title similarity >= threshold (near-duplicates)
+    2. Entity overlap >= min_entity_overlap (same event, different angle)
+
+    Uses seed article's entities to prevent cluster inflation.
+    """
+    clusters: list[list[Item]] = []
+    cluster_norms: list[str] = []
+    cluster_entities: list[set[str]] = []
+    seen_links: set[str] = set()
+
+    for it in items:
+        # Exact URL dedup
+        if it.link in seen_links:
+            continue
+        seen_links.add(it.link)
+
+        nt = norm_title(it.title)
+        if not nt:
+            continue
+
+        ents = extract_entities(it.title)
+
+        placed = False
+        for i, cn in enumerate(cluster_norms):
+            if _should_cluster(
+                nt, cn, ents, cluster_entities[i], threshold, min_entity_overlap
+            ):
+                clusters[i].append(it)
+                placed = True
+                break
+        if not placed:
+            clusters.append([it])
+            cluster_norms.append(nt)
+            cluster_entities.append(ents)
+
+    return clusters
+
+
+def title_entity_density(title: str) -> float:
+    """Score how information-dense a title is (0.0 - 1.0).
+
+    High: "Samsung acquires $2.3B robotics firm Boston Dynamics"
+    Low:  "Things are changing in the industry"
+    """
+    words = title.split()
+    if not words:
+        return 0.0
+
+    signals = 0.0
+    for i, w in enumerate(words):
+        # Proper nouns (capitalized, not sentence-start)
+        if len(w) > 1 and w[0].isupper() and i > 0:
+            signals += 1
+        # Numbers (dollar amounts, percentages, dates)
+        if any(c.isdigit() for c in w):
+            signals += 1.5
+        # Korean proper nouns (quoted or specific patterns)
+        if w.startswith("'") or w.startswith('"'):
+            signals += 0.5
+
+    return min(1.0, signals / max(len(words), 1))
+
+
+def _pick_best(cluster: list[Item]) -> Item:
+    """Pick the best representative article from a cluster.
+
+    Prefers: lowest tier (best source) → most recent → longest description.
+    """
+    return min(
+        cluster,
+        key=lambda it: (
+            it.source_tier,
+            # Negate timestamp so more recent = smaller
+            -(parse_pub_date(it.published) or datetime.min.replace(
+                tzinfo=timezone.utc
+            )).timestamp(),
+            -len(it.description),
+        ),
+    )
+
+
+def rank_clusters(clusters: list[list[Item]]) -> list[Item]:
+    """Score each cluster and return ranked items (best article per cluster)."""
+    now = datetime.now(timezone.utc)
+    ranked: list[Item] = []
+
+    for cluster in clusters:
+        best = _pick_best(cluster)
+
+        # 1. Coverage breadth: how many different sources report this story
+        sources = {it.source for it in cluster}
+        coverage = len(sources)
+        coverage_score = math.log2(coverage + 1) * 3
+
+        # 2. Source authority: tier 1=3, tier 2=2, tier 3=1
+        source_score = max(1, 4 - best.source_tier)
+
+        # 3. Recency: exponential decay, half-life ~14 hours
+        dt = parse_pub_date(best.published)
+        if dt:
+            hours_old = max(0, (now - dt).total_seconds() / 3600)
+            recency = math.exp(-_DECAY_LAMBDA * hours_old)
+        else:
+            recency = 0.5  # unknown time = moderate penalty
+
+        # 4. Title entity density
+        entity_bonus = title_entity_density(best.title) * 2
+
+        raw = coverage_score + source_score + entity_bonus
+        best.score = round(raw * recency, 2)
+        best.coverage = coverage
+
+        # Inherit tag from best-tagged article in cluster
+        if not best.tag:
+            for it in cluster:
+                if it.tag:
+                    best.tag = it.tag
+                    break
+
+        ranked.append(best)
+
+    ranked.sort(key=lambda it: it.score, reverse=True)
+    return ranked
+
+
+# ── Legacy dedupe (kept for backward compat) ─────────────────────────
+
+
 def dedupe(items: list[Item], threshold: float = 0.86) -> list[Item]:
     seen_links: set[str] = set()
     kept: list[Item] = []
@@ -191,7 +445,10 @@ def main():
     ap.add_argument("--max-items", type=int, default=5)
     ap.add_argument("--since", type=float, default=0,
                     help="Only include items published within this many hours (0=no filter)")
-    ap.add_argument("--dedupe-threshold", type=float, default=0.86)
+    ap.add_argument("--cluster-threshold", type=float, default=0.65,
+                    help="Title similarity threshold for story clustering (default: 0.65)")
+    ap.add_argument("--no-rank", action="store_true",
+                    help="Disable scoring/ranking, use legacy dedupe + time order")
     ap.add_argument("--output-format", choices=["text", "json"], default="text",
                     help="Output format: text (Telegram) or json (for compose-newspaper.py)")
     args = ap.parse_args()
@@ -206,8 +463,13 @@ def main():
         items = filter_by_time(items, args.since)
     items = filter_by_keywords(items, keywords)
 
-    # naive sort: keep order as fetched (RSS order tends to be recent-first)
-    items = dedupe(items, threshold=args.dedupe_threshold)[: args.max_items]
+    if args.no_rank:
+        # Legacy behavior: dedupe + time order
+        items = dedupe(items)[: args.max_items]
+    else:
+        # Cluster by story → score → rank
+        clusters = cluster_by_story(items, threshold=args.cluster_threshold)
+        items = rank_clusters(clusters)[: args.max_items]
 
     # JSON output for compose-newspaper.py
     if args.output_format == "json":
@@ -223,6 +485,9 @@ def main():
             }
             if it.description:
                 obj["description"] = it.description
+            if not args.no_rank:
+                obj["score"] = it.score
+                obj["coverage"] = it.coverage
             out.append(obj)
         json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
         print()  # trailing newline
@@ -240,7 +505,8 @@ def main():
 
     lines.append("- Top headlines")
     for it in items:
-        lines.append(f"  - {it.title} ({it.source})")
+        score_str = f" [score:{it.score}]" if not args.no_rank else ""
+        lines.append(f"  - {it.title} ({it.source}){score_str}")
         lines.append(f"    {it.link}")
 
     # Keep impact section as placeholders; LLM can rewrite, but this stays deterministic

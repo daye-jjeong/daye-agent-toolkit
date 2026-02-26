@@ -1,52 +1,75 @@
-# Breaking news high-signal keywords
-# Score: each match = +2 points
-# Alert threshold: score >= 5
+# Breaking news keywords — tiered scoring
+# tier:high   → +4 points (단독으로도 의미 있는 이벤트)
+# tier:normal → +2 points (조합되어야 의미 있는 신호)
+# Alert threshold: score >= 7
+# 단어 경계(word boundary) 매칭 적용
 
-# Product launches
-launch
-launches
-released
-announces
-introducing
-unveils
-ships
+# ── tier:high ── 단독 고신호 ──────────────────
 
-# Breaking / urgent
-breaking
-urgent
-emergency
-critical
-exclusive
+# tier:high
+# AI 마일스톤
+AGI
+superintelligence
+GPT-5
+GPT-6
+o3
+o4
 
-# Major events
+# tier:high
+# 중대 사건
 acquisition
 acquires
 merger
 IPO
-funding
-raises
-billion
 shutdown
 layoffs
-recall
-ban
-regulation
+executive order
+AI ban
 
-# AI-specific high signals
-GPT-5
-GPT-6
+# ── tier:normal ── 조합 신호 ──────────────────
+
+# tier:normal
+# AI 회사명 (발표 + 모델 조합으로 breaking 트리거)
+Anthropic
+OpenAI
+DeepMind
+Google
+
+# tier:normal
+# AI 모델/브랜드 (빈번하므로 조합 필요)
 Claude
 Gemini
-o3
-o4
-AGI
-superintelligence
+ChatGPT
+Copilot
 open-source
 open source
 
-# Safety / policy
+# tier:normal
+# 제품/발표 액션 (threshold=7 + word boundary로 단독 트리거 불가)
+launches
+releases
+updates
+announces
+introduces
+introducing
+unveils
+
+# tier:normal
+# 긴급
+breaking
+urgent
+emergency
+
+# tier:normal
+# 비즈니스
+funding
+billion
+regulation
+ban
+recall
+
+# tier:normal
+# 안전/정책
 AI safety
-executive order
 AI regulation
-AI ban
 deepfake

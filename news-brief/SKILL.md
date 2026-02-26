@@ -32,7 +32,7 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)                            
 
 ## Core Workflow
 
-1. `news_brief.py` fetches RSS feeds, filters by keywords, deduplicates
+1. `news_brief.py` fetches RSS feeds, filters by keywords, clusters by story (title similarity + entity overlap), scores by coverage/source tier/recency/entity density, ranks by score
 2. `--output-format json` outputs: `[{title, link, source, published (KST), domain}, ...]`
 3. `compose-newspaper.py` merges General + AI Trends + Ronik → newspaper schema
 4. `render_newspaper.py` renders combined JSON → HTML newspaper
@@ -123,10 +123,10 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 
 | Script | Purpose | Key Args |
 |--------|---------|----------|
-| `news_brief.py` | RSS fetch + dedup + filter | `--feeds`, `--keywords`, `--output-format json` |
+| `news_brief.py` | RSS fetch + cluster + score + rank | `--feeds`, `--keywords`, `--output-format json`, `--no-rank` |
 | `kst_utils.py` | KST 시간 변환 유틸 | (library, import only) |
 | `compose-newspaper.py` | 3-pipeline JSON 조합 | `--general`, `--ai-trends`, `--ronik`, `--output` |
-| `breaking-alert.py` | 속보 알림 (keyword scoring) | `--sources`, `--keywords`, `--since`, `--dry-run` |
+| `breaking-alert.py` | 속보 알림 (tiered keyword + word boundary) | `--sources`, `--keywords`, `--since`, `--dry-run` |
 | `analyzer.py` | LLM impact analysis + formatting | stdin JSON |
 | `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo, 0 tokens) | `--location`, `--output` |
 | `render_newspaper.py` | JSON → 신문 스타일 HTML | `--input`, `--weather`, `--output` |
