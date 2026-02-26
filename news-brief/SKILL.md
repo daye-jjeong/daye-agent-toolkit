@@ -6,7 +6,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 # News Brief Skill
 
-**Version:** 0.4.0 | **Updated:** 2026-02-21 | **Status:** Experimental
+**Version:** 0.5.0 | **Updated:** 2026-02-26 | **Status:** Experimental
 
 Four-pipeline news briefing system:
 1. **General:** Korean/international general news + daily summary
@@ -19,8 +19,9 @@ Four-pipeline news briefing system:
 ```
 Pipeline 1 (General):  news_brief.py --output-format json  ─┐
 Pipeline 2 (AI):       AI Trends Team (3-agent)              ├→ compose-newspaper.py → enrich.py → render_newspaper.py → HTML
-Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┘                                     save_to_vault.py    → Vault
-Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)                                                                  → Telegram
+Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┤                                     save_to_vault.py    → Vault
+Community  (Reddit):   news_brief.py --output-format json  ─┘                                                         → Telegram
+Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 ```
 
 **시간 표시**: 모든 파이프라인 KST (kst_utils.py). 포맷: `2026-02-21 18:30 KST`
@@ -48,6 +49,13 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)                            
 | `{baseDir}/references/general_feeds.txt` | General RSS feeds (연합뉴스, BBC Korean, Reuters, NYT 등) |
 | `{baseDir}/references/general_keywords.txt` | Broad keywords (경제, 정치, 국제, 과학 등) |
 | `{baseDir}/references/general_prompt.txt` | LLM prompt: 카테고리별 요약 + 오늘의 핵심 |
+
+### Community — Reddit
+
+| File | Purpose |
+|------|---------|
+| `{baseDir}/references/community_feeds.txt` | Reddit RSS feeds (r/artificial, r/MachineLearning) |
+| `{baseDir}/references/community_keywords.txt` | AI/ML 키워드 필터 |
 
 ### Pipeline 2 — AI Trends
 
@@ -105,9 +113,13 @@ python3 news_brief.py --feeds general_feeds.txt --keywords general_keywords.txt 
 python3 news_brief.py --feeds rss_feeds.txt --keywords keywords.txt \
   --max-items 15 --since 24 --output-format json > /tmp/ronik.json
 
+# Community — Reddit (WebFetch 차단 → news_brief.py 경유)
+python3 news_brief.py --feeds community_feeds.txt --keywords community_keywords.txt \
+  --max-items 10 --since 24 --output-format json > /tmp/community.json
+
 # Compose + Enrich + Render
 python3 compose-newspaper.py --general /tmp/general.json --ai-trends /tmp/ai_trends.json \
-  --ronik /tmp/ronik.json --output /tmp/composed.json
+  --ronik /tmp/ronik.json --community /tmp/community.json --output /tmp/composed.json
 python3 enrich.py extract --input /tmp/composed.json > /tmp/to_enrich.json
 # Agent generates /tmp/enrichments.json (한국어 번역 + 요약)
 python3 enrich.py apply --input /tmp/composed.json \
@@ -130,10 +142,9 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 |--------|---------|----------|
 | `news_brief.py` | RSS fetch + cluster + score + rank | `--feeds`, `--keywords`, `--output-format json`, `--no-rank` |
 | `kst_utils.py` | KST 시간 변환 유틸 | (library, import only) |
-| `compose-newspaper.py` | 3-pipeline JSON 조합 | `--general`, `--ai-trends`, `--ronik`, `--output` |
+| `compose-newspaper.py` | 4-input 파이프라인 조합 | `--general`, `--ai-trends`, `--ronik`, `--community`, `--output` |
 | `enrich.py` | 영어→한국어 번역 + 요약(why) 추가 | `extract --input`, `apply --input --enrichments` |
 | `breaking-alert.py` | 속보 알림 (tiered keyword + word boundary) | `--sources`, `--keywords`, `--since`, `--dry-run` |
-| `analyzer.py` | LLM impact analysis + formatting | stdin JSON |
 | `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo, 0 tokens) | `--location`, `--output` |
 | `render_newspaper.py` | JSON → 신문 스타일 HTML | `--input`, `--weather`, `--output` |
 | `save_to_vault.py` | 기사 vault 저장 | `--input`, `--vault-dir` |
@@ -169,10 +180,11 @@ Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trend
 | Phase | Status | Description |
 |-------|--------|-------------|
 | 1. RSS + Dedup | Complete | news_brief.py |
-| 2. LLM Scaffold | Complete | analyzer.py |
-| 3. Compose + KST | Complete | compose-newspaper.py, kst_utils.py |
-| 4. Breaking Alert | Complete | breaking-alert.py |
-| 5. LLM Integration | Pending | Full Claude API |
-| 6. Cron Deployment | Pending | Validation needed |
+| 2. Compose + KST | Complete | compose-newspaper.py, kst_utils.py |
+| 3. AI Trends Team | Complete | 3-agent (researcher/writer/executor) |
+| 4. Enrich + Render | Complete | enrich.py, render_newspaper.py |
+| 5. Breaking Alert | Complete | breaking-alert.py |
+| 6. Community (Reddit) | Complete | news_brief.py + community feeds |
+| 7. Cron Deployment | Pending | Validation needed |
 
 **상세 (로드맵, 병합 이력)**: `{baseDir}/references/roadmap-history.md` 참고
