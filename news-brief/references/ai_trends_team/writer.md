@@ -12,7 +12,7 @@ Researcher의 JSON 출력:
     {
       "title": "...",
       "url": "...",
-      "source": "...",
+      "source_name": "...",
       "publishedAt": "...",
       "summary_1line": "...",
       "why_it_matters": "...",
@@ -88,7 +88,9 @@ Researcher의 JSON 출력:
       "category": "Models|Tools|Policy|Open-source|Business|Other",
       "summary": "요약 (한국어, 2-3문장)",
       "why": "왜 중요한가? (1-2문장, 한국어)",
-      "source": "https://...",
+      "url": "https://...",
+      "source_name": "소스 매체명",
+      "origin_source": "수집 출처명 (Researcher 값 그대로 유지)",
       "tags": ["agent", "llm", ...]
     }
   ],

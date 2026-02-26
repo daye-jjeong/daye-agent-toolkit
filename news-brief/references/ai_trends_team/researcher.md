@@ -19,7 +19,8 @@
    - 최근 24시간 이내 발행된 아이템 우선
    - Category별 다양성 확보 (Models/Tools/Policy/Open-source/Business/Community)
    - priority=high 소스를 우선 처리
-   - **Community 소스 (HN, Reddit, PH, GitHub):** AI/ML 관련 아이템만 선별 (fallback_keywords 참고). 비-AI 토픽은 제외
+   - **Community 소스 (HN, PH, GitHub):** AI/ML 관련 아이템만 선별 (fallback_keywords 참고). 비-AI 토픽은 제외
+   - **⚠️ Reddit 제외**: Reddit RSS는 WebFetch에서 차단됨. news_brief.py가 별도 수집하므로 Researcher는 Reddit을 건너뛸 것
 
 3. **구조화**
    각 아이템을 다음 형식으로 변환:
@@ -27,7 +28,8 @@
    {
      "title": "제목 (반드시 한국어로 번역)",
      "url": "https://...",
-     "source": "소스명 (OpenAI Blog, TechCrunch 등)",
+     "source_name": "소스명 (OpenAI Blog, TechCrunch 등)",
+     "origin_source": "수집 출처명 (rss_sources.json의 name 값 그대로)",
      "publishedAt": "YYYY-MM-DD",
      "summary_1line": "한국어 1줄 요약 (핵심만)",
      "why_it_matters": "왜 중요한가? (비즈니스/기술 관점, 1-2문장, 한국어)",
@@ -36,6 +38,8 @@
    }
    ```
    **⚠️ 언어 규칙**: title, summary_1line, why_it_matters는 반드시 한국어로 작성. 영문 원문을 그대로 넣지 말 것.
+
+   **⚠️ origin_source 규칙**: 기사를 발견한 RSS 소스의 이름(rss_sources.json의 `name` 필드)을 그대로 기입. 예: HN에서 발견한 GitHub 링크 → `origin_source: "Hacker News"` (github.com이 아님). compose-newspaper.py가 이 필드로 커뮤니티 섹션 분류를 결정함.
 
 ## Output Format
 **JSON만 출력** (마크다운 코드블록 없이):
@@ -51,7 +55,8 @@
     {
       "title": "...",
       "url": "...",
-      "source": "...",
+      "source_name": "...",
+      "origin_source": "...",
       "publishedAt": "...",
       "summary_1line": "...",
       "why_it_matters": "...",
