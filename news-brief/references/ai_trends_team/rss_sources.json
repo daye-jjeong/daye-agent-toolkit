@@ -50,6 +50,13 @@
       "priority": "low"
     },
     {
+      "name": "Hacker News",
+      "url": "https://hnrss.org/frontpage",
+      "category": "AI-Tech",
+      "priority": "medium",
+      "note": "AI·테크 섹션 배치. compose에서 reddit만 커뮤니티로 분류"
+    },
+    {
       "name": "Reddit r/artificial",
       "url": "https://www.reddit.com/r/artificial/.rss",
       "category": "Community",
