@@ -7,14 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
--
+## [0.5.0] - 2026-02-26
 
 ### Changed
--
+- AI Trends 스키마 정규화: `source` → `url` + `source_name` 분리
+- `map_ai_trends_items()` backward-compatible 필드 매핑
+- `extract_domain()` 유틸을 kst_utils.py로 통합
+
+### Removed
+- `analyzer.py` 삭제 (enrich.py + render_newspaper.py로 대체)
 
 ### Fixed
--
+- `enrich.py extract`에서 `origin_source` 필드 보존
+- compose-newspaper.py 필드 매핑 불일치 수정
+
+### Docs
+- SKILL.md 전면 갱신 (community 파이프라인, 필드 스키마)
+- newspaper-schema.md 신규 생성
+- scripts-detail.md 전체 스크립트 문서화
+- usage-examples.md, output-example.md 현행화
+- researcher.md, writer.md 필드 스키마 정규화
+
+## [0.4.0] - 2026-02-21
+
+### Added
+- `enrich.py`: 영어→한국어 번역 + 요약(why) 파이프라인
+- `breaking-alert.py`: 15분 간격 속보 알림 (keyword scoring, LLM 0 tokens)
+- `origin_source` 필드: 수집 출처 추적 (커뮤니티 섹션 분류용)
+- `community_feeds.txt`, `community_keywords.txt`: Reddit RSS 별도 수집
+- `compose-newspaper.py`에 `--community` 입력 채널
+
+### Changed
+- HN을 AI-Tech 카테고리로 복원 (커뮤니티에서 분리)
+- 커뮤니티 소스에서 HN 제거, Reddit만 유지
+
+## [0.3.0] - 2026-02-15
+
+### Added
+- `compose-newspaper.py`: 3-pipeline JSON 조합 (General + AI + Ronik)
+- `render_newspaper.py`: JSON → 신문 스타일 HTML 렌더링
+- `save_to_vault.py`: Obsidian vault 저장
+- `fetch_weather.py`: Open-Meteo 날씨 + 옷차림 (0 tokens)
+- `ai_trends_ingest.py`: AI 트렌드 vault 적재
+- `kst_utils.py`: KST 시간 변환 유틸
+- AI Trends 3-agent team (researcher/writer/executor)
+- Story clustering + entity-based scoring in news_brief.py
 
 ## [0.2.0] - 2026-02-09
 
