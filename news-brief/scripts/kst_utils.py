@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlparse
 
 KST = timezone(timedelta(hours=9))
 KST_FMT = "%Y-%m-%d %H:%M KST"
@@ -58,3 +59,16 @@ def format_pub_kst(raw: str | None) -> str:
     if dt is None:
         return raw or ""
     return format_kst(dt)
+
+
+def extract_domain(url: str) -> str:
+    """Extract domain from URL, stripping 'www.' prefix.
+
+    Returns the input as-is if not a valid HTTP(S) URL.
+    """
+    if not url or not url.startswith("http"):
+        return url
+    try:
+        return urlparse(url).netloc.replace("www.", "")
+    except Exception:
+        return url
