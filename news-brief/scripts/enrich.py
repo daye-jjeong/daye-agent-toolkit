@@ -89,6 +89,7 @@ def extract(data: dict) -> dict:
                     "url": item.get("url", ""),
                     "source": item.get("source", ""),
                     "tag": item.get("tag", ""),
+                    "origin_source": item.get("origin_source", ""),
                     "needs": needs,
                 }
 
