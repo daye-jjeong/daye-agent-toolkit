@@ -50,13 +50,6 @@
       "priority": "low"
     },
     {
-      "name": "Hacker News",
-      "url": "https://hnrss.org/frontpage",
-      "category": "Community",
-      "priority": "high",
-      "note": "Top stories from HN frontpage; filter AI-related by keywords"
-    },
-    {
       "name": "Reddit r/artificial",
       "url": "https://www.reddit.com/r/artificial/.rss",
       "category": "Community",
@@ -92,7 +85,6 @@
     "open-source AI",
     "AI regulation",
     "AI safety",
-    "Show HN",
     "trending",
     "Product Hunt",
     "GitHub stars",
