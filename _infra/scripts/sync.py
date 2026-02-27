@@ -91,11 +91,16 @@ def cmd_push(message=None):
     if not message:
         changed_files = status.strip().split("\n")
         skills_changed = set()
+        categories = {"shared", "cc", "openclaw"}
         for line in changed_files:
             parts = line.strip().split()
             if len(parts) >= 2:
                 filepath = parts[-1]
-                skill_name = filepath.split("/")[0] if "/" in filepath else filepath
+                parts_path = filepath.split("/")
+                if len(parts_path) >= 2 and parts_path[0] in categories:
+                    skill_name = parts_path[1]
+                else:
+                    skill_name = parts_path[0]
                 skills_changed.add(skill_name)
 
         if len(skills_changed) == 1:
