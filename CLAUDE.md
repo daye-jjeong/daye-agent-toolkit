@@ -97,11 +97,12 @@ OpenClaw enable/disable은 `make install-oc`이 `~/.openclaw/openclaw.json`에 �
 - `make sync`로 양방향 git sync (OpenClaw PC용)
 - `make install-oc`으로 초기 셋업 (clone + enable + cron)
 
-## _infra/scripts/ 규칙
+## scripts/ 규칙
 
 - stdlib만 사용 (외부 패키지 금지)
 - bash 또는 python3
-- `{baseDir}/_infra/scripts/` 경로로 SKILL.md에서 참조
+- 개별 스킬은 자체 `{baseDir}/scripts/`를 SKILL.md에서 참조
+- `_infra/scripts/`는 레포 인프라 전용 (Makefile에서 호출, SKILL.md에서 참조하지 않음)
 
 ## 방침
 
