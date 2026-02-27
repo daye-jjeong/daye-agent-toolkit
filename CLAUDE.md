@@ -12,15 +12,16 @@
 
 ## 스킬 분류
 
-### Claude Code 전용 (3개) — `.claude-skill` 있음, OpenClaw disabled
+### Claude Code 전용 (4개) — `.claude-skill` 있음, OpenClaw disabled
 
 | 스킬 | 설명 |
 |------|------|
+| correction-memory | 교정 기억 — 실수 반복 방지 3계층 메모리 |
 | mermaid-diagrams | Mermaid 다이어그램 생성 가이드 |
 | professional-communication | 업무 커뮤니케이션 가이드 |
 | skill-forge | SKILL.md 생성/최적화/감사/검증 |
 
-### Claude Code + OpenClaw 양쪽 (12개) — `.claude-skill` 있음, OpenClaw enabled
+### Claude Code + OpenClaw 양쪽 (11개) — `.claude-skill` 있음, OpenClaw enabled
 
 | 스킬 | 설명 |
 |------|------|
@@ -35,7 +36,6 @@
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |
 | task-dashboard | 프로젝트 HTML 대시보드 |
-| vault-memory | Obsidian vault 메모리 관리 |
 
 ### OpenClaw 전용 (14개) — `.claude-skill` 없음, OpenClaw enabled
 
