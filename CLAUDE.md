@@ -38,15 +38,13 @@
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |
 
-### OpenClaw 전용 (9개) — `.claude-skill` 없음, OpenClaw enabled
+### OpenClaw 전용 (7개) — `.claude-skill` 없음, OpenClaw enabled
 
 | 스킬 | 설명 | 비고 |
 |------|------|------|
 | check-integrations | 외부 서비스 통합 점검 | `disable-model-invocation` |
 | elon-thinking | First Principles 사고 프레임 | |
-| model-health-orchestrator | 모델 헬스체크 + 폴백 | |
 | notion | Notion API 클라이언트 | |
-| openclaw-docs | OpenClaw 문서 참조 가이드 | |
 | orchestrator | 서브에이전트 조율 | `user-invocable: false` |
 | proactive-agent | 능동적 에이전트 패턴 | |
 | prompt-guard | 프롬프트 인젝션 스캐너 | `user-invocable: false` |
