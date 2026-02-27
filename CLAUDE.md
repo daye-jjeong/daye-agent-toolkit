@@ -7,8 +7,8 @@
 
 | 환경 | 접근 방식 |
 |------|-----------|
-| Claude Code (로컬) | `make install-cc` → 마켓플레이스 등록 + 플러그인 설치 + symlink |
-| OpenClaw (원격) | `make install-oc` → clone + 스킬 enable + cron |
+| Claude Code (로컬) | `make install-cc` → shared/ + cc/ 스킬 symlink |
+| OpenClaw (원격) | `make install-oc` → extraDirs 설정 (`make sync`로 동기화) |
 | 동기화 | `make sync` → 양방향 git sync (OpenClaw PC용) |
 
 ## 디렉토리 구조
@@ -61,7 +61,7 @@ _infra/       — 빌드/설치/동기화 스크립트
 ## skills.json 매니페스트
 
 디렉토리 기반 자동 탐색. `cc/`, `shared/`의 스킬을 자동으로 발견하므로 개별 목록 불필요.
-`marketplace_plugins`로 외부 플러그인 선언.
+`plugins`로 외부 플러그인 선언.
 OpenClaw enable/disable은 `make install-oc`이 `~/.openclaw/openclaw.json`에 설정.
 
 ## 스킬 포맷

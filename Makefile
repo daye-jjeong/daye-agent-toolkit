@@ -7,7 +7,7 @@
 #   make status         # Show installation status
 #   make init           # Interactive env setup
 
-REPO_DIR := $(shell pwd)
+REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 SKILLS_DIR := $(HOME)/.claude/skills
 
 # Discover skills from directory structure (parent dir names of SKILL.md)
@@ -28,7 +28,9 @@ install-cc: ## Install skills for Claude Code (symlink shared/ + cc/)
 	@for skill_path in $(ALL_CC_DIRS); do \
 		name=$$(basename $$skill_path); \
 		dest="$(SKILLS_DIR)/$$name"; \
-		if [ -L "$$dest" ]; then rm "$$dest"; fi; \
+		if [ -L "$$dest" ]; then rm "$$dest"; \
+		elif [ -e "$$dest" ]; then echo "  ⚠ SKIPPED $$name ($$dest exists and is not a symlink)"; continue; \
+		fi; \
 		ln -s "$(REPO_DIR)/$$skill_path" "$$dest"; \
 		echo "  ✓ $$name → $$skill_path"; \
 	done
@@ -37,7 +39,7 @@ install-cc: ## Install skills for Claude Code (symlink shared/ + cc/)
 
 install-oc: ## Configure OpenClaw extraDirs
 	@echo "=== OpenClaw config update ==="
-	@python3 -c "import json,os;p=os.path.expanduser('~/.openclaw/openclaw.json');exec('if not os.path.exists(p):\n print(\"⚠ openclaw.json not found\");exit(1)');c=json.load(open(p));s=c.setdefault('skills',{});l=s.setdefault('load',{});r='$(REPO_DIR)';d=[os.path.expanduser('~/.openclaw/core-skills'),r+'/shared',r+'/openclaw'];l['extraDirs']=d;json.dump(c,open(p,'w'),indent=2,ensure_ascii=False);print('✓ extraDirs updated:');[print(f'  {x}') for x in d]"
+	@python3 _infra/scripts/install_oc.py "$(REPO_DIR)"
 
 clean: ## Remove CC symlinks created by install-cc
 	@echo "=== Removing CC symlinks ==="
