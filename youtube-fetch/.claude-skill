@@ -1,0 +1,6 @@
+{
+  "name": "youtube-fetch",
+  "version": "1.0.0",
+  "description": "YouTube 메타데이터 + 자막 추출 — yt-dlp 기반",
+  "entrypoint": "SKILL.md"
+}

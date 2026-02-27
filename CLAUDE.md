@@ -12,15 +12,17 @@
 
 ## 스킬 분류
 
-### Claude Code 전용 (5개) — `.claude-skill` 있음, OpenClaw disabled
+### Claude Code 전용 (7개) — `.claude-skill` 있음, OpenClaw disabled
 
 | 스킬 | 설명 |
 |------|------|
 | correction-memory | 교정 기억 — 실수 반복 방지 3계층 메모리 |
 | mermaid-diagrams | Mermaid 다이어그램 생성 가이드 |
 | professional-communication | 업무 커뮤니케이션 가이드 |
+| reddit-fetch | Reddit 포스트/댓글 조회 + 검색 |
 | skill-forge | SKILL.md 생성/최적화/감사/검증 |
 | work-digest | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
+| youtube-fetch | YouTube 메타데이터 + 자막 추출 |
 
 ### Claude Code + OpenClaw 양쪽 (10개) — `.claude-skill` 있음, OpenClaw enabled
 
@@ -55,7 +57,7 @@
 
 ## skills.json 매니페스트
 
-`local_skills`: Claude Code에서 symlink할 스킬 목록 (15개).
+`local_skills`: Claude Code에서 symlink할 스킬 목록 (17개).
 OpenClaw은 `~/openclaw/skills/` 전체를 스캔하므로 별도 목록 불필요.
 OpenClaw enable/disable은 `setup.sh --openclaw`이 `~/.openclaw/openclaw.json`에 설정.
 

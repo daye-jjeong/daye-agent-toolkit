@@ -13,9 +13,11 @@
     "news-brief",
     "pantry-manager",
     "professional-communication",
+    "reddit-fetch",
     "saju-manse",
     "skill-forge",
-    "work-digest"
+    "work-digest",
+    "youtube-fetch"
   ],
   "marketplaces": [
     {

@@ -1,0 +1,6 @@
+{
+  "name": "reddit-fetch",
+  "version": "1.0.0",
+  "description": "Reddit 포스트/댓글 조회 + 검색 — Reddit JSON API",
+  "entrypoint": "SKILL.md"
+}
