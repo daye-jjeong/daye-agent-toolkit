@@ -1,0 +1,6 @@
+{
+  "name": "work-digest",
+  "version": "1.0.0",
+  "description": "일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림",
+  "entrypoint": "SKILL.md"
+}
