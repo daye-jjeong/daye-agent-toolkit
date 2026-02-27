@@ -1,6 +1,0 @@
-{
-  "name": "goal-planner",
-  "version": "1.0.0",
-  "description": "월간 → 주간 → 일간 3계층 목표 수립 및 관리",
-  "entrypoint": "SKILL.md"
-}

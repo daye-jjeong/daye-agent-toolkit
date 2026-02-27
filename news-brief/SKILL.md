@@ -20,7 +20,7 @@ Four-pipeline news briefing system:
 Pipeline 1 (General):  news_brief.py --output-format json  ─┐
 Pipeline 2 (AI):       AI Trends Team (3-agent)              ├→ compose-newspaper.py → enrich.py → render_newspaper.py → HTML
 Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┤                                     save_to_vault.py    → Vault
-Community  (Reddit):   news_brief.py --output-format json  ─┘                                                         → Telegram
+Community  (Reddit):   news_brief.py --output-format json  ─┘
 Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 ```
 
@@ -92,21 +92,13 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 
 ## Output
 
-### Telegram (text)
+| 산출물 | 경로 | 설명 |
+|--------|------|------|
+| HTML 신문 | `/tmp/mingming_daily.html` | 4개 파이프라인 종합 신문 |
+| Vault 마크다운 | `{vault-dir}/reports/news-brief/YYYY-MM-DD.md` | 구조화된 일일 브리핑 |
+| 속보 텍스트 | stdout | breaking-alert.py 감지 결과 |
 
-Each headline includes: link, Opportunity, Risk, Action. Ends with a daily bet recommendation.
-
-### HTML 신문 (file attachment)
-
-`render_newspaper.py`가 JSON → 신문 스타일 HTML 파일 생성. 텔레그램에 파일 첨부로 전송.
-
-```bash
-# 날씨 수집 (Tier 1, 0 tokens)
-python3 fetch_weather.py --output /tmp/weather.json
-
-# HTML 렌더링 (날씨 포함)
-python3 render_newspaper.py --input data.json --weather /tmp/weather.json --output /tmp/mingming_daily.html
-```
+`render_newspaper.py`가 JSON → 신문 스타일 HTML 파일 생성.
 
 **Input JSON schema**: `{baseDir}/references/newspaper-schema.md` 참고
 **상세**: `{baseDir}/references/output-example.md` 참고
@@ -164,23 +156,24 @@ python3 render_newspaper.py --input /tmp/composed.json \
   --weather /tmp/weather.json --output /tmp/mingming_daily.html
 ```
 
-### 3. 배포
+### 3. 저장
 
 ```bash
 # Vault 저장
 python3 save_to_vault.py --input /tmp/composed.json \
   --weather /tmp/weather.json --vault-dir ~/openclaw/vault
-
-# 텔레그램 전송 — HTML 첨부 + 핵심 요약 텍스트
 ```
+
 
 ### Pipeline 4 — Breaking Alert (별도 cron)
 
 ```bash
+# 속보 감지 (stdout으로 출력)
 python3 breaking-alert.py --sources ../references/ai_trends_team/rss_sources.json \
   --feeds ../references/general_feeds.txt \
-  --keywords ../references/breaking-keywords.txt --since 1 --dry-run
+  --keywords ../references/breaking-keywords.txt --since 1
 ```
+
 
 **상세 (cron, testing 등)**: `{baseDir}/references/usage-examples.md` 참고
 

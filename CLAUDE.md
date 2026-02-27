@@ -24,12 +24,11 @@
 | work-digest | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
 | youtube-fetch | YouTube 메타데이터 + 자막 추출 |
 
-### Claude Code + OpenClaw 양쪽 (10개) — `.claude-skill` 있음, OpenClaw enabled
+### Claude Code + OpenClaw 양쪽 (9개) — `.claude-skill` 있음, OpenClaw enabled
 
 | 스킬 | 설명 |
 |------|------|
 | banksalad-import | 뱅크샐러드 → Obsidian vault import |
-| goal-planner | 월간→주간→일간 목표 관리 |
 | health-coach | 맞춤 건강 조언 + 운동 추천 |
 | health-tracker | 운동/증상/PT 트래킹 |
 | investment-report | 일일 투자 리포트 |
@@ -39,7 +38,7 @@
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |
 
-### OpenClaw 전용 (11개) — `.claude-skill` 없음, OpenClaw enabled
+### OpenClaw 전용 (9개) — `.claude-skill` 없음, OpenClaw enabled
 
 | 스킬 | 설명 | 비고 |
 |------|------|------|
@@ -52,8 +51,6 @@
 | proactive-agent | 능동적 에이전트 패턴 | |
 | prompt-guard | 프롬프트 인젝션 스캐너 | `user-invocable: false` |
 | quant-swing | 스윙 전략 실행/분석 | |
-| schedule-advisor | 캘린더 브리핑/알림 | |
-| system-audit | 시스템 감사 — 문서 린트 + 점검 | |
 
 ## skills.json 매니페스트
 

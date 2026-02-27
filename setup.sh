@@ -114,11 +114,11 @@ if [ "${1:-}" = "--openclaw" ]; then
 
   # OpenClaw에서 로드할 스킬 목록 (Claude Code 전용 제외)
   ENABLED_SKILLS=(
-    banksalad-import check-integrations doc-lint goal-planner
+    banksalad-import check-integrations doc-lint
     health-coach health-tracker investment-report investment-research
     meal-tracker news-brief notion openclaw-docs orchestrator
     pantry-manager prompt-guard quant-swing saju-manse
-    schedule-advisor session-manager skill-forge taling-auto-monitor
+    session-manager skill-forge taling-auto-monitor
     task-dashboard task-manager task-policy
   )
 
