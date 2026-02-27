@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Daily Digest — JSON → formatted summary → Telegram.
+"""Daily Digest — JSON → LLM 분석 or 템플릿 → Telegram.
 
-Reads parse_work_log.py JSON from stdin, generates a formatted summary
-message, and sends it to Telegram via clawdbot.
+Reads parse_work_log.py JSON from stdin, generates a digest message
+(via claude CLI or fallback template), and sends to Telegram.
 
 Usage:
-    python3 parse_work_log.py | python3 daily_digest.py
-    python3 parse_work_log.py | python3 daily_digest.py --dry-run
+    python3 parse_work_log.py | python3 daily_digest.py              # LLM + Telegram
+    python3 parse_work_log.py | python3 daily_digest.py --dry-run    # LLM + stdout
+    python3 parse_work_log.py | python3 daily_digest.py --no-llm     # template only
 """
 
 import argparse
@@ -14,6 +15,7 @@ import json
 import subprocess
 import sys
 from datetime import datetime
+from pathlib import Path
 
 # ── Telegram config ──────────────────────────────────
 TELEGRAM_GROUP = "-1003242721592"
@@ -24,6 +26,8 @@ WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
 TELEGRAM_MAX_CHARS = 4096
 TOPIC_SNIPPET_MAX = 30
 TOPIC_SNIPPETS_PER_REPO = 2
+BASE_DIR = Path(__file__).resolve().parent.parent
+PROMPT_TEMPLATE = BASE_DIR / "references" / "prompt-template.md"
 
 
 # ── Message building ────────────────────────────────
@@ -234,6 +238,82 @@ def build_message(data: dict) -> str:
     return message
 
 
+# ── LLM analysis via claude CLI ──────────────────────
+
+def _load_system_prompt() -> str:
+    """Load system prompt from prompt-template.md."""
+    try:
+        text = PROMPT_TEMPLATE.read_text(encoding="utf-8")
+        # Extract content between first ``` pair in ## System Prompt
+        in_block = False
+        lines = []
+        for line in text.splitlines():
+            if line.strip() == "```" and not in_block:
+                in_block = True
+                continue
+            if line.strip() == "```" and in_block:
+                break
+            if in_block:
+                lines.append(line)
+        return "\n".join(lines) if lines else ""
+    except FileNotFoundError:
+        return ""
+
+
+def analyze_with_llm(data: dict) -> str | None:
+    """Call claude CLI in print mode for natural language analysis.
+
+    Returns LLM-generated message, or None if claude CLI unavailable.
+    Uses haiku for cost efficiency (~0.001 USD per call).
+    """
+    system_prompt = _load_system_prompt()
+    json_str = json.dumps(data, ensure_ascii=False, indent=2)
+
+    user_prompt = (
+        f"다음은 오늘({data['date']})의 Claude Code 작업 로그 JSON입니다.\n\n"
+        f"{json_str}\n\n"
+        "위 데이터를 분석해서 일일 작업 다이제스트를 생성해주세요.\n"
+        "텔레그램 메시지 형태로, 4096자 이내로 작성해주세요.\n"
+        "4개 섹션: 오늘의 요약, 레포별 작업, 목표 대비 진행(목표 데이터 있을 때만), 패턴 피드백."
+    )
+
+    cmd = [
+        "claude", "-p",
+        "--model", "haiku",
+        "--no-session-persistence",
+    ]
+    if system_prompt:
+        cmd.extend(["--system-prompt", system_prompt])
+
+    try:
+        result = subprocess.run(
+            cmd,
+            input=user_prompt,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            output = result.stdout.strip()
+            # Truncate if over Telegram limit
+            if len(output) > TELEGRAM_MAX_CHARS:
+                output = output[:TELEGRAM_MAX_CHARS - 20] + "\n\n... (truncated)"
+            return output
+        print(f"[daily_digest] claude CLI returned code {result.returncode}", file=sys.stderr)
+        if result.stderr:
+            print(f"[daily_digest] stderr: {result.stderr[:200]}", file=sys.stderr)
+        return None
+    except FileNotFoundError:
+        print("[daily_digest] claude CLI not found — falling back to template", file=sys.stderr)
+        return None
+    except subprocess.TimeoutExpired:
+        print("[daily_digest] claude CLI timeout (60s) — falling back to template", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"[daily_digest] claude CLI error: {e} — falling back to template", file=sys.stderr)
+        return None
+
+
 # ── Telegram send ────────────────────────────────────
 
 def send_telegram(message: str) -> None:
@@ -277,6 +357,11 @@ def main():
         action="store_true",
         help="Print message to stdout without sending to Telegram",
     )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Skip LLM analysis, use template-based message only",
+    )
     args = parser.parse_args()
 
     # Read JSON from stdin
@@ -287,7 +372,17 @@ def main():
         print(f"[daily_digest] Error: invalid JSON from stdin: {e}", file=sys.stderr)
         sys.exit(1)
 
-    message = build_message(data)
+    # Empty day — no LLM needed
+    if not data.get("sessions"):
+        message = build_empty_message(data.get("date", "?"))
+    elif args.no_llm:
+        message = build_message(data)
+    else:
+        # Try LLM first, fallback to template
+        message = analyze_with_llm(data)
+        if message is None:
+            print("[daily_digest] Using template fallback", file=sys.stderr)
+            message = build_message(data)
 
     if args.dry_run:
         print(message)
