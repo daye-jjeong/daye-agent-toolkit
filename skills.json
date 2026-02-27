@@ -1,23 +1,10 @@
 {
-  "$comment": "daye-agent-toolkit 스킬 매니페스트. setup.sh가 이 파일을 읽어 환경을 구성합니다.",
-  "local_skills": [
-    "banksalad-import",
-    "correction-memory",
-    "health-coach",
-    "health-tracker",
-    "investment-report",
-    "investment-research",
-    "meal-tracker",
-    "mermaid-diagrams",
-    "news-brief",
-    "pantry-manager",
-    "professional-communication",
-    "reddit-fetch",
-    "saju-manse",
-    "skill-forge",
-    "work-digest",
-    "youtube-fetch"
-  ],
+  "$comment": "daye-agent-toolkit 매니페스트. Makefile이 디렉토리 구조로 환경을 구성합니다.",
+  "categories": {
+    "shared": "CC + OpenClaw 양쪽에서 사용하는 스킬",
+    "cc": "Claude Code 전용 스킬",
+    "openclaw": "OpenClaw 전용 스킬"
+  },
   "marketplaces": [
     {
       "name": "claude-plugins-official",
