@@ -7,12 +7,22 @@
 
 | 환경 | 접근 방식 |
 |------|-----------|
-| Claude Code (로컬) | `./setup.sh` → 마켓플레이스 등록 + 플러그인 설치 + symlink |
-| OpenClaw (원격) | `./setup.sh --openclaw` → clone + 스킬 enable + cron |
+| Claude Code (로컬) | `make install-cc` → 마켓플레이스 등록 + 플러그인 설치 + symlink |
+| OpenClaw (원격) | `make install-oc` → clone + 스킬 enable + cron |
+| 동기화 | `make sync` → 양방향 git sync (OpenClaw PC용) |
+
+## 디렉토리 구조
+
+```
+cc/           — Claude Code 전용 스킬
+shared/       — CC + OpenClaw 양쪽 스킬
+openclaw/     — OpenClaw 전용 스킬
+_infra/       — 빌드/설치/동기화 스크립트
+```
 
 ## 스킬 분류
 
-### Claude Code 전용 (7개) — `.claude-skill` 있음, OpenClaw disabled
+### Claude Code 전용 (7개) — `cc/` 디렉토리
 
 | 스킬 | 설명 |
 |------|------|
@@ -24,7 +34,7 @@
 | work-digest | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
 | youtube-fetch | YouTube 메타데이터 + 자막 추출 |
 
-### Claude Code + OpenClaw 양쪽 (9개) — `.claude-skill` 있음, OpenClaw enabled
+### Claude Code + OpenClaw 양쪽 (9개) — `shared/` 디렉토리
 
 | 스킬 | 설명 |
 |------|------|
@@ -38,29 +48,27 @@
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |
 
-### OpenClaw 전용 (7개) — `.claude-skill` 없음, OpenClaw enabled
+### OpenClaw 전용 (5개) — `openclaw/` 디렉토리
 
 | 스킬 | 설명 | 비고 |
 |------|------|------|
 | check-integrations | 외부 서비스 통합 점검 | `disable-model-invocation` |
 | elon-thinking | First Principles 사고 프레임 | |
 | notion | Notion API 클라이언트 | |
-| orchestrator | 서브에이전트 조율 | `user-invocable: false` |
-| proactive-agent | 능동적 에이전트 패턴 | |
 | prompt-guard | 프롬프트 인젝션 스캐너 | `user-invocable: false` |
 | quant-swing | 스윙 전략 실행/분석 | |
 
 ## skills.json 매니페스트
 
-`local_skills`: Claude Code에서 symlink할 스킬 목록 (17개).
-OpenClaw은 `~/openclaw/skills/` 전체를 스캔하므로 별도 목록 불필요.
-OpenClaw enable/disable은 `setup.sh --openclaw`이 `~/.openclaw/openclaw.json`에 설정.
+디렉토리 기반 자동 탐색. `cc/`, `shared/`의 스킬을 자동으로 발견하므로 개별 목록 불필요.
+`marketplace_plugins`로 외부 플러그인 선언.
+OpenClaw enable/disable은 `make install-oc`이 `~/.openclaw/openclaw.json`에 설정.
 
 ## 스킬 포맷
 
-- `<skill-name>/SKILL.md` — 스킬 본문 (공통, 150줄 이내)
-- `<skill-name>/references/` — 상세 문서 (SKILL.md에서 포인터 참조)
-- `<skill-name>/.claude-skill` — Claude Code 메타데이터 (양쪽/CC전용만)
+- `<category>/<skill-name>/SKILL.md` — 스킬 본문 (공통, 150줄 이내)
+- `<category>/<skill-name>/references/` — 상세 문서 (SKILL.md에서 포인터 참조)
+- `<category>/<skill-name>/.claude-skill` — Claude Code 메타데이터 (cc/, shared/만)
 
 ### SKILL.md frontmatter 필드
 
@@ -74,26 +82,26 @@ OpenClaw enable/disable은 `setup.sh --openclaw`이 `~/.openclaw/openclaw.json`�
 
 ## 새 스킬 추가 절차
 
-1. `<skill-name>/` 디렉토리 생성
+1. 카테고리 디렉토리에 `<skill-name>/` 생성 (`cc/`, `shared/`, `openclaw/`)
 2. `SKILL.md` 작성 (frontmatter + 150줄 이내)
 3. 상세 내용은 `references/`로 분리
-4. Claude Code용이면: `.claude-skill` 추가 + `skills.json`의 `local_skills`에 추가
-5. OpenClaw용이면: `setup.sh`의 `ENABLED_SKILLS`에 추가
-6. `./setup.sh` 실행
+4. Claude Code용이면: `.claude-skill` 추가 (`cc/` 또는 `shared/`에 배치)
+5. OpenClaw용이면: `openclaw/` 또는 `shared/`에 배치
+6. `make install-cc` 또는 `make install-oc` 실행
 7. 커밋 + push
 
 ## 동기화
 
 - 레포가 source of truth
 - `~/openclaw/skills/`는 이 레포의 clone
-- `scripts/sync.py`로 양방향 git sync (OpenClaw PC용)
-- `setup.sh --openclaw`으로 초기 셋업 (clone + enable + cron)
+- `make sync`로 양방향 git sync (OpenClaw PC용)
+- `make install-oc`으로 초기 셋업 (clone + enable + cron)
 
-## scripts/ 규칙
+## _infra/scripts/ 규칙
 
 - stdlib만 사용 (외부 패키지 금지)
 - bash 또는 python3
-- `{baseDir}/scripts/` 경로로 SKILL.md에서 참조
+- `{baseDir}/_infra/scripts/` 경로로 SKILL.md에서 참조
 
 ## 방침
 
