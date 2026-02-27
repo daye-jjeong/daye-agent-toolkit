@@ -50,7 +50,7 @@ $ARGUMENTS를 파싱하여 모드 결정:
 자동 트리거: save 시 규칙이 50개 이상이면 review 제안.
 수동 트리거: `/correction-memory review`
 
-1. Layer 1 (Rules) `corrections.md` 전체 읽기
+1. Layer 1 (Rules) `.claude/rules/correction-*.md` 파일들 전체 읽기
 2. 중복 규칙 식별 + 병합 제안
 3. 모순 규칙 식별 + 해결 제안
 4. 더 이상 유효하지 않은 규칙 제거 제안

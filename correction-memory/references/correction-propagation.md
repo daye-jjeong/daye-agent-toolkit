@@ -65,14 +65,14 @@
 ### 4단계: 스코프 결정
 
 교정의 적용 범위를 판단:
-- **프로젝트 한정** (기본) → `.claude/rules/corrections.md`
+- **프로젝트 한정** (기본) → `.claude/rules/correction-{slug}.md`
 - **전역** (모든 프로젝트에 적용할 교정) → 사용자에게 `~/.claude/CLAUDE.md` 추가 제안
 - 판단 기준: "이 규칙이 다른 프로젝트에서도 유효한가?"
 
 ### 5단계: 중복 체크
 
 저장 전에 기존 규칙과의 중복 확인:
-1. `.claude/rules/corrections.md`에 동일/유사 규칙이 있는지 확인
+1. `.claude/rules/correction-*.md` 파일들에 동일/유사 규칙이 있는지 확인
 2. 프로젝트 CLAUDE.md 본문에 이미 같은 내용이 있는지 확인
 3. `~/.claude/CLAUDE.md` (전역)에 있는지 확인
 4. 중복 발견 시 → 저장 안 함 + "이미 존재하는 규칙입니다" 안내

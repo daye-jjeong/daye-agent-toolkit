@@ -119,7 +119,7 @@ if [ "${1:-}" = "--openclaw" ]; then
     meal-tracker news-brief notion openclaw-docs orchestrator
     pantry-manager prompt-guard quant-swing saju-manse
     schedule-advisor session-manager skill-forge taling-auto-monitor
-    task-dashboard task-manager task-policy vault-memory
+    task-dashboard task-manager task-policy
   )
 
   # Claude Code 전용 → OpenClaw에서 비활성화
