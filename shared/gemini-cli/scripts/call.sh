@@ -16,7 +16,7 @@ while [[ $# -gt 0 ]]; do
 		--model) MODEL="$2"; shift 2 ;;
 		--file)  FILE="$2"; shift 2 ;;
 		--raw)   RAW=true; shift ;;
-		*)       PROMPT="$1"; shift ;;
+		*)       PROMPT="${PROMPT:+${PROMPT} }$1"; shift ;;
 	esac
 done
 
