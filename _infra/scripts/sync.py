@@ -5,12 +5,12 @@ Skill Sync — daye-agent-toolkit 양방향 동기화
 OpenClaw PC에서 사용. 이 레포를 clone한 뒤 스킬 변경사항을 push/pull.
 
 Usage:
-    python scripts/sync.py              # sync (기본: push → pull)
-    python scripts/sync.py sync         # 로컬 변경 커밋+푸시 → 원격 최신본 pull
-    python scripts/sync.py pull         # 원격에서 최신 변경사항 가져오기
-    python scripts/sync.py push         # 로컬 변경사항 커밋 + 푸시
-    python scripts/sync.py push "메시지" # 커밋 메시지 지정
-    python scripts/sync.py status       # 레포 상태 확인
+    make sync                                    # sync (기본: push → pull)
+    python _infra/scripts/sync.py sync           # 로컬 변경 커밋+푸시 → 원격 최신본 pull
+    python _infra/scripts/sync.py pull           # 원격에서 최신 변경사항 가져오기
+    python _infra/scripts/sync.py push           # 로컬 변경사항 커밋 + 푸시
+    python _infra/scripts/sync.py push "메시지"  # 커밋 메시지 지정
+    python _infra/scripts/sync.py status         # 레포 상태 확인
 """
 
 import sys
@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 
 # ─── Config ───
-REPO_ROOT = Path(__file__).resolve().parent.parent  # daye-agent-toolkit/
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # daye-agent-toolkit/
 
 
 def run_cmd(cmd, cwd=None, quiet=False):
@@ -173,10 +173,19 @@ def cmd_status():
         for line in log.strip().split("\n"):
             print(f"     {line}")
 
-    skills = [d.name for d in REPO_ROOT.iterdir()
-              if d.is_dir() and not d.name.startswith(".")
-              and d.name not in ("docs", "scripts")]
-    print(f"\n  Skills ({len(skills)}): {', '.join(sorted(skills))}")
+    categories = ["shared", "cc", "openclaw"]
+    skills = []
+    for cat in categories:
+        cat_dir = REPO_ROOT / cat
+        if cat_dir.is_dir():
+            cat_skills = sorted(
+                d.name for d in cat_dir.iterdir()
+                if d.is_dir() and (d / "SKILL.md").exists()
+            )
+            skills.extend(cat_skills)
+            if cat_skills:
+                print(f"  {cat} ({len(cat_skills)}): {', '.join(cat_skills)}")
+    print(f"\n  Total: {len(skills)} skills")
 
     return True
 
