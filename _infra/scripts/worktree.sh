@@ -99,11 +99,93 @@ cmd_list() {
   echo "Active: $active/$count  |  Total: +$total_add/-$total_del"
 }
 
+cmd_merge() {
+  local name="$1"
+  local dry_run=false
+  [ "${2:-}" = "--dry-run" ] && dry_run=true
+
+  local wt_path="$WT_BASE/$name"
+  local branch="wt/$name"
+
+  if [ ! -d "$wt_path" ]; then
+    echo "ERROR: worktree '$name' not found" >&2
+    exit 1
+  fi
+
+  # Read base branch from metadata
+  local base_branch="main"
+  if [ -f "$wt_path/.session-meta.json" ]; then
+    base_branch=$(jq -r '.base_branch // "main"' "$wt_path/.session-meta.json" 2>/dev/null)
+  fi
+
+  # Check for uncommitted changes in worktree
+  if ! git -C "$wt_path" diff --quiet HEAD 2>/dev/null; then
+    echo "ERROR: worktree '$name' has uncommitted changes. Commit or stash first." >&2
+    echo "  path: $wt_path"
+    exit 1
+  fi
+
+  # Dry run: show what would be merged
+  if $dry_run; then
+    echo "=== Dry run: merge $branch → $base_branch ==="
+    git -C "$REPO_ROOT" log --oneline "$base_branch..$branch" 2>/dev/null
+    echo ""
+    git -C "$REPO_ROOT" diff --stat "$base_branch...$branch" 2>/dev/null
+    return
+  fi
+
+  # Create backup tag
+  local tag="backup/wt-${name}-$(date +%Y%m%d-%H%M%S)"
+  git -C "$REPO_ROOT" tag "$tag" "$branch"
+  echo "✓ backup tag: $tag"
+
+  # Merge
+  local current_branch
+  current_branch=$(git -C "$REPO_ROOT" branch --show-current)
+
+  if [ "$current_branch" != "$base_branch" ]; then
+    git -C "$REPO_ROOT" checkout "$base_branch"
+  fi
+
+  if git -C "$REPO_ROOT" merge --no-ff "$branch" -m "merge: $name (from worktree)"; then
+    echo "✓ merged $branch → $base_branch"
+
+    # Cleanup (--force needed because .session-meta.json is untracked)
+    git -C "$REPO_ROOT" worktree remove --force "$wt_path"
+    git -C "$REPO_ROOT" branch -d "$branch"
+    echo "✓ cleaned up worktree and branch"
+  else
+    echo "ERROR: merge conflict. Resolve manually:" >&2
+    echo "  git merge --abort   # to cancel" >&2
+    echo "  # or resolve conflicts, then: git commit" >&2
+    echo "  # backup tag: $tag" >&2
+    exit 1
+  fi
+}
+
+cmd_clean() {
+  local name="$1"
+  local wt_path="$WT_BASE/$name"
+  local branch="wt/$name"
+
+  if [ ! -d "$wt_path" ]; then
+    echo "ERROR: worktree '$name' not found" >&2
+    exit 1
+  fi
+
+  git -C "$REPO_ROOT" worktree remove --force "$wt_path"
+  echo "✓ removed worktree: $wt_path"
+
+  if git -C "$REPO_ROOT" branch -D "$branch" 2>/dev/null; then
+    echo "✓ deleted branch: $branch"
+  fi
+}
+
 case "${1:-help}" in
   create) shift; cmd_create "$@" ;;
   list)   shift; cmd_list "$@" ;;
-  merge)  shift; echo "not implemented yet" ;;
-  clean)  shift; echo "not implemented yet" ;;
+  merge)  shift; cmd_merge "$@" ;;
+  clean)  shift; cmd_clean "$@" ;;
   *)
     echo "Usage: worktree.sh {create|list|merge|clean} ..."
     exit 1
