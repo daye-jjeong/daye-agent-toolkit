@@ -84,6 +84,8 @@ When executing an implementation plan, ALWAYS use `superpowers:subagent-driven-d
 
 ## Gate 2: Plan Review Before Execution
 
+**Structural enforcement:** A PostToolUse hook on `docs/plans/*.md` will inject a reminder into your context when a plan file is written. When you see this reminder, you MUST execute the checklist below immediately.
+
 After `writing-plans` generates a plan, you MUST review it before executing. Never auto-execute.
 
 **The 3-Example Rule:** For every file path, naming convention, or structural claim in the plan, find 3+ existing examples in the codebase that confirm it. If you can't find 3 examples, the plan item is suspect.
