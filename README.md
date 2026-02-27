@@ -16,11 +16,11 @@ _infra/       — 빌드/설치/동기화 스크립트
 ## Setup
 
 ```bash
-# Claude Code (로컬) — symlink + 마켓플레이스 플러그인 설치
+# Claude Code — symlink 설치
 make install-cc
 
-# OpenClaw (원격) — 스킬 enable + extraDirs 설정
-make install-oc
+# OpenClaw — symlink 후 minions init 시 자동 등록
+ln -s $(pwd) ~/.openclaw/daye-agent-toolkit
 
 # 설치 상태 확인
 make status
@@ -38,7 +38,7 @@ make sync
 1. 카테고리 디렉토리에 `<skill-name>/` 생성 (`shared/`, `cc/`, `openclaw/`)
 2. `SKILL.md` 작성 (frontmatter + 150줄 이내)
 3. Claude Code용이면 `.claude-skill` 추가 (`cc/` 또는 `shared/`)
-4. `make install-cc` 또는 `make install-oc` 실행
+4. `make install-cc` 실행
 5. 커밋 + push
 
 ## 방침

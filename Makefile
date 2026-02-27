@@ -1,7 +1,6 @@
 # daye-agent-toolkit Makefile
 # Usage:
 #   make install-cc     # Claude Code: symlink shared/ + cc/ skills
-#   make install-oc     # OpenClaw: update extraDirs config
 #   make clean          # Remove CC symlinks
 #   make sync           # Git sync (OpenClaw PC)
 #   make status         # Show installation status
@@ -16,7 +15,7 @@ CC_DIRS := $(patsubst %/SKILL.md,%,$(wildcard cc/*/SKILL.md))
 OC_DIRS := $(patsubst %/SKILL.md,%,$(wildcard openclaw/*/SKILL.md))
 ALL_CC_DIRS := $(SHARED_DIRS) $(CC_DIRS)
 
-.PHONY: install-cc install-oc clean sync status init help
+.PHONY: install-cc clean sync status init help
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -36,10 +35,6 @@ install-cc: ## Install skills for Claude Code (symlink shared/ + cc/)
 	done
 	@echo ""
 	@echo "Done. $(words $(SHARED_DIRS)) shared + $(words $(CC_DIRS)) cc-only = $(words $(ALL_CC_DIRS)) skills installed."
-
-install-oc: ## Configure OpenClaw extraDirs
-	@echo "=== OpenClaw config update ==="
-	@python3 _infra/scripts/install_oc.py "$(REPO_DIR)"
 
 clean: ## Remove CC symlinks created by install-cc
 	@echo "=== Removing CC symlinks ==="

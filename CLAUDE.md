@@ -8,8 +8,8 @@
 | 환경 | 접근 방식 |
 |------|-----------|
 | Claude Code (로컬) | `make install-cc` → shared/ + cc/ 스킬 symlink |
-| OpenClaw (원격) | `make install-oc` → extraDirs 설정 (`make sync`로 동기화) |
-| 동기화 | `make sync` → 양방향 git sync (OpenClaw PC용) |
+| OpenClaw (로컬) | `ln -s <repo> ~/.openclaw/daye-agent-toolkit` → `minions init` 시 자동 등록 |
+| OpenClaw (별도 PC) | git clone + `make sync` → 양방향 동기화 |
 
 ## 디렉토리 구조
 
@@ -95,7 +95,7 @@ OpenClaw enable/disable은 `make install-oc`이 `~/.openclaw/openclaw.json`에 �
 - 레포가 source of truth
 - `~/openclaw/skills/`는 이 레포의 clone
 - `make sync`로 양방향 git sync (OpenClaw PC용)
-- `make install-oc`으로 초기 셋업 (clone + enable + cron)
+- 로컬: `ln -s <repo> ~/.openclaw/daye-agent-toolkit` 후 `minions init` → 자동 등록
 
 ## scripts/ 규칙
 
