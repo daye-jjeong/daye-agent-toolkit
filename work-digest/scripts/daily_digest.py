@@ -12,14 +12,18 @@ Usage:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import urllib.request
+import urllib.parse
+import urllib.error
 from datetime import datetime
 from pathlib import Path
 
 # ── Telegram config ──────────────────────────────────
-TELEGRAM_GROUP = "-1003242721592"
-THREAD_ID = None  # work-digest 전용 토픽 — 생성 후 설정
+TELEGRAM_CHAT_ID = "8514441011"  # 개인 DM (notify.sh와 동일)
+TELEGRAM_BOT_TOKEN_DEFAULT = "8584213613:AAE5h2B3m9hGD1nIMUmLvcTmSwJDph25lic"
 
 # ── Constants ────────────────────────────────────────
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
@@ -317,32 +321,36 @@ def analyze_with_llm(data: dict) -> str | None:
 # ── Telegram send ────────────────────────────────────
 
 def send_telegram(message: str) -> None:
-    """Send message to Telegram via clawdbot CLI."""
-    cmd = ["clawdbot", "message", "send", "-t", TELEGRAM_GROUP]
-    if THREAD_ID:
-        cmd.extend(["--thread-id", str(THREAD_ID)])
-    cmd.extend(["-m", message])
+    """Send message to Telegram via Bot API (stdlib only, no requests)."""
+    # 환경변수보다 스크립트 내장 토큰 우선 (일관성)
+    bot_token = TELEGRAM_BOT_TOKEN_DEFAULT
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+    }
+
+    data = urllib.parse.urlencode(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data)
 
     try:
-        result = subprocess.run(
-            cmd, check=True, capture_output=True, text=True, timeout=30
-        )
-        print(f"[daily_digest] Telegram 전송 완료", file=sys.stderr)
-        if result.stdout.strip():
-            print(f"[daily_digest] {result.stdout.strip()}", file=sys.stderr)
-    except FileNotFoundError:
-        print(
-            "[daily_digest] Error: clawdbot not found. Is it installed and in PATH?",
-            file=sys.stderr,
-        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            if result.get("ok"):
+                print("[daily_digest] Telegram 전송 완료", file=sys.stderr)
+            else:
+                print(f"[daily_digest] Telegram API error: {result}", file=sys.stderr)
+                sys.exit(1)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        print(f"[daily_digest] Telegram HTTP {e.code}: {body[:200]}", file=sys.stderr)
         sys.exit(1)
-    except subprocess.CalledProcessError as e:
+    except urllib.error.URLError as e:
+        print(f"[daily_digest] Telegram 연결 실패: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
         print(f"[daily_digest] Telegram 전송 실패: {e}", file=sys.stderr)
-        if e.stderr:
-            print(f"[daily_digest] stderr: {e.stderr.strip()}", file=sys.stderr)
-        sys.exit(1)
-    except subprocess.TimeoutExpired:
-        print("[daily_digest] Telegram 전송 타임아웃 (30초)", file=sys.stderr)
         sys.exit(1)
 
 
