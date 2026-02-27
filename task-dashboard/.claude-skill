@@ -1,6 +1,0 @@
-{
-  "name": "task-dashboard",
-  "version": "1.0.0",
-  "description": "프로젝트 tasks.yml + goals YAML → 인터랙티브 HTML 대시보드",
-  "entrypoint": "SKILL.md"
-}

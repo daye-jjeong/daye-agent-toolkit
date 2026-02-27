@@ -1,8 +1,0 @@
-{
-  "projects_root": "projects/",
-  "default_status": "todo",
-  "default_priority": "medium",
-  "dry_run_default": true,
-  "auto_approve_keywords": ["진행해", "do it", "approve", "execute"],
-  "similarity_threshold": 0.8
-}
