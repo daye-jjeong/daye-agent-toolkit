@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Claude Code 환경 설정 (인터랙티브).
 
-setup.sh에서 호출되거나 단독 실행 가능.
+make init에서 호출되거나 단독 실행 가능.
 ~/.claude/settings.json + cc-config.json 생성.
 
-Usage: python3 _cc/setup_env.py
-Called by: ./setup.sh (CC 기본 모드)
+Usage: python3 _infra/scripts/setup_env.py
+Called by: make init (CC 기본 모드)
 """
 
 import json
@@ -15,7 +15,7 @@ from pathlib import Path
 
 # ── 경로 ───────────────────────────────────────────
 
-CC_DIR = Path(__file__).resolve().parent  # _cc/
+CC_DIR = Path(__file__).resolve().parent.parent / "cc"  # _infra/cc/
 CLAUDE_DIR = Path.home() / ".claude"
 SETTINGS_FILE = CLAUDE_DIR / "settings.json"
 CONFIG_FILE = CLAUDE_DIR / "cc-config.json"
@@ -206,32 +206,9 @@ def generate_settings(
     vault_path: Path, selected_plugins: list[str], model: str
 ):
     """~/.claude/settings.json 생성."""
-    recorder_path = str(CC_DIR / "vault_recorder.py")
     statusline_path = str(CC_DIR / "statusline.sh")
 
     settings = {
-        "hooks": {
-            "PreCompact": [
-                {
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": f"python3 {recorder_path}",
-                        }
-                    ]
-                }
-            ],
-            "SessionEnd": [
-                {
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": f"python3 {recorder_path}",
-                        }
-                    ]
-                }
-            ],
-        },
         "env": {
             "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
         },
@@ -317,7 +294,7 @@ def main():
     print(f"  Vault:    {vault_path}")
     print(f"  Model:    {model}")
     print(f"  Plugins:  {len(selected_plugins)}개")
-    print(f"  Hooks:    vault_recorder (PreCompact + SessionEnd)")
+    print(f"  Hooks:    (none)")
     print(f"  Scripts:  {CC_DIR}")
     print()
 
