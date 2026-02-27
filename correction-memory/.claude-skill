@@ -1,0 +1,6 @@
+{
+  "name": "correction-memory",
+  "version": "1.0.0",
+  "description": "교정 기억 — 실수를 기억하고 반복하지 않게 하는 3계층 메모리",
+  "entrypoint": "SKILL.md"
+}
