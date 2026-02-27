@@ -35,6 +35,10 @@ install-cc: ## Install skills for Claude Code (symlink shared/ + cc/)
 	done
 	@echo ""
 	@echo "Done. $(words $(SHARED_DIRS)) shared + $(words $(CC_DIRS)) cc-only = $(words $(ALL_CC_DIRS)) skills installed."
+	@echo ""
+	@echo "Dashboard:"
+	@echo "  alias wd='$(REPO_DIR)/_infra/cc/wd.sh'"
+	@echo "  (add to ~/.zshrc for persistent access)"
 
 clean: ## Remove CC symlinks created by install-cc
 	@echo "=== Removing CC symlinks ==="
