@@ -12,7 +12,7 @@
 
 ## 스킬 분류
 
-### Claude Code 전용 (4개) — `.claude-skill` 있음, OpenClaw disabled
+### Claude Code 전용 (5개) — `.claude-skill` 있음, OpenClaw disabled
 
 | 스킬 | 설명 |
 |------|------|
@@ -20,8 +20,9 @@
 | mermaid-diagrams | Mermaid 다이어그램 생성 가이드 |
 | professional-communication | 업무 커뮤니케이션 가이드 |
 | skill-forge | SKILL.md 생성/최적화/감사/검증 |
+| work-digest | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
 
-### Claude Code + OpenClaw 양쪽 (11개) — `.claude-skill` 있음, OpenClaw enabled
+### Claude Code + OpenClaw 양쪽 (10개) — `.claude-skill` 있음, OpenClaw enabled
 
 | 스킬 | 설명 |
 |------|------|
@@ -35,9 +36,8 @@
 | news-brief | 키워드 뉴스 브리핑 |
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |
-| task-dashboard | 프로젝트 HTML 대시보드 |
 
-### OpenClaw 전용 (14개) — `.claude-skill` 없음, OpenClaw enabled
+### OpenClaw 전용 (11개) — `.claude-skill` 없음, OpenClaw enabled
 
 | 스킬 | 설명 | 비고 |
 |------|------|------|
@@ -51,10 +51,7 @@
 | prompt-guard | 프롬프트 인젝션 스캐너 | `user-invocable: false` |
 | quant-swing | 스윙 전략 실행/분석 | |
 | schedule-advisor | 캘린더 브리핑/알림 | |
-| session-manager | 세션 fallback/retry | `user-invocable: false` |
 | system-audit | 시스템 감사 — 문서 린트 + 점검 | |
-| task-manager | 태스크 관리 | |
-| task-policy | 태스크 정책 가드레일 | `user-invocable: false` |
 
 ## skills.json 매니페스트
 
