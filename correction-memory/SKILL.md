@@ -47,6 +47,9 @@ $ARGUMENTS를 파싱하여 모드 결정:
 
 ### 리뷰 (review)
 
+자동 트리거: save 시 규칙이 50개 이상이면 review 제안.
+수동 트리거: `/correction-memory review`
+
 1. Layer 1 (Rules) `corrections.md` 전체 읽기
 2. 중복 규칙 식별 + 병합 제안
 3. 모순 규칙 식별 + 해결 제안
@@ -59,6 +62,12 @@ $ARGUMENTS를 파싱하여 모드 결정:
 2. 주제별 교정 빈도 집계
 3. 최근 7일/30일 추세
 4. 가장 많이 교정되는 토픽 → "집중 개선 필요" 안내
+
+## 자동 트리거
+
+교정 감지 → 자동 저장은 `.claude/rules/correction-protocol.md`가 담당.
+이 규칙 파일은 매 세션 자동 로드되므로, 스킬을 명시적으로 호출하지 않아도 동작한다.
+스킬의 search/review/stats 모드는 수동 호출용.
 
 ## Write Gate
 

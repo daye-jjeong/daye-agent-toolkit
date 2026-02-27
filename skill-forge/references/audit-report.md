@@ -34,12 +34,12 @@
 |-----------|--------------|--------------|
 | scripts/health/track.py | health-tracker | 참조 파일 수정 |
 | skills/new-skill/SKILL.md | (신규) | 매니페스트 미등록 |
-| vault/format.md | vault-memory | 포맷 규격 변경 |
+| .claude/rules/corrections.md | correction-memory | 교정 규칙 변경 |
 
 액션 필요:
 - health-tracker: scripts/health/track.py 변경 확인 필요
 - new-skill: skills.json 및 CLAUDE.md 등록 필요
-- vault-memory: vault/format.md 변경이 워크플로우에 영향 확인 필요
+- correction-memory: corrections.md 변경이 교정 규칙에 영향 확인 필요
 
 변경 무관 스킬: 25개 (영향 없음)
 ```

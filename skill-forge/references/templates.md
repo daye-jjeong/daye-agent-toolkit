@@ -55,5 +55,5 @@ argument-hint: "<사용법 힌트>"
 | 분류 | .claude-skill | OpenClaw enabled | 예시 |
 |------|---------------|------------------|------|
 | CC 전용 | O | X | mermaid-diagrams, skill-forge |
-| CC + OpenClaw | O | O | health-tracker, vault-memory |
+| CC + OpenClaw | O | O | health-tracker, news-brief |
 | OpenClaw 전용 | X | O | notion, orchestrator |
