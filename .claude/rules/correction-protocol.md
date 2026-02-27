@@ -17,9 +17,10 @@ You are corrected when the user:
 
 ### 2. Save to Layer 1 — Rules (git-tracked, shared)
 - Directory: `.claude/rules/` in the current project
-- Create ONE file per correction: `correction-{slug}.md`
+- Create ONE file per correction: `correction-{YYYYMMDD}-{HHmm}-{slug}.md`
 - Slug: lowercase, hyphens, 2-4 words describing the rule
-- Example filename: `correction-use-bun.md`
+- Timestamp prevents filename collision between concurrent sessions
+- Example filename: `correction-20260227-1430-use-bun.md`
 - Example content: `- ALWAYS use bun, NEVER use npm for package management`
 - IMPORTANT: Each rule is a SEPARATE file to prevent concurrent session conflicts
 - Before creating, check existing `correction-*.md` files for duplicates
