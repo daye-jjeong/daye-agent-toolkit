@@ -1,0 +1,39 @@
+# AI Trends keywords for news_brief.py filtering
+# rss_sources.json fallback_keywords + 추가 키워드
+
+# Models & Labs
+GPT
+Claude
+Gemini
+LLM
+OpenAI
+Anthropic
+Google AI
+Meta AI
+DeepSeek
+
+# Concepts
+AI agents
+machine learning
+transformer
+fine-tuning
+RAG
+open-source AI
+AI regulation
+AI safety
+neural network
+deep learning
+computer vision
+NLP
+
+# Tools & Ecosystem
+LangChain
+Hugging Face
+GitHub Copilot
+MCP
+vector database
+
+# Business
+AI startup
+AI funding
+AI acquisition

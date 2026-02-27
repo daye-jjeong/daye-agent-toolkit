@@ -59,9 +59,18 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 
 ### Pipeline 2 — AI Trends
 
+**자동 수집 (cron/단일 에이전트):**
+
 | File | Purpose |
 |------|---------|
-| `{baseDir}/references/ai_trends_team/rss_sources.json` | AI RSS + community sources (13개) |
+| `{baseDir}/references/ai_trends_feeds.txt` | AI RSS feeds — plain text URL 목록 (news_brief.py용) |
+| `{baseDir}/references/ai_trends_keywords.txt` | AI 키워드 필터 (GPT, Claude, LLM, transformer 등) |
+
+**멀티 에이전트 (수동/고품질):**
+
+| File | Purpose |
+|------|---------|
+| `{baseDir}/references/ai_trends_team/rss_sources.json` | AI RSS + community sources (13개) — 에이전트가 직접 web_fetch |
 | `{baseDir}/references/ai_trends_team/researcher.md` | Researcher agent prompt |
 | `{baseDir}/references/ai_trends_team/writer.md` | Writer agent prompt |
 | `{baseDir}/references/ai_trends_team/executor.md` | Executor agent prompt (compose flow) |
@@ -104,35 +113,74 @@ python3 render_newspaper.py --input data.json --weather /tmp/weather.json --outp
 
 ## Quick Usage
 
+모든 스크립트는 `{baseDir}/scripts/` 디렉토리에서 실행.
+
+### 1. 데이터 수집 (4개 파이프라인)
+
 ```bash
-# Pipeline 1 — General (JSON output for compose)
-python3 news_brief.py --feeds general_feeds.txt --keywords general_keywords.txt \
+# 날씨
+python3 fetch_weather.py --location Seoul --output /tmp/weather.json
+
+# Pipeline 1 — General
+python3 news_brief.py --feeds ../references/general_feeds.txt \
+  --keywords ../references/general_keywords.txt \
   --max-items 15 --since 24 --output-format json > /tmp/general.json
 
-# Pipeline 3 — Ronik (JSON output for compose)
-python3 news_brief.py --feeds rss_feeds.txt --keywords keywords.txt \
-  --max-items 15 --since 24 --output-format json > /tmp/ronik.json
+# Pipeline 2 — AI Trends (자동 수집)
+python3 news_brief.py --feeds ../references/ai_trends_feeds.txt \
+  --keywords ../references/ai_trends_keywords.txt \
+  --max-items 10 --since 24 --output-format json > /tmp/ai_trends.json
 
-# Community — Reddit (WebFetch 차단 → news_brief.py 경유)
-python3 news_brief.py --feeds community_feeds.txt --keywords community_keywords.txt \
+# Pipeline 3 — Ronik
+python3 news_brief.py --feeds ../references/rss_feeds.txt \
+  --keywords ../references/keywords.txt \
+  --max-items 10 --since 24 --output-format json > /tmp/ronik.json
+
+# Community — Reddit
+python3 news_brief.py --feeds ../references/community_feeds.txt \
+  --keywords ../references/community_keywords.txt \
   --max-items 10 --since 24 --output-format json > /tmp/community.json
-
-# Compose + Enrich + Render
-python3 compose-newspaper.py --general /tmp/general.json --ai-trends /tmp/ai_trends.json \
-  --ronik /tmp/ronik.json --community /tmp/community.json --output /tmp/composed.json
-python3 enrich.py extract --input /tmp/composed.json > /tmp/to_enrich.json
-# Agent generates /tmp/enrichments.json (한국어 번역 + 요약)
-python3 enrich.py apply --input /tmp/composed.json \
-  --enrichments /tmp/enrichments.json --output /tmp/composed.json
-python3 render_newspaper.py --input /tmp/composed.json --weather /tmp/weather.json \
-  --output /tmp/mingming_daily.html
-
-# Pipeline 4 — Breaking Alert (dry run)
-python3 breaking-alert.py --sources references/ai_trends_team/rss_sources.json \
-  --keywords references/breaking-keywords.txt --since 1 --dry-run
 ```
 
-Pipeline 2 (AI Trends)는 multi-agent team으로 실행 — `references/ai_trends_team/` 참고.
+Pipeline 2를 멀티 에이전트 팀으로 고품질 실행하려면 `references/ai_trends_team/` 참고.
+
+### 2. 조합 + 보강 + 렌더링
+
+```bash
+# Compose (4개 파이프라인 합치기, --highlight 필수)
+python3 compose-newspaper.py --general /tmp/general.json \
+  --ai-trends /tmp/ai_trends.json --ronik /tmp/ronik.json \
+  --community /tmp/community.json \
+  --highlight "오늘의 핵심 한줄 요약" --output /tmp/composed.json
+
+# Enrich (영어 헤드라인 한국어 번역 + 요약 why 추가)
+python3 enrich.py extract --input /tmp/composed.json > /tmp/to_enrich.json
+# → 에이전트가 to_enrich.json을 읽고 enrichments.json 생성 (한국어 번역 + why)
+python3 enrich.py apply --input /tmp/composed.json \
+  --enrichments /tmp/enrichments.json --output /tmp/composed.json
+
+# Render HTML
+python3 render_newspaper.py --input /tmp/composed.json \
+  --weather /tmp/weather.json --output /tmp/mingming_daily.html
+```
+
+### 3. 배포
+
+```bash
+# Vault 저장
+python3 save_to_vault.py --input /tmp/composed.json \
+  --weather /tmp/weather.json --vault-dir ~/openclaw/vault
+
+# 텔레그램 전송 — HTML 첨부 + 핵심 요약 텍스트
+```
+
+### Pipeline 4 — Breaking Alert (별도 cron)
+
+```bash
+python3 breaking-alert.py --sources ../references/ai_trends_team/rss_sources.json \
+  --feeds ../references/general_feeds.txt \
+  --keywords ../references/breaking-keywords.txt --since 1 --dry-run
+```
 
 **상세 (cron, testing 등)**: `{baseDir}/references/usage-examples.md` 참고
 

@@ -146,24 +146,27 @@ def _is_community(item: dict) -> bool:
 def map_ai_trends_items(items: list[dict]) -> tuple[list[dict], list[dict]]:
     """Map AI Trends items → (main_items, community_items).
 
-    Supports two input formats:
+    Supports three input formats:
       - Writer vault format: name, url/source (URL), source_name, origin_source
-      - Researcher format (fallback): name/title, url, source_name, origin_source
+      - Researcher format: name/title, url, source_name, origin_source
+      - news_brief.py format: title, link, source, tag, description
     """
     main, community = [], []
     for it in items:
-        # URL: prefer explicit 'url', fallback to 'source' (writer vault format)
-        url = it.get("url") or it.get("source", "")
-        # Source name: prefer 'source_name', fallback to domain extraction
-        source_name = it.get("source_name") or extract_domain(url)
+        # URL: prefer explicit 'url', fallback to 'link' (news_brief.py), 'source' (writer)
+        url = it.get("url") or it.get("link") or it.get("source", "")
+        # Source name: prefer 'source_name', fallback to 'source' (news_brief.py), domain
+        source_name = it.get("source_name") or it.get("source") or extract_domain(url)
+        # Summary: prefer 'summary', fallback to 'description' (news_brief.py)
+        summary = it.get("summary") or it.get("description", "")
 
         mapped = {
             "headline": it.get("name") or it.get("title", ""),
             "url": url,
             "source": source_name,
-            "tag": it.get("category", ""),
+            "tag": it.get("category") or it.get("tag", ""),
             "published": format_pub_kst(it.get("published")),
-            "summary": _clean_community_summary(it.get("summary", "")),
+            "summary": _clean_community_summary(summary),
             "why": it.get("why", ""),
             "origin_source": it.get("origin_source", ""),
         }
@@ -202,7 +205,7 @@ def map_community_items(items: list[dict]) -> list[dict]:
 
 def compose(
     general: list[dict] | None,
-    ai_trends: dict | None,
+    ai_trends: list[dict] | dict | None,
     ronik: list[dict] | None,
     community: list[dict] | None = None,
     highlight: str = "",
@@ -225,6 +228,10 @@ def compose(
         for cat, items in groups.items():
             if cat not in _GENERAL_SECTION_ORDER and items:
                 sections.append({"title": cat, "items": items})
+
+    # Normalize ai_trends: news_brief.py outputs list, researcher outputs dict
+    if isinstance(ai_trends, list):
+        ai_trends = {"items": ai_trends}
 
     # AI·테크 (커뮤니티 제외)
     ai_community_items: list[dict] = []

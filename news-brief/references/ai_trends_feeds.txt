@@ -1,0 +1,22 @@
+# AI Trends RSS feeds. One URL per line.
+# rss_sources.json에서 추출 — news_brief.py용 plain text 버전
+# Reddit은 community_feeds.txt에서 별도 수집, Anthropic은 RSS 미제공으로 제외
+
+# Models (high priority)
+https://openai.com/blog/rss.xml
+https://blog.google/technology/ai/rss/
+
+# Open-source (high priority)
+https://huggingface.co/blog/feed.xml
+
+# Tools (medium priority)
+https://blog.langchain.dev/rss/
+
+# Business (medium priority)
+https://techcrunch.com/tag/artificial-intelligence/feed/
+https://www.theverge.com/ai-artificial-intelligence/rss/index.xml
+https://arstechnica.com/tag/artificial-intelligence/feed/
+
+# Community — AI·테크 섹션 배치 (reddit은 제외)
+https://hnrss.org/frontpage
+https://www.producthunt.com/feed
