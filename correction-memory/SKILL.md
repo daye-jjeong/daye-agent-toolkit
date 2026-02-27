@@ -26,7 +26,7 @@ $ARGUMENTS를 파싱하여 모드 결정:
 
 | 계층 | 경로 | 공유 | 용도 |
 |------|------|------|------|
-| **Rules** | `{project}/.claude/rules/corrections.md` | git (팀) | Claude에게 적용할 행동 규칙 |
+| **Rules** | `{project}/.claude/rules/correction-{slug}.md` | git (팀) | Claude에게 적용할 행동 규칙 (파일 1개 = 규칙 1개) |
 | **Register** | auto memory `corrections/{topic}.md` | 로컬 (나만) | 주제별 교정 이력 + 사유 |
 | **Log** | auto memory `corrections/log/YYYY-MM-DD.md` | 로컬 (나만) | 교정 발생 타임라인 |
 

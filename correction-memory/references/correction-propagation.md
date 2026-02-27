@@ -18,21 +18,27 @@
 ### 3단계: 3계층 동시 저장
 
 #### Layer 1 — Rules
-파일: `{project}/.claude/rules/corrections.md`
+디렉토리: `{project}/.claude/rules/`
+파일 이름: `correction-{slug}.md` (규칙 1개 = 파일 1개)
 
 포맷:
-- 한 줄에 하나의 규칙
+- 파일당 하나의 규칙
 - `- ` 접두사 (마크다운 리스트)
 - 영어로 작성 (Claude가 가장 잘 따름)
 - DO/DON'T 명확히 구분
-- 최대 50개 규칙 유지 (초과 시 review 모드 제안)
+- 최대 50개 파일 유지 (초과 시 review 모드 제안)
+- slug: lowercase, hyphens, 2-4 words
 
 예시:
 ```
+# .claude/rules/correction-use-bun.md
 - ALWAYS use bun, NEVER use npm for package management
+
+# .claude/rules/correction-no-enum.md
 - NEVER use TypeScript enum, use string literal unions instead
-- ALWAYS run typecheck before committing
 ```
+
+개별 파일 방식의 이점: 동일 디렉토리에서 여러 세션이 동시에 작업해도 충돌 없음.
 
 #### Layer 2 — Register
 파일: `~/.claude/projects/{hash}/memory/corrections/{topic}.md`

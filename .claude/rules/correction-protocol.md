@@ -16,10 +16,14 @@ You are corrected when the user:
 ### 1. Apply the correction immediately in current session
 
 ### 2. Save to Layer 1 — Rules (git-tracked, shared)
-- File: `.claude/rules/corrections.md` in the current project
-- Format: one rule per line, `- ` prefix, English, DO/DON'T style
-- Example: `- ALWAYS use bun, NEVER use npm for package management`
-- If the file has 50+ rules, suggest running `/correction-memory review`
+- Directory: `.claude/rules/` in the current project
+- Create ONE file per correction: `correction-{slug}.md`
+- Slug: lowercase, hyphens, 2-4 words describing the rule
+- Example filename: `correction-use-bun.md`
+- Example content: `- ALWAYS use bun, NEVER use npm for package management`
+- IMPORTANT: Each rule is a SEPARATE file to prevent concurrent session conflicts
+- Before creating, check existing `correction-*.md` files for duplicates
+- If 50+ correction files exist, suggest running `/correction-memory review`
 
 ### 3. Save to Layer 2 — Register (auto memory, local only)
 - File: auto memory `corrections/{topic}.md`
@@ -52,5 +56,9 @@ When a correction affects project-wide conventions (not just Claude behavior):
 - Never modify CLAUDE.md without user confirmation
 
 ## Scope Decision
-- Project-specific corrections -> `.claude/rules/corrections.md`
+- Project-specific corrections -> `.claude/rules/correction-{slug}.md`
 - Global corrections (apply to all projects) -> suggest adding to `~/.claude/CLAUDE.md`
+
+## Concurrent Session Safety
+- Each correction = separate file → no write conflicts between sessions
+- `/correction-memory review` consolidates and cleans up files
