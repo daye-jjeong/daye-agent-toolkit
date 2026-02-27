@@ -47,25 +47,41 @@ When `using-superpowers` says "invoke relevant skills BEFORE any response", the 
 
 ## Gate 0.5: Worktree Isolation for Concurrent Sessions
 
-When working on implementation tasks, ALWAYS use a git worktree for isolation.
+Implementation 작업시 worktree로 격리한다. Claude가 직접 worktree를 생성/관리한다.
+
+### Opening (작업 시작시)
 
 **The rule:**
-- Start sessions with `claude --worktree <name>` when doing implementation work
-- If already in a session without worktree, ask: "Should I create a worktree for this work?"
-- Each session = separate worktree = separate branch = no conflicts
-- Add `.claude/worktrees/` to `.gitignore` if not already present
+- Implementation 작업을 시작하면 `worktree.sh create <name> "description"`을 실행한다
+- `<name>`은 태스크를 2-3단어로 요약 (예: `feat-auth`, `fix-login-bug`, `refactor-api`)
+- 생성된 worktree 경로로 이동하여 작업한다
+- 이미 worktree 안에 있으면 이 단계를 건너뛴다
+
+**Script:** `"$CLAUDE_PROJECT_DIR"/_infra/scripts/worktree.sh create <name> "description"`
 
 **When worktree is REQUIRED:**
 - Any implementation task (code changes + commits)
-- When user is known to run multiple sessions on the same project
+- 사용자가 멀티 세션을 돌리는 것으로 알려진 경우
 
-**When worktree is optional:**
+**When worktree is OPTIONAL:**
 - Read-only exploration / research
 - Single quick fix the user wants on current branch
 
-**After worktree work completes:**
-- Use `finishing-a-development-branch` to merge/PR
-- Clean up worktree
+### Closing (작업 완료시, Gate 3 이후)
+
+Gate 3(Fresh-Eyes Review)를 통과한 뒤:
+1. `worktree.sh merge <name> --dry-run`으로 사전 확인
+2. 사용자에게 merge 확인 요청
+3. 승인시 `worktree.sh merge <name>` 실행
+4. conflict 발생시 사용자에게 수동 해결 안내
+
+**Script:** `"$CLAUDE_PROJECT_DIR"/_infra/scripts/worktree.sh merge <name>`
+
+### Dashboard
+
+사용자가 별도 Warp 탭에서 `wd`를 실행하여 모든 worktree 상태를 모니터링할 수 있다.
+스크립트 위치: `_infra/cc/wd.sh`
+설치 후 `PATH`에 추가하거나 alias 설정: `alias wd='path/to/_infra/cc/wd.sh'`
 
 ---
 
@@ -79,6 +95,28 @@ When executing an implementation plan, ALWAYS use `superpowers:subagent-driven-d
 - `subagent-driven-development` = DEFAULT execution mode
 - `executing-plans` = ONLY if user explicitly requests batch mode
 - Never downgrade from subagent-driven to executing-plans without user consent
+
+### 태스크별 Ralph Loop 제안
+
+subagent-driven-development 실행 중, 각 태스크 실행 직전에 다음 3가지를 평가한다:
+
+1. 자동 검증 가능한 완료 조건이 있는가? (테스트 통과, lint 0 에러, 빌드 성공, 커버리지 수치 등)
+2. 반복 개선 패턴인가? (구현 → 테스트 → 수정 사이클)
+3. 20분+ 소요 예상인가?
+
+**3개 모두 충족시 제안:**
+```
+💡 Task N "[태스크명]"은 [완료 조건]이 명확합니다.
+   Ralph Loop(/ralph-loop)로 전환하면 자율 반복으로 효율적일 수 있습니다.
+   전환할까요?
+```
+
+**규칙:**
+- 제안만 하고 강제하지 않는다
+- 사용자 승인시 → 해당 태스크만 /ralph-loop으로 실행
+- 사용자 거부시 → 일반 subagent로 진행
+- 조건 미충족시 → 제안 없이 subagent 진행
+- Ralph 완료 후 다음 태스크부터 다시 subagent-driven으로 복귀
 
 ---
 
@@ -174,6 +212,7 @@ The phases and their required gates:
 | Plan written → Execution start | Gate 2 (Plan Review) |
 | Task N complete → Task N+1 | Per-task review (subagent-driven handles this) |
 | All tasks complete → Finishing branch | Gate 3 (Fresh-Eyes Final Review) |
+| Fresh-Eyes Review passed → Merge worktree | Gate 0.5 Closing (Merge & Clean) |
 
 ### 4b. Anti-Skip Rules
 
@@ -198,7 +237,7 @@ After any context compaction (`/compact` or auto-compact), re-read this file and
     ↓
 ══ GATE 0: Brainstorming first? (building/creating/modifying) ══
     ↓
-══ GATE 0.5: Worktree Isolation ══
+══ GATE 0.5 OPENING: Worktree Isolation (worktree.sh create) ══
     ↓
 brainstorming
     ↓
@@ -207,11 +246,11 @@ writing-plans
 ══ GATE 2: Plan Review (3-Example Rule) ══
     ↓
 subagent-driven-development (Gate 1)
-  ├─ Task 1 → spec review → code review → ✓
-  ├─ Task 2 → spec review → code review → ✓
-  └─ Task N → spec review → code review → ✓
+  ├─ Task 1 → 💡 Ralph 평가 → subagent or ralph-loop → ✓
+  ├─ Task 2 → 💡 Ralph 평가 → subagent or ralph-loop → ✓
+  └─ Task N → 💡 Ralph 평가 → subagent or ralph-loop → ✓
     ↓
 ══ GATE 3: Fresh-Eyes Final Review (full diff) ══
     ↓
-finishing-a-development-branch (merge worktree)
+══ GATE 0.5 CLOSING: Merge & Clean (worktree.sh merge) ══
 ```
