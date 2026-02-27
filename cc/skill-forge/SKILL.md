@@ -56,14 +56,24 @@ $ARGUMENTS를 파싱하여 모드를 결정:
 
 **템플릿 및 frontmatter 상세**: `{baseDir}/references/templates.md` 참고
 
+### 카테고리 디렉토리 선택
+
+새 스킬을 생성할 때, 사용 환경에 따라 디렉토리를 결정:
+
+| 디렉토리 | 대상 환경 | 예시 |
+|----------|-----------|------|
+| `cc/` | Claude Code 전용 | mermaid-diagrams, skill-forge |
+| `shared/` | CC + OpenClaw 양쪽 | health-tracker, news-brief |
+| `openclaw/` | OpenClaw 전용 | notion, prompt-guard |
+
 ### 생성 후 자동 동기화
 
 스킬 파일 생성 완료 시, 다음을 **자동으로 수행**:
 
 1. **`.claude-skill` 생성** — CC 대상 스킬인 경우 (CC전용 또는 CC+OpenClaw)
-2. **`skills.json` 업데이트** — `local_skills` 배열에 스킬 이름 추가 (CC 대상만)
+2. **카테고리 디렉토리 배치** — `cc/`, `shared/`, `openclaw/` 중 적절한 곳에 생성 (Makefile이 디렉토리 구조로 자동 검색)
 3. **`CLAUDE.md` 업데이트** — 해당 분류 테이블에 행 추가
-4. **`setup.sh` 안내** — 사용자에게 `./setup.sh` 실행을 안내하여 symlink 갱신
+4. **`make install-cc` 안내** — 사용자에게 `make install-cc` 실행을 안내하여 symlink 갱신
 
 ### 생성 후 체크리스트
 
@@ -71,7 +81,8 @@ $ARGUMENTS를 파싱하여 모드를 결정:
 - [ ] frontmatter에 name, description 있음?
 - [ ] 핵심 워크플로우 명확?
 - [ ] 상세 내용 references/ 분리?
-- [ ] skills.json + CLAUDE.md 동기화 완료?
+- [ ] 카테고리 디렉토리 배치 올바름? (cc/, shared/, openclaw/)
+- [ ] CLAUDE.md 동기화 완료?
 
 ## 모드 2: 최적화 (optimize)
 
@@ -98,7 +109,7 @@ $ARGUMENTS를 파싱하여 모드를 결정:
 
 ### 프로세스
 
-1. 레포 루트에서 `*/SKILL.md` 패턴으로 스킬 검색
+1. 레포 루트에서 `{cc,shared,openclaw}/*/SKILL.md` 패턴으로 스킬 검색
 2. 각 스킬의 줄 수, references/ 유무, .claude-skill 유무 확인
 3. **드리프트 분석** — `git diff main...HEAD --name-only`로 변경 파일 수집
 4. 변경 파일이 어떤 스킬의 참조 경로/패턴에 영향을 주는지 매핑
@@ -121,17 +132,17 @@ $ARGUMENTS를 파싱하여 모드를 결정:
 ### 검증 항목
 
 1. **구조 검증** — 각 스킬의 SKILL.md frontmatter 필수 필드 (name, description)
-2. **매니페스트 동기화** — `skills.json` `local_skills` ↔ 실제 `.claude-skill` 보유 스킬
+2. **매니페스트 동기화** — 디렉토리 구조(`cc/`, `shared/`) ↔ 실제 `.claude-skill` 보유 스킬
 3. **CLAUDE.md 동기화** — CLAUDE.md 스킬 테이블 ↔ 실제 스킬 목록
 4. **참조 무결성** — SKILL.md 내 `{baseDir}/references/` 포인터 → 실제 파일 존재 여부
 5. **데드 스킬** — `.claude-skill`만 있고 SKILL.md 없음, 또는 반대
 
 ### 검증 프로세스
 
-1. `*/SKILL.md`와 `*/.claude-skill` 패턴으로 전체 스캔
-2. `skills.json`의 `local_skills` 읽기
+1. `{cc,shared,openclaw}/*/SKILL.md`와 `{cc,shared,openclaw}/*/.claude-skill` 패턴으로 전체 스캔
+2. 디렉토리 구조에서 카테고리별 스킬 목록 수집
 3. `CLAUDE.md`의 스킬 테이블 파싱
-4. 3개 소스 간 diff → 불일치 항목 리포트
+4. 디렉토리 구조 ↔ CLAUDE.md 간 diff → 불일치 항목 리포트
 5. 불일치 발견 시 `AskUserQuestion`으로 자동 수정 여부 확인
 
 ### 출력 포맷
@@ -148,4 +159,4 @@ CLAUDE.md 동기화:  W 2개 누락 (output-style-ko, check-quota)
 - CLAUDE.md에 output-style-ko, check-quota 추가 필요
 ```
 
-자동 수정 승인 시: skills.json, CLAUDE.md를 직접 Edit하여 동기화.
+자동 수정 승인 시: CLAUDE.md를 직접 Edit하여 동기화.

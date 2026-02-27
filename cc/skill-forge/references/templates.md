@@ -52,8 +52,8 @@ argument-hint: "<사용법 힌트>"
 
 ## 스킬 분류 기준
 
-| 분류 | .claude-skill | OpenClaw enabled | 예시 |
-|------|---------------|------------------|------|
-| CC 전용 | O | X | mermaid-diagrams, skill-forge |
-| CC + OpenClaw | O | O | health-tracker, news-brief |
-| OpenClaw 전용 | X | O | notion, orchestrator |
+| 분류 | 디렉토리 | .claude-skill | OpenClaw enabled | 예시 |
+|------|----------|---------------|------------------|------|
+| CC 전용 | `cc/` | O | X | mermaid-diagrams, skill-forge |
+| CC + OpenClaw | `shared/` | O | O | health-tracker, news-brief |
+| OpenClaw 전용 | `openclaw/` | X | O | notion, prompt-guard |
