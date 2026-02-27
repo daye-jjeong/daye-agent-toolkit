@@ -76,14 +76,16 @@ def detect_repo(cwd: str) -> str:
 
 # ── transcript 파싱 ───────────────────────────────
 
+IDLE_THRESHOLD_SEC = 300  # 5분 이상 gap = idle로 간주
+
+
 def parse_transcript(transcript_path: str) -> dict:
     """Parse .jsonl transcript — 수정 파일, 명령, 에러, 토픽, 토큰 추출."""
     files_modified = set()
     commands_run = []
     errors = []
     first_user_msg = ""
-    session_start = None
-    session_end = None
+    timestamps: list[datetime] = []
     token_input = 0
     token_output = 0
     token_cache_read = 0
@@ -100,9 +102,10 @@ def parse_transcript(transcript_path: str) -> dict:
 
                 ts = entry.get("timestamp")
                 if ts:
-                    if session_start is None:
-                        session_start = ts
-                    session_end = ts
+                    try:
+                        timestamps.append(datetime.fromisoformat(ts))
+                    except (ValueError, TypeError):
+                        pass
 
                 entry_type = entry.get("type", "")
                 msg = entry.get("message", {})
@@ -157,14 +160,15 @@ def parse_transcript(transcript_path: str) -> dict:
     except (FileNotFoundError, PermissionError):
         pass
 
+    # 활성 시간 계산: 연속 엔트리 간 gap이 임계값 이하인 것만 합산
     duration_min = None
-    if session_start and session_end:
-        try:
-            start = datetime.fromisoformat(session_start)
-            end = datetime.fromisoformat(session_end)
-            duration_min = int((end - start).total_seconds() / 60)
-        except (ValueError, TypeError):
-            pass
+    if len(timestamps) >= 2:
+        active_sec = 0
+        for i in range(1, len(timestamps)):
+            gap = (timestamps[i] - timestamps[i - 1]).total_seconds()
+            if 0 < gap <= IDLE_THRESHOLD_SEC:
+                active_sec += gap
+        duration_min = max(1, int(active_sec / 60))
 
     return {
         "files": sorted(files_modified),
