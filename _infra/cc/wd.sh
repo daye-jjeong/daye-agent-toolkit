@@ -21,7 +21,7 @@ fi
 
 # Live dashboard with watch (fallback to loop if watch not available)
 if command -v watch &>/dev/null; then
-  watch -n 5 -t "$WORKTREE_SH list"
+  watch -n 5 -t "'$WORKTREE_SH' list"
 else
   while true; do
     clear

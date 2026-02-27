@@ -7,12 +7,35 @@
 #   worktree.sh clean <name>
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+# Derive REPO_ROOT from script location (works even when called from inside a worktree)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WT_BASE="$REPO_ROOT/.claude/worktrees"
 
+# jq is required for JSON handling
+if ! command -v jq &>/dev/null; then
+  echo "ERROR: jq is required but not installed. Install with: brew install jq" >&2
+  exit 1
+fi
+
+validate_name() {
+  local name="$1"
+  if [[ ! "$name" =~ ^[a-z0-9][a-z0-9._-]*$ ]]; then
+    echo "ERROR: name must be lowercase alphanumeric with hyphens/dots (got: '$name')" >&2
+    exit 1
+  fi
+}
+
 cmd_create() {
+  if [ $# -lt 1 ]; then
+    echo "Usage: worktree.sh create <name> [description]" >&2
+    exit 1
+  fi
+
   local name="$1"
   local desc="${2:-}"
+  validate_name "$name"
+
   local wt_path="$WT_BASE/$name"
   local branch="wt/$name"
 
@@ -29,16 +52,15 @@ cmd_create() {
   mkdir -p "$WT_BASE"
   git -C "$REPO_ROOT" worktree add -b "$branch" "$wt_path" HEAD
 
-  # Write session metadata
-  cat > "$wt_path/.session-meta.json" <<METAEOF
-{
-  "name": "$name",
-  "description": "$desc",
-  "created": "$(date -u +%Y-%m-%dT%H:%M:%S%z)",
-  "base_branch": "$base_branch",
-  "base_sha": "$base_sha"
-}
-METAEOF
+  # Write session metadata (jq ensures proper JSON escaping)
+  jq -n \
+    --arg name "$name" \
+    --arg desc "$desc" \
+    --arg created "$(date -u +%Y-%m-%dT%H:%M:%S%z)" \
+    --arg base_branch "$base_branch" \
+    --arg base_sha "$base_sha" \
+    '{name: $name, description: $desc, created: $created, base_branch: $base_branch, base_sha: $base_sha}' \
+    > "$wt_path/.session-meta.json"
 
   echo "✓ worktree created: $name"
   echo "  path:   $wt_path"
@@ -65,10 +87,21 @@ cmd_list() {
   local total_add=0 total_del=0 active=0 count=0
 
   for wt_path in "${wt_dirs[@]}"; do
-    local name branch stat files=0 add=0 del=0 status desc
+    local name branch stat files=0 add=0 del=0 status desc base_sha
+
     name=$(basename "$wt_path")
     branch=$(git -C "$wt_path" branch --show-current 2>/dev/null || echo "?")
-    stat=$(git -C "$wt_path" diff --stat HEAD 2>/dev/null | tail -1)
+
+    # Diff against base_sha (total branch work), not just uncommitted changes
+    base_sha=""
+    if [ -f "$wt_path/.session-meta.json" ]; then
+      base_sha=$(jq -r '.base_sha // ""' "$wt_path/.session-meta.json" 2>/dev/null)
+    fi
+    if [ -n "$base_sha" ]; then
+      stat=$(git -C "$wt_path" diff --stat "$base_sha" 2>/dev/null | tail -1)
+    else
+      stat=$(git -C "$wt_path" diff --stat HEAD 2>/dev/null | tail -1)
+    fi
 
     if [ -n "$stat" ]; then
       files=$(echo "$stat" | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' || echo 0)
@@ -100,9 +133,15 @@ cmd_list() {
 }
 
 cmd_merge() {
+  if [ $# -lt 1 ]; then
+    echo "Usage: worktree.sh merge <name> [--dry-run]" >&2
+    exit 1
+  fi
+
   local name="$1"
   local dry_run=false
   [ "${2:-}" = "--dry-run" ] && dry_run=true
+  validate_name "$name"
 
   local wt_path="$WT_BASE/$name"
   local branch="wt/$name"
@@ -118,8 +157,9 @@ cmd_merge() {
     base_branch=$(jq -r '.base_branch // "main"' "$wt_path/.session-meta.json" 2>/dev/null)
   fi
 
-  # Check for uncommitted changes in worktree
-  if ! git -C "$wt_path" diff --quiet HEAD 2>/dev/null; then
+  # Check for uncommitted changes (unstaged + staged) in worktree
+  if ! git -C "$wt_path" diff --quiet HEAD 2>/dev/null || \
+     ! git -C "$wt_path" diff --cached --quiet HEAD 2>/dev/null; then
     echo "ERROR: worktree '$name' has uncommitted changes. Commit or stash first." >&2
     echo "  path: $wt_path"
     exit 1
@@ -164,7 +204,14 @@ cmd_merge() {
 }
 
 cmd_clean() {
+  if [ $# -lt 1 ]; then
+    echo "Usage: worktree.sh clean <name>" >&2
+    exit 1
+  fi
+
   local name="$1"
+  validate_name "$name"
+
   local wt_path="$WT_BASE/$name"
   local branch="wt/$name"
 
