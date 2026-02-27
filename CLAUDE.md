@@ -34,11 +34,12 @@ _infra/       — 빌드/설치/동기화 스크립트
 | work-digest | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
 | youtube-fetch | YouTube 메타데이터 + 자막 추출 |
 
-### Claude Code + OpenClaw 양쪽 (9개) — `shared/` 디렉토리
+### Claude Code + OpenClaw 양쪽 (10개) — `shared/` 디렉토리
 
 | 스킬 | 설명 |
 |------|------|
 | banksalad-import | 뱅크샐러드 → Obsidian vault import |
+| gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
 | health-coach | 맞춤 건강 조언 + 운동 추천 |
 | health-tracker | 운동/증상/PT 트래킹 |
 | investment-report | 일일 투자 리포트 |
