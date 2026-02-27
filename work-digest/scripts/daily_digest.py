@@ -61,12 +61,25 @@ def format_duration(total_min: int) -> str:
     return f"{hours}시간 {minutes}분"
 
 
+def _format_tokens(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
+
+
 def build_time_summary(summary: dict) -> str:
-    """Build time summary line."""
+    """Build time summary line with token usage."""
     sessions = summary["total_sessions"]
     duration = format_duration(summary["total_duration_min"])
     files = summary["total_files"]
-    return f"\u23f1 {sessions}세션 \u00b7 {duration} \u00b7 파일 {files}개"
+    tokens = summary.get("tokens", {})
+    total_tokens = tokens.get("total", 0)
+    line = f"\u23f1 {sessions}세션 \u00b7 {duration} \u00b7 파일 {files}개"
+    if total_tokens > 0:
+        line += f" \u00b7 {_format_tokens(total_tokens)} tokens"
+    return line
 
 
 def _clean_topic(topic: str) -> str:
@@ -192,6 +205,18 @@ def build_pattern_feedback(summary: dict) -> str:
     total_sessions = summary["total_sessions"]
     if total_duration_min < 30 and total_sessions > 0:
         lines.append("\u2022 짧은 세션이 많았음 — 집중 시간 확보 필요")
+
+    # Token usage feedback
+    tokens = summary.get("tokens", {})
+    total_tokens = tokens.get("total", 0)
+    if total_tokens > 0:
+        output_tokens = tokens.get("output", 0)
+        api_calls = tokens.get("api_calls", 0)
+        lines.append(f"\u2022 API {api_calls}회 · 출력 {_format_tokens(output_tokens)} tokens")
+        cache_read = tokens.get("cache_read", 0)
+        if cache_read > 0 and total_tokens > 0:
+            cache_pct = int(cache_read / total_tokens * 100)
+            lines.append(f"\u2022 캐시 활용률 {cache_pct}%")
 
     if not lines:
         return ""

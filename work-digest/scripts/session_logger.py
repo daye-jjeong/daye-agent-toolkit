@@ -77,13 +77,18 @@ def detect_repo(cwd: str) -> str:
 # ── transcript 파싱 ───────────────────────────────
 
 def parse_transcript(transcript_path: str) -> dict:
-    """Parse .jsonl transcript — 수정 파일, 명령, 에러, 토픽 추출."""
+    """Parse .jsonl transcript — 수정 파일, 명령, 에러, 토픽, 토큰 추출."""
     files_modified = set()
     commands_run = []
     errors = []
     first_user_msg = ""
     session_start = None
     session_end = None
+    token_input = 0
+    token_output = 0
+    token_cache_read = 0
+    token_cache_create = 0
+    api_calls = 0
 
     try:
         with open(transcript_path, "r") as f:
@@ -112,6 +117,16 @@ def parse_transcript(transcript_path: str) -> dict:
                                 break
                     elif isinstance(content, str):
                         first_user_msg = content[:120]
+
+                # Token usage (from assistant responses)
+                if entry_type == "assistant" and isinstance(msg, dict):
+                    usage = msg.get("usage", {})
+                    if usage:
+                        api_calls += 1
+                        token_input += usage.get("input_tokens", 0)
+                        token_output += usage.get("output_tokens", 0)
+                        token_cache_read += usage.get("cache_read_input_tokens", 0)
+                        token_cache_create += usage.get("cache_creation_input_tokens", 0)
 
                 # Assistant tool calls
                 if entry_type == "assistant" and isinstance(content, list):
@@ -157,10 +172,26 @@ def parse_transcript(transcript_path: str) -> dict:
         "errors": errors[:5],
         "topic": first_user_msg,
         "duration_min": duration_min,
+        "tokens": {
+            "input": token_input,
+            "output": token_output,
+            "cache_read": token_cache_read,
+            "cache_create": token_cache_create,
+            "api_calls": api_calls,
+        },
     }
 
 
 # ── 세션 마커 ─────────────────────────────────────
+
+def _format_tokens(n: int) -> str:
+    """Format token count: 1234 → 1.2K, 1234567 → 1.2M"""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M tokens"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K tokens"
+    return f"{n} tokens"
+
 
 def build_frontmatter(now):
     date_str = now.strftime("%Y-%m-%d")
@@ -180,7 +211,10 @@ def build_session_section(session_id, data, now, repo):
 
     file_count = len(data["files"])
     duration = f"{data['duration_min']}분" if data["duration_min"] else "?분"
-    lines.append(f"> 파일 {file_count}개 | {duration}")
+    tokens = data.get("tokens", {})
+    total_tokens = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
+    token_str = _format_tokens(total_tokens)
+    lines.append(f"> 파일 {file_count}개 | {duration} | {token_str}")
     lines.append("")
 
     if data["topic"]:
@@ -204,6 +238,15 @@ def build_session_section(session_id, data, now, repo):
         lines.append("### 에러/이슈")
         for err in data["errors"]:
             lines.append(f"- {err}")
+        lines.append("")
+
+    if tokens.get("api_calls", 0) > 0:
+        lines.append("### 토큰")
+        lines.append(f"- API 호출: {tokens['api_calls']}회")
+        lines.append(f"- Input: {_format_tokens(tokens.get('input', 0))}")
+        lines.append(f"- Output: {_format_tokens(tokens.get('output', 0))}")
+        lines.append(f"- Cache read: {_format_tokens(tokens.get('cache_read', 0))}")
+        lines.append(f"- Cache create: {_format_tokens(tokens.get('cache_create', 0))}")
         lines.append("")
 
     return "\n".join(lines) + "\n"

@@ -40,10 +40,11 @@ RE_SESSION_HEADER = re.compile(
     r"\)\s*$"
 )
 
-# > 파일 3개 | 7분  OR  > 수정 파일 3개 | 7분
+# > 파일 3개 | 7분  OR  > 수정 파일 3개 | 7분  OR  > 파일 3개 | 7분 | 1.2M tokens
 RE_BLOCKQUOTE = re.compile(
-    r"^>\s+(?:수정\s+)?파일\s+(\d+)개\s*\|\s*(\d+|[?？])분"
+    r"^>\s+(?:수정\s+)?파일\s+(\d+)개\s*\|\s*(\d+|[?？])분(?:\s*\|\s*(.+tokens))?"
 )
+RE_TOKEN_ITEM = re.compile(r"^-\s+(\w[\w\s]*):\s*(.+)$")
 
 RE_TOPIC = re.compile(r"^\*\*주제\*\*:\s*(.+)$")
 RE_FILE_ITEM = re.compile(r"^-\s+`(.+?)`\s*$")
@@ -70,7 +71,25 @@ def _subsection_name(line: str) -> str | None:
         return "commands"
     if "에러" in name or "이슈" in name:
         return "errors"
+    if "토큰" in name or "token" in name.lower():
+        return "tokens"
     return name
+
+
+def _parse_token_value(val: str) -> int:
+    """Parse token display value back to int: '1.2M tokens' → 1200000."""
+    val = val.replace(",", "").strip()
+    if "회" in val:
+        return int(re.sub(r"[^\d]", "", val) or 0)
+    val = val.replace("tokens", "").strip()
+    if val.endswith("M"):
+        return int(float(val[:-1]) * 1_000_000)
+    if val.endswith("K"):
+        return int(float(val[:-1]) * 1_000)
+    try:
+        return int(float(val))
+    except ValueError:
+        return 0
 
 
 def parse_session_block(lines: list[str]) -> dict | None:
@@ -92,6 +111,8 @@ def parse_session_block(lines: list[str]) -> dict | None:
     files: list[str] = []
     commands: list[str] = []
     errors: list[str] = []
+    tokens: dict[str, int] = {}
+    token_summary_str = ""
 
     current_subsection: str | None = None
     # State for multi-line backtick commands
@@ -121,6 +142,8 @@ def parse_session_block(lines: list[str]) -> dict | None:
             file_count = int(bq.group(1))
             dur_str = bq.group(2)
             duration_min = int(dur_str) if dur_str.isdigit() else None
+            if bq.group(3):
+                token_summary_str = bq.group(3).strip()
             continue
 
         # Topic
@@ -154,6 +177,13 @@ def parse_session_block(lines: list[str]) -> dict | None:
             em = RE_ERROR_ITEM.match(stripped)
             if em:
                 errors.append(em.group(1))
+        elif current_subsection == "tokens":
+            tm = RE_TOKEN_ITEM.match(stripped)
+            if tm:
+                key = tm.group(1).strip()
+                val = tm.group(2).strip()
+                # Parse "287회" → 287, "62.8K tokens" → 62800, etc.
+                tokens[key] = _parse_token_value(val)
 
     # Flush any unclosed multi-line command
     if pending_cmd is not None:
@@ -169,6 +199,8 @@ def parse_session_block(lines: list[str]) -> dict | None:
         "files": files,
         "commands": commands,
         "errors": errors,
+        "tokens": tokens if tokens else None,
+        "token_summary": token_summary_str or None,
     }
 
 
@@ -247,6 +279,20 @@ def parse_work_log(date_str: str) -> dict:
                 if not has_commits and "git commit" in cmd_lower:
                     has_commits = True
 
+        # Aggregate token usage
+        total_api_calls = 0
+        total_input = 0
+        total_output = 0
+        total_cache_read = 0
+        total_cache_create = 0
+        for s in sessions:
+            t = s.get("tokens") or {}
+            total_api_calls += t.get("API 호출", 0)
+            total_input += t.get("Input", 0)
+            total_output += t.get("Output", 0)
+            total_cache_read += t.get("Cache read", 0)
+            total_cache_create += t.get("Cache create", 0)
+
         result["summary"] = {
             "total_sessions": len(sessions),
             "total_duration_min": total_duration,
@@ -255,6 +301,14 @@ def parse_work_log(date_str: str) -> dict:
             "total_errors": total_errors,
             "has_tests": has_tests,
             "has_commits": has_commits,
+            "tokens": {
+                "api_calls": total_api_calls,
+                "input": total_input,
+                "output": total_output,
+                "cache_read": total_cache_read,
+                "cache_create": total_cache_create,
+                "total": total_input + total_output + total_cache_read + total_cache_create,
+            },
         }
 
     # Load goals
