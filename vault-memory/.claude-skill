@@ -1,6 +1,0 @@
-{
-  "name": "vault-memory",
-  "version": "1.0.0",
-  "description": "Obsidian vault 기반 메모리 관리",
-  "entrypoint": "SKILL.md"
-}
