@@ -37,8 +37,13 @@ install-cc: ## Install skills for Claude Code (symlink shared/ + cc/)
 	@echo ""
 	@echo "=== Rules symlink ==="
 	@mkdir -p $(RULES_DIR)
-	@for rule_file in $$(find shared/*/rules cc/*/rules -name '*.md' 2>/dev/null); do \
+	@seen=""; \
+	for rule_file in $$(find shared/*/rules cc/*/rules -name '*.md' 2>/dev/null); do \
 		name=$$(basename $$rule_file); \
+		case " $$seen " in \
+			*" $$name "*) echo "  ⚠ CONFLICT $$name — duplicate basename, skipped ($$rule_file)"; continue ;; \
+		esac; \
+		seen="$$seen $$name"; \
 		dest="$(RULES_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then rm "$$dest"; \
 		elif [ -e "$$dest" ]; then echo "  ⚠ SKIPPED $$name (exists, not symlink)"; continue; \
