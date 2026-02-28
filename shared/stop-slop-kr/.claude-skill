@@ -1,0 +1,6 @@
+{
+  "name": "stop-slop-kr",
+  "version": "1.0.0",
+  "description": "한국어 AI 말투 교정 — 번역체, 아첨, 상투어 제거",
+  "entrypoint": "SKILL.md"
+}
