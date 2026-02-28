@@ -1,0 +1,10 @@
+[
+	{
+		"name": "daily-newspaper",
+		"scope": "routine",
+		"schedule": "0 8 * * *",
+		"target": "daily-newspaper",
+		"reason": "cron: daily-newspaper",
+		"instructions": "매일 아침 뉴스 브리핑 HTML을 생성하세요. General/AI/Ronik/Community 4개 파이프라인으로 뉴스 수집 → 정리 → HTML 렌더링 → 텔레그램으로 텍스트 + HTML 파일 전송. 완료 후 routine complete 처리."
+	}
+]
