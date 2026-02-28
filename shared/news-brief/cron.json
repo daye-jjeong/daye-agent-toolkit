@@ -5,6 +5,6 @@
 		"schedule": "0 8 * * *",
 		"target": "daily-newspaper",
 		"reason": "cron: daily-newspaper",
-		"instructions": "매일 아침 뉴스 브리핑 HTML을 생성하세요. General/AI/Ronik/Community 4개 파이프라인으로 뉴스 수집 → 정리 → HTML 렌더링 → 텔레그램으로 텍스트 + HTML 파일 전송. 완료 후 routine complete 처리."
+		"instructions": "매일 아침 뉴스 브리핑 HTML을 생성하세요. General/AI/Ronik/Community 4개 파이프라인으로 뉴스 수집 → 정리 → HTML 렌더링 → brain/library/reports/에 저장. 완료 후 텔레그램 전송: `minions thread add --author {{agentId}} --mentions daye --tags alert --content \"...요약...\" --media <HTML파일 절대경로>` (--media 필수 — HTML 파일 첨부). routine complete 처리."
 	}
 ]
