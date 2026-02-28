@@ -8,6 +8,7 @@
 
 REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 SKILLS_DIR := $(HOME)/.claude/skills
+RULES_DIR := $(HOME)/.claude/rules
 
 # Discover skills from directory structure (parent dir names of SKILL.md)
 SHARED_DIRS := $(patsubst %/SKILL.md,%,$(wildcard shared/*/SKILL.md))
@@ -34,6 +35,18 @@ install-cc: ## Install skills for Claude Code (symlink shared/ + cc/)
 		echo "  ✓ $$name → $$skill_path"; \
 	done
 	@echo ""
+	@echo "=== Rules symlink ==="
+	@mkdir -p $(RULES_DIR)
+	@for rule_file in $$(find shared/*/rules cc/*/rules -name '*.md' 2>/dev/null); do \
+		name=$$(basename $$rule_file); \
+		dest="$(RULES_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then rm "$$dest"; \
+		elif [ -e "$$dest" ]; then echo "  ⚠ SKIPPED $$name (exists, not symlink)"; continue; \
+		fi; \
+		ln -s "$(REPO_DIR)/$$rule_file" "$$dest"; \
+		echo "  ✓ $$name → $$rule_file"; \
+	done
+	@echo ""
 	@echo "Done. $(words $(SHARED_DIRS)) shared + $(words $(CC_DIRS)) cc-only = $(words $(ALL_CC_DIRS)) skills installed."
 	@echo ""
 	@echo "Dashboard:"
@@ -48,6 +61,16 @@ clean: ## Remove CC symlinks created by install-cc
 		if [ -L "$$dest" ]; then \
 			rm "$$dest"; \
 			echo "  ✓ removed $$name"; \
+		fi; \
+	done
+	@echo ""
+	@echo "=== Removing rules symlinks ==="
+	@for rule_file in $$(find shared/*/rules cc/*/rules -name '*.md' 2>/dev/null); do \
+		name=$$(basename $$rule_file); \
+		dest="$(RULES_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then \
+			rm "$$dest"; \
+			echo "  ✓ removed rule $$name"; \
 		fi; \
 	done
 	@echo "Done."
@@ -68,6 +91,15 @@ status: ## Show current installation status
 		dest="$(SKILLS_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then echo "  ✓ $$name"; \
 		elif [ -d "$$dest" ]; then echo "  ⚠ $$name (dir, not symlink)"; \
+		else echo "  ✗ $$name (not installed)"; \
+		fi; \
+	done
+	@echo ""
+	@echo "=== Rules ==="
+	@for rule_file in $$(find shared/*/rules cc/*/rules -name '*.md' 2>/dev/null); do \
+		name=$$(basename $$rule_file); \
+		dest="$(RULES_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then echo "  ✓ $$name"; \
 		else echo "  ✗ $$name (not installed)"; \
 		fi; \
 	done
