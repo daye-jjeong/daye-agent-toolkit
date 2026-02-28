@@ -34,7 +34,7 @@ _infra/       — 빌드/설치/동기화 스크립트
 | work-digest | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
 | youtube-fetch | YouTube 메타데이터 + 자막 추출 |
 
-### Claude Code + OpenClaw 양쪽 (10개) — `shared/` 디렉토리
+### Claude Code + OpenClaw 양쪽 (11개) — `shared/` 디렉토리
 
 | 스킬 | 설명 |
 |------|------|
@@ -48,6 +48,7 @@ _infra/       — 빌드/설치/동기화 스크립트
 | news-brief | 키워드 뉴스 브리핑 |
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |
+| stop-slop-kr | 한국어 AI 말투 교정 — 번역체, 아첨, 상투어 제거 |
 
 ### OpenClaw 전용 (5개) — `openclaw/` 디렉토리
 
