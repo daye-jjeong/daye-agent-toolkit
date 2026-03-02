@@ -7,32 +7,35 @@
 
 | 환경 | 접근 방식 |
 |------|-----------|
-| Claude Code (로컬) | `make install-cc` → shared/ + cc/ 스킬 symlink |
+| Claude Code (로컬) | `make install-cc` → 스킬(`~/.claude/skills/`) + 규칙(`~/.claude/rules/`) symlink |
 | OpenClaw (로컬) | `ln -s <repo> ~/.openclaw/daye-agent-toolkit` → `minions init` 시 자동 등록 |
 | OpenClaw (별도 PC) | git clone + `make sync` → 양방향 동기화 |
 
 ## 디렉토리 구조
 
 ```
-cc/           — Claude Code 전용 스킬
+cc/           — Claude Code 전용 스킬 + 규칙
 shared/       — CC + OpenClaw 양쪽 스킬
 openclaw/     — OpenClaw 전용 스킬
+docs/plans/   — 디자인 문서 + 구현 plan
 _infra/       — 빌드/설치/동기화 스크립트
+.claude/rules/ — 프로젝트 레벨 규칙 오버라이드
 ```
 
 ## 스킬 분류
 
-### Claude Code 전용 (7개) — `cc/` 디렉토리
+### Claude Code 전용 (7개 스킬 + 1개 규칙묶음) — `cc/` 디렉토리
 
-| 스킬 | 설명 |
-|------|------|
-| correction-memory | 교정 기억 — 실수 반복 방지 3계층 메모리 |
-| mermaid-diagrams | Mermaid 다이어그램 생성 가이드 |
-| professional-communication | 업무 커뮤니케이션 가이드 |
-| reddit-fetch | Reddit 포스트/댓글 조회 + 검색 |
-| skill-forge | SKILL.md 생성/최적화/감사/검증 |
-| work-digest | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
-| youtube-fetch | YouTube 메타데이터 + 자막 추출 |
+| 이름 | 유형 | 설명 |
+|------|------|------|
+| correction-memory | 스킬 | 교정 기억 — 실수 반복 방지 3계층 메모리 |
+| global-rules | 규칙 | 글로벌 규칙 묶음 — 세션 자동 로드 (SKILL.md 없음) |
+| mermaid-diagrams | 스킬 | Mermaid 다이어그램 생성 가이드 |
+| professional-communication | 스킬 | 업무 커뮤니케이션 가이드 |
+| reddit-fetch | 스킬 | Reddit 포스트/댓글 조회 + 검색 |
+| skill-forge | 스킬 | SKILL.md 생성/최적화/감사/검증 |
+| work-digest | 스킬 | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
+| youtube-fetch | 스킬 | YouTube 메타데이터 + 자막 추출 |
 
 ### Claude Code + OpenClaw 양쪽 (11개) — `shared/` 디렉토리
 
@@ -66,11 +69,31 @@ _infra/       — 빌드/설치/동기화 스크립트
 `plugins`로 외부 플러그인 선언.
 OpenClaw enable/disable은 `make install-oc`이 `~/.openclaw/openclaw.json`에 설정.
 
+## 규칙 시스템
+
+스킬과 별도로, `rules/*.md` 파일은 모든 CC 세션에 자동 로드되는 행동 규칙.
+
+### 규칙 소스
+
+| 경로 | 설명 |
+|------|------|
+| `cc/global-rules/rules/` | 프로젝트 무관 글로벌 규칙 (6개) |
+| `cc/correction-memory/rules/` | 교정 프로토콜 자동 적용 |
+| `shared/stop-slop-kr/rules/` | 한국어 톤 규칙 |
+| `.claude/rules/` | 프로젝트 레벨 오버라이드 (git-tracked) |
+
+### 동작
+
+- `make install-cc` → `cc/*/rules/*.md`, `shared/*/rules/*.md`를 `~/.claude/rules/`에 심링크
+- 동일 basename 충돌 시 CONFLICT 경고 + skip
+- `.claude/rules/`는 프로젝트별 오버라이드 (예: worktree 명령어 변경)
+
 ## 스킬 포맷
 
 - `<category>/<skill-name>/SKILL.md` — 스킬 본문 (공통, 150줄 이내)
 - `<category>/<skill-name>/references/` — 상세 문서 (SKILL.md에서 포인터 참조)
 - `<category>/<skill-name>/.claude-skill` — Claude Code 메타데이터 (cc/, shared/만)
+- `<category>/<skill-name>/rules/` — 세션 자동 로드 규칙 (`~/.claude/rules/`에 심링크)
 
 ### SKILL.md frontmatter 필드
 
