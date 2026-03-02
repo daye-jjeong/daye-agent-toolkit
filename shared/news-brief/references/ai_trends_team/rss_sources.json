@@ -11,7 +11,11 @@
       "url": "https://www.anthropic.com/news",
       "category": "Models",
       "priority": "high",
-      "note": "No RSS feed, use web_fetch"
+      "note": "No RSS feed, use web_fetch",
+      "scrape": {
+        "link_pattern": "/news/",
+        "base_url": "https://www.anthropic.com"
+      }
     },
     {
       "name": "Google AI Blog",

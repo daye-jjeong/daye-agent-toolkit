@@ -4,6 +4,7 @@
 # Models & Labs
 GPT
 Claude
+Claude Code
 Gemini
 LLM
 OpenAI

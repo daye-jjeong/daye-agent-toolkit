@@ -38,6 +38,7 @@ Google
 # tier:normal
 # AI 모델/브랜드 (빈번하므로 조합 필요)
 Claude
+Claude Code
 Gemini
 ChatGPT
 Copilot
