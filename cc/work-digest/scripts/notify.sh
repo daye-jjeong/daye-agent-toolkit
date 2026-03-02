@@ -22,6 +22,22 @@ SID="$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | cut -c1-
 [ -z "$SID" ] && SID="manual"
 TRANSCRIPT="$(echo "$INPUT" | grep -o '"transcript_path":"[^"]*"' | cut -d'"' -f4)"
 
+# 중복 알림 방지: 같은 세션에서 30초 이내 재알림 스킵
+DEDUP_DIR="/tmp/claude-notify-dedup"
+mkdir -p "$DEDUP_DIR"
+DEDUP_FILE="${DEDUP_DIR}/${SID}"
+NOW=$(date +%s)
+if [ -f "$DEDUP_FILE" ]; then
+  LAST=$(cat "$DEDUP_FILE")
+  DIFF=$((NOW - LAST))
+  if [ "$DIFF" -lt 30 ]; then
+    exit 0
+  fi
+fi
+echo "$NOW" > "$DEDUP_FILE"
+# 오래된 dedup 파일 정리 (1시간+)
+find "$DEDUP_DIR" -type f -mmin +60 -delete 2>/dev/null || true
+
 # transcript에서 마지막 텍스트 응답 추출 (100자 제한)
 SUMMARY=""
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
