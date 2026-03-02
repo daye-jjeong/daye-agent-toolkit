@@ -14,11 +14,13 @@ Usage:
 
 from __future__ import annotations
 
+import html
 import os
 import re
 import sys
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -26,6 +28,16 @@ from kst_utils import parse_pub_date
 
 _TIMEOUT = 10
 _UA = "Mozilla/5.0 (compatible; news-brief/1.0)"
+_WS_RE = re.compile(r"\s+")
+_MS_RE = re.compile(r"\.\d+Z$")
+# Embedded JSON date extraction (Next.js __next_f etc.)
+# Covers both raw ("key":"val") and escaped (\"key\":\"val\") JSON
+_JSON_DATE_RE = re.compile(
+    r'\\?"(?:publishedOn|publishedAt|published_at|datePublished)\\?"'
+    r'\s*:\s*\\?"(\d{4}-\d{2}-\d{2}T[^"\\]+)\\?"'
+)
+# Slug field in Sanity/Next.js JSON (e.g. "current":"some-slug")
+_JSON_SLUG_RE = re.compile(r'\\?"current\\?"\s*:\s*\\?"([^"\\]+)\\?"')
 
 # Date pattern: "Feb 27, 2026" or "February 27, 2026"
 _DATE_RE = re.compile(
@@ -43,12 +55,10 @@ _CATEGORY_RE = re.compile(
 def _clean_title(raw: str) -> str:
     """Clean extracted title by stripping dates, categories, and descriptions."""
     t = raw.strip()
-    # Remove HTML entities
-    t = t.replace("&#x27;", "'").replace("&amp;", "&").replace("&quot;", '"')
+    t = html.unescape(t)
     # Strip date patterns
     t = _DATE_RE.sub("", t)
-    # Collapse whitespace before checking categories
-    t = re.sub(r"\s+", " ", t).strip()
+    t = _WS_RE.sub(" ", t).strip()
     # Strip category label only at the START (not mid-title)
     m = _CATEGORY_RE.match(t)
     if m:
@@ -103,24 +113,17 @@ def _extract_dates_from_json(html: str) -> dict[str, str]:
     Returns {slug: iso_date_string} mapping.
     """
     dates: dict[str, str] = {}
-    # Pattern covers both raw ("key":"val") and escaped (\"key\":\"val\") JSON
-    date_re = re.compile(
-        r'\\?"(?:publishedOn|publishedAt|published_at|datePublished)\\?"'
-        r'\s*:\s*\\?"(\d{4}-\d{2}-\d{2}T[^"\\]+)\\?"'
-    )
-    slug_re = re.compile(r'\\?"current\\?"\s*:\s*\\?"([^"\\]+)\\?"')
-
-    for m in date_re.finditer(html):
+    for m in _JSON_DATE_RE.finditer(html):
         date_str = m.group(1)
         # Anthropic: publishedOn comes BEFORE slug — look forward
         after = html[m.end() : m.end() + 300]
-        slug_match = slug_re.search(after)
+        slug_match = _JSON_SLUG_RE.search(after)
         if slug_match:
             dates[slug_match.group(1)] = date_str
             continue
         # Fallback: look backward for slug
         before = html[max(0, m.start() - 500) : m.start()]
-        slug_match = slug_re.search(before)
+        slug_match = _JSON_SLUG_RE.search(before)
         if slug_match:
             dates[slug_match.group(1)] = date_str
     return dates
@@ -146,7 +149,6 @@ def fetch_entries(
         (same keys as feedparser entries)
     """
     link_pattern = scrape_config.get("link_pattern", "/")
-    base_url = scrape_config.get("base_url", "").rstrip("/")
 
     try:
         req = Request(url, headers={"User-Agent": _UA})
@@ -185,20 +187,13 @@ def fetch_entries(
 
     for href, title in best_titles.items():
 
-        # Resolve relative URL
-        if href.startswith("/"):
-            full_url = f"{base_url}{href}"
-        elif href.startswith("http"):
-            full_url = href
-        else:
-            full_url = f"{base_url}/{href}"
+        full_url = urljoin(url, href)
 
         # Try to find date
         slug = _slug_from_path(href)
         raw_date = date_map.get(slug)
         if raw_date:
-            # Strip milliseconds (.000Z → Z) for parse_pub_date compatibility
-            raw_date = re.sub(r"\.\d+Z$", "Z", raw_date)
+            raw_date = _MS_RE.sub("Z", raw_date)
         dt = parse_pub_date(raw_date) if raw_date else None
 
         # Time filter

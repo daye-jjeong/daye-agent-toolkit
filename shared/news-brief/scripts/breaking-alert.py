@@ -184,11 +184,7 @@ def fetch_and_score(
         # Fetch entries: HTML scraper for non-RSS, feedparser for RSS
         scrape_cfg = src.get("scrape")
         if scrape_cfg:
-            raw_entries = [
-                {"title": e.get("title", ""), "link": e.get("link", ""),
-                 "published": e.get("published")}
-                for e in fetch_html_entries(url, scrape_cfg, since_hours)
-            ]
+            raw_entries = fetch_html_entries(url, scrape_cfg, since_hours)
         else:
             try:
                 d = feedparser.parse(url)
