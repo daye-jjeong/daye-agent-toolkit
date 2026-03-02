@@ -439,8 +439,11 @@ def dedupe(items: list[Item], threshold: float = 0.86) -> list[Item]:
     return kept
 
 
-def fetch_web_items(sources_path: str, keywords: list[str], since_hours: float) -> list[Item]:
-    """Fetch items from non-RSS sources (those with 'scrape' config) in rss_sources.json."""
+def fetch_web_items(sources_path: str, since_hours: float) -> list[Item]:
+    """Fetch items from non-RSS sources (those with 'scrape' config) in rss_sources.json.
+
+    Returns unfiltered items — keyword/time filtering is done by the main pipeline.
+    """
     with open(sources_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     sources = data.get("sources", data) if isinstance(data, dict) else data
@@ -473,8 +476,6 @@ def fetch_web_items(sources_path: str, keywords: list[str], since_hours: float) 
                 source_tier=tier,
             ))
 
-    if keywords:
-        items = filter_by_keywords(items, keywords)
     return items
 
 
@@ -499,10 +500,11 @@ def main():
     keywords = load_list(args.keywords) if args.keywords else []
 
     items = fetch_items(feeds)
-    # Merge non-RSS web sources
+    # Merge non-RSS web sources (html_source handles its own time filter;
+    # keyword filtering is applied uniformly below with RSS items)
     if args.web_sources:
         since = args.since if args.since > 0 else 24
-        web_items = fetch_web_items(args.web_sources, keywords, since)
+        web_items = fetch_web_items(args.web_sources, since)
         items.extend(web_items)
     # Filter noise (부고, 인사, 광고 등)
     items = [it for it in items if not NOISE_PATTERNS.search(it.title)]

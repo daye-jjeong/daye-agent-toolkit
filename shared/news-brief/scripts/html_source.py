@@ -14,7 +14,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
@@ -50,8 +49,10 @@ def _clean_title(raw: str) -> str:
     t = _DATE_RE.sub("", t)
     # Collapse whitespace before checking categories
     t = re.sub(r"\s+", " ", t).strip()
-    # Strip category labels only at the START (not mid-title)
-    t = _CATEGORY_RE.sub("", t, count=1).strip()
+    # Strip category label only at the START (not mid-title)
+    m = _CATEGORY_RE.match(t)
+    if m:
+        t = t[m.end():].strip()
     # If too long, likely has description appended — truncate at sentence boundary
     if len(t) > 100:
         # Look for sentence break: period+space, or common continuation signals
@@ -172,7 +173,6 @@ def fetch_entries(
     # Build entries
     now = datetime.now(timezone.utc)
     entries: list[dict] = []
-    seen_hrefs: set[str] = set()
 
     # Deduplicate: prefer shorter (cleaner) title for duplicate hrefs
     best_titles: dict[str, str] = {}
@@ -184,9 +184,6 @@ def fetch_entries(
             best_titles[href] = title
 
     for href, title in best_titles.items():
-        if href in seen_hrefs:
-            continue
-        seen_hrefs.add(href)
 
         # Resolve relative URL
         if href.startswith("/"):
