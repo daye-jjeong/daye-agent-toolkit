@@ -108,8 +108,13 @@ worktree 생성 후 바로 작업:
 - plan이 있으면 plan 대비 누락 체크 포함
 - Critical/Important 이슈 수정 후 커밋
 
-### 7. Merge
-- 리뷰 이슈 수정 완료 후, 사용자에게 merge 제안
+### 7. Simplify
+- 리뷰 이슈 수정 후 `simplify` 스킬 실행
+- 3개 병렬 에이전트(Code Reuse, Code Quality, Efficiency)가 diff를 분석하고 직접 수정
+- 수정사항이 있으면 커밋
+
+### 8. Merge
+- simplify 완료 후, 사용자에게 merge 제안
 - 사용자가 OK하면 merge 절차 실행 (rebase → dry-run → merge)
 - 사용자가 요청하기 전에 자동 merge하지 않음
 
@@ -158,10 +163,10 @@ M과 동일한 구조. 다음만 다름:
 [S] worktree → 직접 코딩 → 테스트 실행 → merge
 
 [M] worktree → brainstorming → (plan) → 메인 구현 (TDD or 수동검증)
-    → 자기 검증 → 완료 리뷰 (1 서브에이전트) → rebase → merge
+    → 자기 검증 → 완료 리뷰 (1 서브에이전트) → simplify → rebase → merge
 
 [L] worktree → brainstorming → plan → 메인 구현 (+ Ralph 평가)
-    → 자기 검증 → 완료 리뷰 → rebase → merge
+    → 자기 검증 → 완료 리뷰 → simplify → rebase → merge
 
 [핸드오프] 이전: WIP 커밋 + plan 업데이트 → 새 세션: 자동 감지 → 이어서
 ```
