@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import feedparser
 
+from html_source import fetch_entries as fetch_html_entries
 from kst_utils import format_pub_kst, parse_pub_date
 
 # Low-signal patterns filtered from general news
@@ -438,6 +439,45 @@ def dedupe(items: list[Item], threshold: float = 0.86) -> list[Item]:
     return kept
 
 
+def fetch_web_items(sources_path: str, keywords: list[str], since_hours: float) -> list[Item]:
+    """Fetch items from non-RSS sources (those with 'scrape' config) in rss_sources.json."""
+    with open(sources_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    sources = data.get("sources", data) if isinstance(data, dict) else data
+
+    items: list[Item] = []
+    for src in sources:
+        scrape_cfg = src.get("scrape")
+        if not scrape_cfg:
+            continue
+        url = src.get("url", "")
+        if not url:
+            continue
+
+        entries = fetch_html_entries(url, scrape_cfg, since_hours)
+        tier = detect_source_tier(url)
+        src_domain = domain(url) or src.get("name", url)
+
+        for e in entries:
+            title = e.get("title", "").strip()
+            link = e.get("link", "").strip()
+            if not title or not link:
+                continue
+            items.append(Item(
+                title=title,
+                link=link,
+                source=src_domain,
+                published=e.get("published"),
+                description=e.get("summary", ""),
+                tag="",
+                source_tier=tier,
+            ))
+
+    if keywords:
+        items = filter_by_keywords(items, keywords)
+    return items
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--feeds", required=True, help="Path to rss_feeds.txt")
@@ -451,12 +491,19 @@ def main():
                     help="Disable scoring/ranking, use legacy dedupe + time order")
     ap.add_argument("--output-format", choices=["text", "json"], default="text",
                     help="Output format: text (Telegram) or json (for compose-newspaper.py)")
+    ap.add_argument("--web-sources",
+                    help="rss_sources.json path — non-RSS sources with 'scrape' config")
     args = ap.parse_args()
 
     feeds = load_list(args.feeds)
     keywords = load_list(args.keywords) if args.keywords else []
 
     items = fetch_items(feeds)
+    # Merge non-RSS web sources
+    if args.web_sources:
+        since = args.since if args.since > 0 else 24
+        web_items = fetch_web_items(args.web_sources, keywords, since)
+        items.extend(web_items)
     # Filter noise (부고, 인사, 광고 등)
     items = [it for it in items if not NOISE_PATTERNS.search(it.title)]
     if args.since > 0:
