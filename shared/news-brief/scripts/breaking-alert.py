@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import feedparser
 
+from html_source import fetch_entries as fetch_html_entries
 from kst_utils import format_kst, parse_pub_date
 
 CACHE_DIR = Path(os.path.expanduser("~/.cache/news-brief"))
@@ -180,14 +181,29 @@ def fetch_and_score(
         priority = src.get("priority", "medium")
         source_name = src.get("name", url)
 
-        try:
-            d = feedparser.parse(url)
-        except Exception:
-            continue
+        # Fetch entries: HTML scraper for non-RSS, feedparser for RSS
+        scrape_cfg = src.get("scrape")
+        if scrape_cfg:
+            raw_entries = [
+                {"title": e.get("title", ""), "link": e.get("link", ""),
+                 "published": e.get("published")}
+                for e in fetch_html_entries(url, scrape_cfg, since_hours)
+            ]
+        else:
+            try:
+                d = feedparser.parse(url)
+            except Exception:
+                continue
+            raw_entries = [
+                {"title": (e.get("title") or "").strip(),
+                 "link": (e.get("link") or "").strip(),
+                 "published": e.get("published") or e.get("updated")}
+                for e in d.entries[:20]
+            ]
 
-        for e in d.entries[:20]:
-            title = (e.get("title") or "").strip()
-            link = (e.get("link") or "").strip()
+        for entry in raw_entries:
+            title = entry["title"]
+            link = entry["link"]
             if not title or not link:
                 continue
 
@@ -196,8 +212,7 @@ def fetch_and_score(
                 continue
 
             # Time filter
-            raw_date = e.get("published") or e.get("updated")
-            dt = parse_pub_date(raw_date)
+            dt = parse_pub_date(entry["published"])
             if dt and since_hours > 0:
                 age_hours = (now - dt).total_seconds() / 3600
                 if age_hours > since_hours:
