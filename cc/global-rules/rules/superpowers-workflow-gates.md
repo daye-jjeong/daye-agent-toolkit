@@ -26,14 +26,16 @@
 - 유일한 예외: read-only 탐색/리서치
 
 ### Worktree 생성 방법 (우선순위)
-1. 프로젝트에 `worktree.sh`가 있으면 → `worktree.sh create <name> "desc"`
-2. 없으면 → `git worktree add .claude/worktrees/<name> -b <name>`
+1. 프로젝트에 Git Flow 스킬(`.claude/skills/gitflow/`)이 있으면 → 해당 스킬의 브랜치 네이밍 규칙 적용
+2. 프로젝트에 `worktree.sh`가 있으면 → `worktree.sh create <name> "desc"`
+3. 없으면 → `git worktree add .claude/worktrees/<name> -b <name>`
 
-### Worktree merge 방법 (우선순위)
-1. 프로젝트에 `worktree.sh`가 있으면 → `worktree.sh merge <name>`
-2. 없으면 → 아래 merge 절차 참조
+### 작업 완료 방법 (우선순위)
+1. 프로젝트에 Git Flow 스킬(`.claude/skills/gitflow/`)이 있으면 → 해당 스킬의 Finish 절차 따름 (PR 기반)
+2. 프로젝트에 `worktree.sh`가 있으면 → `worktree.sh merge <name>`
+3. 없으면 → `finishing-a-development-branch` 스킬 또는 아래 merge 절차
 
-### Merge 절차 (공통)
+### Merge 절차 (Git Flow 스킬이 없는 프로젝트 전용)
 1. **먼저 rebase:** `git rebase main` — 다른 worktree가 먼저 merge한 변경사항 반영
 2. 충돌 발생 시 → 사용자에게 알리고 수동 해결 안내 (자동 해결 시도하지 않음)
 3. rebase 성공 시 → dry-run으로 확인 → 사용자 OK → merge
@@ -45,8 +47,8 @@
 
 | 규모 | 기본 기준 | 적용 워크플로우 |
 |------|-----------|-----------------|
-| **S** | 1-2 파일, 단순 수정 | worktree → 직접 코딩 → 테스트 → merge |
-| **M** | 3-5 파일 | worktree → brainstorming → (plan) → 구현 → 검증 → 리뷰 → merge |
+| **S** | 1-2 파일, 단순 수정 | worktree → 직접 코딩 → 테스트 → 완료 |
+| **M** | 3-5 파일 | worktree → brainstorming → (plan) → 구현 → 검증 → 리뷰 → 완료 |
 | **L** | 6+ 파일 | M + plan 필수 + Ralph Loop 평가 |
 
 **복잡도 보정:** 파일 수가 적어도 다음에 해당하면 상위 티어 적용:
@@ -66,8 +68,8 @@ worktree 생성 후 바로 작업:
 - 디버깅 (`systematic-debugging` 사용)
 
 **완료 전 최소 게이트:**
-- 테스트가 있는 프로젝트 → 관련 테스트 실행, 통과 확인 후 merge
-- 테스트가 없는 프로젝트 → 변경 영향 범위 확인 후 merge
+- 테스트가 있는 프로젝트 → 관련 테스트 실행, 통과 확인 후 완료 절차
+- 테스트가 없는 프로젝트 → 변경 영향 범위 확인 후 완료 절차
 
 ---
 
@@ -113,10 +115,10 @@ worktree 생성 후 바로 작업:
 - 3개 병렬 에이전트(Code Reuse, Code Quality, Efficiency)가 diff를 분석하고 직접 수정
 - 수정사항이 있으면 커밋
 
-### 8. Merge
-- simplify 완료 후, 사용자에게 merge 제안
-- 사용자가 OK하면 merge 절차 실행 (rebase → dry-run → merge)
-- 사용자가 요청하기 전에 자동 merge하지 않음
+### 8. 완료
+- simplify 완료 후, 사용자에게 완료 제안
+- 사용자가 OK하면 **작업 완료 방법** (위 우선순위) 따라 실행
+- 사용자가 요청하기 전에 자동 완료하지 않음
 
 ---
 
@@ -160,13 +162,13 @@ M과 동일한 구조. 다음만 다름:
 ```
 [세션 시작] git worktree list → 진행중 작업 있으면 이어하기 제안
 
-[S] worktree → 직접 코딩 → 테스트 실행 → merge
+[S] worktree → 직접 코딩 → 테스트 실행 → 완료 (프로젝트 스킬 우선)
 
 [M] worktree → brainstorming → (plan) → 메인 구현 (TDD or 수동검증)
-    → 자기 검증 → 완료 리뷰 (1 서브에이전트) → simplify → rebase → merge
+    → 자기 검증 → 완료 리뷰 (1 서브에이전트) → simplify → 완료
 
 [L] worktree → brainstorming → plan → 메인 구현 (+ Ralph 평가)
-    → 자기 검증 → 완료 리뷰 → simplify → rebase → merge
+    → 자기 검증 → 완료 리뷰 → simplify → 완료
 
 [핸드오프] 이전: WIP 커밋 + plan 업데이트 → 새 세션: 자동 감지 → 이어서
 ```
