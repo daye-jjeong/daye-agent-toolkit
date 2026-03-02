@@ -24,7 +24,12 @@ python3 news_brief.py --feeds ../references/community_feeds.txt \
 # 4. Weather
 python3 fetch_weather.py --output /tmp/weather.json
 
-# 5. AI Trends — multi-agent team 실행 → /tmp/ai_trends_data.json
+# 5. AI Trends (자동 수집 + non-RSS 소스 포함)
+python3 news_brief.py --feeds ../references/ai_trends_feeds.txt \
+  --keywords ../references/ai_trends_keywords.txt \
+  --web-sources ../references/ai_trends_team/rss_sources.json \
+  --max-items 10 --since 24 --output-format json > /tmp/ai_trends_data.json
+# 또는 multi-agent team 실행 → /tmp/ai_trends_data.json
 
 # 6. Compose
 python3 compose-newspaper.py \

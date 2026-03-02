@@ -121,6 +121,7 @@ python3 news_brief.py --feeds ../references/general_feeds.txt \
 # Pipeline 2 — AI Trends (자동 수집)
 python3 news_brief.py --feeds ../references/ai_trends_feeds.txt \
   --keywords ../references/ai_trends_keywords.txt \
+  --web-sources ../references/ai_trends_team/rss_sources.json \
   --max-items 10 --since 24 --output-format json > /tmp/ai_trends.json
 
 # Pipeline 3 — Ronik
@@ -181,7 +182,8 @@ python3 breaking-alert.py --sources ../references/ai_trends_team/rss_sources.jso
 
 | Script | Purpose | Key Args |
 |--------|---------|----------|
-| `news_brief.py` | RSS fetch + cluster + score + rank | `--feeds`, `--keywords`, `--output-format json`, `--no-rank` |
+| `news_brief.py` | RSS fetch + cluster + score + rank | `--feeds`, `--keywords`, `--web-sources`, `--output-format json`, `--no-rank` |
+| `html_source.py` | Non-RSS 블로그 HTML 스크래핑 | (library, import only) |
 | `kst_utils.py` | KST 시간 변환 유틸 | (library, import only) |
 | `compose-newspaper.py` | 4-input 파이프라인 조합 | `--general`, `--ai-trends`, `--ronik`, `--community`, `--output` |
 | `enrich.py` | 영어→한국어 번역 + 요약(why) 추가 | `extract --input`, `apply --input --enrichments` |
