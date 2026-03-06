@@ -19,6 +19,7 @@ Usage:
 
 Enrichment JSON format (agent generates this):
 {
+  "highlight": "전체 기사를 종합한 오늘의 핵심 2-3문장",
   "0.0": {"headline": "한국어 제목", "summary": "한국어 요약", "why": "왜 중요한가"},
   "0.1": {"headline": "...", "summary": "...", "why": "..."},
   ...
@@ -97,21 +98,35 @@ def extract(data: dict) -> dict:
         sec.get("title", "") for sec in data.get("sections", [])
     ]
 
+    # Collect all headlines for highlight generation context
+    all_headlines: list[str] = []
+    for sec in data.get("sections", []):
+        for item in sec.get("items", []):
+            all_headlines.append(item.get("headline", ""))
+
     return {
         "total_items": sum(
             len(sec.get("items", [])) for sec in data.get("sections", [])
         ),
         "items_needing_enrichment": len(items_to_enrich),
         "section_titles": section_titles,
+        "all_headlines": all_headlines,
         "items": items_to_enrich,
         "instructions": (
-            "각 항목에 대해 다음을 생성해주세요:\n"
+            "## 1. 각 항목 enrichment\n"
             "- translate_headline: 한국어 제목 번역\n"
             "- rewrite_summary: 한국어 1-2문장 요약 "
             "(RSS 원문이 아닌 기사 핵심 내용)\n"
             "- add_why: '왜 중요한가' 1문장 (비즈니스/기술/사회 관점, '→' 접두사 붙이지 말 것)\n\n"
-            "출력 형식 (JSON):\n"
-            '{"0.0": {"headline": "...", "summary": "...", "why": "..."}, ...}'
+            "## 2. highlight (필수)\n"
+            "전체 기사를 종합해서 '오늘의 핵심' 2-3문장을 작성하세요.\n"
+            "- 섹션 카테고리 나열 금지 ('AI·테크 트렌드와 글로벌 뉴스 종합' 같은 건 의미 없음)\n"
+            "- 오늘 가장 중요한 흐름 2-3개를 구체적으로, 서로 연결해서 서술\n"
+            "- 예: '이란 전쟁 여파로 환율 1,480원·코스피 1%↓ — 금융시장 불안 지속. "
+            "OpenAI GPT-5.4 공개로 AI 경쟁 격화.'\n\n"
+            "## 출력 형식 (JSON)\n"
+            '{"highlight": "오늘의 핵심 2-3문장", '
+            '"0.0": {"headline": "...", "summary": "...", "why": "..."}, ...}'
         ),
     }
 
@@ -119,7 +134,14 @@ def extract(data: dict) -> dict:
 def apply(data: dict, enrichments: dict) -> dict:
     """Apply enrichment data back into composed JSON."""
     applied = 0
+
+    # Apply highlight if provided (overrides compose --highlight)
+    if "highlight" in enrichments and enrichments["highlight"]:
+        data["highlight"] = enrichments["highlight"]
+
     for key, values in enrichments.items():
+        if key == "highlight":
+            continue
         parts = key.split(".")
         if len(parts) != 2:
             continue
