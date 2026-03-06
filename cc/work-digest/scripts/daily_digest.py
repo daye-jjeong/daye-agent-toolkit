@@ -461,15 +461,12 @@ def send_telegram(message: str) -> None:
     """Send message to Telegram via Bot API (stdlib only, no requests)."""
     conf = _load_telegram_conf()
     bot_token = conf.get("BOT_TOKEN", "")
-    chat_id = conf.get("CHAT_ID", "")
-    thread_id = conf.get("THREAD_DAILY", "")
+    chat_id = conf.get("CHAT_ID_DAILY") or conf.get("CHAT_ID", "")
     if not bot_token or not chat_id:
         print("[daily_digest] telegram.conf 없음 — 전송 스킵", file=sys.stderr)
         return
 
     payload = {"chat_id": chat_id, "text": message}
-    if thread_id:
-        payload["message_thread_id"] = thread_id
 
     data = urllib.parse.urlencode(payload).encode("utf-8")
     req = urllib.request.Request(

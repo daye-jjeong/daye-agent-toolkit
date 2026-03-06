@@ -295,15 +295,12 @@ def analyze_with_llm(dates: list[str], agg: dict) -> str | None:
 def send_telegram(message: str):
     conf = _load_telegram_conf()
     bot_token = conf.get("BOT_TOKEN", "")
-    chat_id = conf.get("CHAT_ID", "")
-    thread_id = conf.get("THREAD_WEEKLY", "")
+    chat_id = conf.get("CHAT_ID_WEEKLY") or conf.get("CHAT_ID", "")
     if not bot_token or not chat_id:
         print("[weekly_digest] telegram.conf 없음 — 전송 스킵", file=sys.stderr)
         return
 
     payload = {"chat_id": chat_id, "text": message}
-    if thread_id:
-        payload["message_thread_id"] = thread_id
 
     req = urllib.request.Request(
         f"https://api.telegram.org/bot{bot_token}/sendMessage",

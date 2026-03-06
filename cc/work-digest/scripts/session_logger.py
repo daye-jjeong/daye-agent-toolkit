@@ -405,8 +405,7 @@ def send_session_telegram(data: dict, repo: str, duration_min: int | None):
     """세션 종료 시 요약을 텔레그램으로 전송."""
     conf = _load_telegram_conf()
     bot_token = conf.get("BOT_TOKEN", "")
-    chat_id = conf.get("CHAT_ID", "")
-    thread_id = conf.get("THREAD_SESSION", "")
+    chat_id = conf.get("CHAT_ID_SESSION") or conf.get("CHAT_ID", "")
     if not bot_token or not chat_id:
         return
 
@@ -426,9 +425,6 @@ def send_session_telegram(data: dict, repo: str, duration_min: int | None):
         msg = msg[:4090] + "..."
 
     payload = {"chat_id": chat_id, "text": msg}
-    if thread_id:
-        payload["message_thread_id"] = thread_id
-
     req = urllib.request.Request(
         f"https://api.telegram.org/bot{bot_token}/sendMessage",
         data=urllib.parse.urlencode(payload).encode("utf-8"),

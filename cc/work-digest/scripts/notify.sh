@@ -13,8 +13,8 @@ CONF_FILE="$(dirname "$SCRIPT_DIR")/telegram.conf"
 
 # telegram.conf 읽기
 CHAT_ID=""
+CHAT_ID_SESSION=""
 TOKEN=""
-THREAD_SESSION=""
 if [ -f "$CONF_FILE" ]; then
   while IFS='=' read -r key value; do
     key="$(echo "$key" | xargs)"
@@ -22,11 +22,13 @@ if [ -f "$CONF_FILE" ]; then
     case "$key" in
       BOT_TOKEN) TOKEN="$value" ;;
       CHAT_ID) CHAT_ID="$value" ;;
-      THREAD_SESSION) THREAD_SESSION="$value" ;;
+      CHAT_ID_SESSION) CHAT_ID_SESSION="$value" ;;
     esac
   done < <(grep -v '^#' "$CONF_FILE" | grep '=')
 fi
 
+# 세션 채널 우선, fallback 기본 CHAT_ID
+[ -n "$CHAT_ID_SESSION" ] && CHAT_ID="$CHAT_ID_SESSION"
 [ -z "$TOKEN" ] || [ -z "$CHAT_ID" ] && exit 0
 
 # stdin JSON 읽기 (hook에서 전달)
@@ -73,11 +75,10 @@ ${MSG}
 📂 \`${PROJECT}\` (\`${BRANCH}\`)"
 
 # 백그라운드 전송 — hook 블로킹 최소화
-CURL_DATA=(-d chat_id="$CHAT_ID" -d text="$TEXT" -d parse_mode="Markdown")
-[ -n "$THREAD_SESSION" ] && CURL_DATA+=(-d message_thread_id="$THREAD_SESSION")
-
 curl -sf -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-  "${CURL_DATA[@]}" \
+  -d chat_id="$CHAT_ID" \
+  -d text="$TEXT" \
+  -d parse_mode="Markdown" \
   >/dev/null 2>&1 &
 
 exit 0
