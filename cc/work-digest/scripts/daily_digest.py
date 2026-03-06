@@ -180,52 +180,6 @@ def build_repos_section(summary: dict, sessions: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def build_goals_section(goals: dict | None) -> str | None:
-    """Build goals section. Returns None if no goals data."""
-    if goals is None:
-        return None
-
-    items: list[dict] = []
-
-    # top3 format: list of {title, status} or {name, status}
-    if "top3" in goals and isinstance(goals["top3"], list):
-        for item in goals["top3"]:
-            if isinstance(item, dict):
-                title = item.get("title") or item.get("name", "")
-                status = item.get("status", "todo")
-                items.append({"title": title, "status": status})
-
-    # checklist format: list of {title, done} or {name, done}
-    if "checklist" in goals and isinstance(goals["checklist"], list):
-        for item in goals["checklist"]:
-            if isinstance(item, dict):
-                title = item.get("title") or item.get("name", "")
-                done = item.get("done", False)
-                status = item.get("status", "done" if done else "todo")
-                items.append({"title": title, "status": status})
-
-    if not items:
-        return None
-
-    status_icons = {
-        "done": "\u2705",
-        "in_progress": "\u26a0\ufe0f",
-        "todo": "\u274c",
-    }
-
-    lines = ["\U0001f3af 목표 대비:"]
-    for item in items:
-        icon = status_icons.get(item["status"], "\u274c")
-        title = item["title"]
-        status_label = {
-            "done": "완료",
-            "in_progress": "진행 중",
-            "todo": "작업 흔적 없음",
-        }.get(item["status"], item["status"])
-        lines.append(f"  {icon} {title} \u2192 {status_label}")
-
-    return "\n".join(lines)
-
 
 def build_pattern_feedback(summary: dict) -> str:
     """Build rule-based pattern feedback section."""
@@ -276,8 +230,6 @@ def build_message(data: dict) -> str:
     date_str = data["date"]
     sessions = data.get("sessions", [])
     summary = data.get("summary")
-    goals = data.get("goals")
-
     # Empty day
     if not sessions or summary is None:
         return build_empty_message(date_str)
@@ -297,11 +249,6 @@ def build_message(data: dict) -> str:
 
     # Repos
     sections.append(build_repos_section(summary, sessions))
-
-    # Goals (optional)
-    goals_section = build_goals_section(goals)
-    if goals_section:
-        sections.append(goals_section)
 
     # Pattern feedback
     feedback = build_pattern_feedback(summary)

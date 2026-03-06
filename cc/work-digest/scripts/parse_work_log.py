@@ -18,14 +18,7 @@ from pathlib import Path
 
 KST = timezone(timedelta(hours=9))
 BASE_DIR = Path(__file__).resolve().parent.parent          # work-digest/
-TOOLKIT_ROOT = BASE_DIR.parent                             # daye-agent-toolkit/
 WORK_LOG_DIR = BASE_DIR / "work-log"
-
-# ── Goal YAML candidate paths ───────────────────────
-GOAL_CANDIDATE_DIRS = [
-    Path.home() / "openclaw" / "vault" / "goals" / "daily",
-    TOOLKIT_ROOT / "goal-planner" / "goals" / "daily",
-]
 
 # ── Regex patterns ───────────────────────────────────
 
@@ -323,49 +316,7 @@ def parse_work_log(date_str: str) -> dict:
             },
         }
 
-    # Load goals
-    result["goals"] = load_goals(date_str)
-
     return result
-
-
-# ── Goal loader ──────────────────────────────────────
-
-def load_goals(date_str: str) -> dict | None:
-    """Try to load goal-planner daily YAML. Returns dict or None."""
-    for candidate_dir in GOAL_CANDIDATE_DIRS:
-        yml_path = candidate_dir / f"{date_str}.yml"
-        if yml_path.exists():
-            return _parse_yaml_file(yml_path)
-    return None
-
-
-def _parse_yaml_file(path: Path) -> dict | None:
-    """Load YAML file using PyYAML if available, otherwise skip."""
-    try:
-        import yaml  # type: ignore
-    except ImportError:
-        print(
-            f"[parse_work_log] PyYAML not installed, skipping goals: {path}",
-            file=sys.stderr,
-        )
-        return None
-
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        if not isinstance(data, dict):
-            return None
-        # Extract relevant fields
-        result: dict = {}
-        if "top3" in data:
-            result["top3"] = data["top3"]
-        if "checklist" in data:
-            result["checklist"] = data["checklist"]
-        return result if result else None
-    except Exception as e:
-        print(f"[parse_work_log] Failed to parse {path}: {e}", file=sys.stderr)
-        return None
 
 
 # ── CLI ──────────────────────────────────────────────
