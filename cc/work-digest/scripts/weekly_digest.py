@@ -15,35 +15,16 @@ import argparse
 import json
 import subprocess
 import sys
-import urllib.request
-import urllib.parse
-import urllib.error
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from _common import WEEKDAYS_KO, send_telegram as _send_telegram
+
 KST = timezone(timedelta(hours=9))
-WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
 TELEGRAM_MAX_CHARS = 4096
 
-BASE_DIR = Path(__file__).resolve().parent.parent
 PARSE_SCRIPT = Path(__file__).resolve().parent / "parse_work_log.py"
-TELEGRAM_CONF = BASE_DIR / "telegram.conf"
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
-
-
-def _load_telegram_conf() -> dict:
-    conf = {}
-    try:
-        for line in TELEGRAM_CONF.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                k, v = line.split("=", 1)
-                conf[k.strip()] = v.strip()
-    except FileNotFoundError:
-        pass
-    return conf
 
 
 # ── Data collection ──────────────────────────────
@@ -290,32 +271,12 @@ def analyze_with_llm(dates: list[str], agg: dict) -> str | None:
     return None
 
 
-# ── Telegram ────────────────────────────────────
-
 def send_telegram(message: str):
-    conf = _load_telegram_conf()
-    bot_token = conf.get("BOT_TOKEN", "")
-    chat_id = conf.get("CHAT_ID_WEEKLY") or conf.get("CHAT_ID", "")
-    if not bot_token or not chat_id:
-        print("[weekly_digest] telegram.conf 없음 — 전송 스킵", file=sys.stderr)
-        return
-
-    payload = {"chat_id": chat_id, "text": message}
-
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{bot_token}/sendMessage",
-        data=urllib.parse.urlencode(payload).encode("utf-8"),
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            if result.get("ok"):
-                print("[weekly_digest] Telegram 전송 완료", file=sys.stderr)
-            else:
-                print(f"[weekly_digest] Telegram API error: {result}", file=sys.stderr)
-                sys.exit(1)
-    except Exception as e:
-        print(f"[weekly_digest] Telegram 전송 실패: {e}", file=sys.stderr)
+    ok = _send_telegram(message, chat_id_key="CHAT_ID_WEEKLY", silent=True)
+    if ok:
+        print("[weekly_digest] Telegram 전송 완료", file=sys.stderr)
+    else:
+        print("[weekly_digest] Telegram 전송 실패", file=sys.stderr)
         sys.exit(1)
 
 
