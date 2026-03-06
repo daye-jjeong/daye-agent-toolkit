@@ -6,15 +6,10 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 # Work Digest Skill
 
-**Version:** 1.0.0 | **Updated:** 2026-02-27 | **Status:** Active
+**Version:** 2.0.0 | **Updated:** 2026-03-06 | **Status:** Active
 
-Claude Code 세션 로그를 자동 기록하고, 매일 저녁 하루의 작업을 요약하여 텔레그램으로 전송하는 하이브리드 스킬.
-목표 대비 갭 분석 + 작업 패턴 피드백 포함.
-
-## Trigger
-
-- 크론 `21:00` 자동 실행
-- 수동 호출 가능
+Claude Code 세션 로그를 자동 기록하고, LLM 요약 + 작업 유형 태깅으로 일일/주간 다이제스트를 생성한다.
+텔레그램 알림 + 프로젝트별 작업 컨텍스트 피드백 루프 포함.
 
 ## File Structure
 
@@ -22,72 +17,88 @@ Claude Code 세션 로그를 자동 기록하고, 매일 저녁 하루의 작업
 work-digest/
 ├── SKILL.md
 ├── .claude-skill
+├── telegram.conf            # Telegram 설정 (단일 소스)
 ├── scripts/
-│   ├── session_logger.py      # CC 세션 종료 시 로그 기록 (훅)
-│   ├── parse_work_log.py      # work-log .md → 구조화 JSON
-│   └── daily_digest.py        # JSON → LLM 요약 + 텔레그램 전송
+│   ├── session_logger.py    # CC 세션 종료 시 LLM 요약 + 로그 + 알림
+│   ├── parse_work_log.py    # work-log .md → 구조화 JSON
+│   ├── daily_digest.py      # 일일 다이제스트 + 레포별 context 갱신
+│   ├── weekly_digest.py     # 주간 리포트 + reflect 질문
+│   └── notify.sh            # permission/idle/error 알림 (stop 제외)
 ├── work-log/
-│   ├── YYYY-MM-DD.md          # 일별 세션 로그 (자동 생성, git ignored)
+│   ├── YYYY-MM-DD.md        # 일별 세션 로그 (자동 생성, git ignored)
 │   └── state/
-│       └── session_logger_state.json
 └── references/
-    └── prompt-template.md     # LLM 프롬프트 템플릿
+    └── prompt-template.md
 ```
 
 ## Workflow
 
-### Pipeline 1 — Session Logger (CC Hook)
+### Pipeline 1 — Session Logger (CC Hook: SessionEnd/PreCompact)
 
 ```
-CC 세션 종료 → session_logger.py (stdin JSON) → work-log/YYYY-MM-DD.md
+CC 세션 종료
+  → transcript에서 user/assistant 대화 추출
+  → claude haiku로 [태그] + 2-3줄 요약 생성
+  → work-log/YYYY-MM-DD.md에 기록
+  → 텔레그램으로 세션 요약 알림 전송
 ```
 
-각 세션의 메타데이터를 마크다운으로 기록:
-- 시각, 레포, 수정 파일, 실행 명령, 에러, 주제
+태그 종류: 코딩, 디버깅, 리서치, 리뷰, ops, 설정, 문서, 기타
 
-### Pipeline 2 — Daily Digest (Cron)
+### Pipeline 2 — Daily Digest (Cron 21:00)
 
 ```
-parse_work_log.py --date today | daily_digest.py → 텔레그램 전송
+parse_work_log.py | daily_digest.py
+  → 태그 비율 + 레포별 요약 다이제스트 → 텔레그램
+  → 레포별 work-context.md → 프로젝트 auto memory
 ```
 
-1. `parse_work_log.py`: 당일 .md 파싱 → 구조화 JSON (stdout)
-2. `daily_digest.py`: JSON → `claude -p --model haiku` 분석 → 텔레그램 전송
-   - claude CLI 미사용 시 템플릿 기반 fallback
+### Pipeline 3 — Weekly Digest (Cron 일요일 21:00)
+
+```
+weekly_digest.py --date today
+  → 일별 활동 + 태그 분석 + 레포 순위 → 텔레그램
+  → 🔮 reflect 질문 (패턴 기반)
+  → 레포별 주간 work-context.md → 프로젝트 auto memory
+```
 
 ## 자동화
 
 | Cron | Script | 설명 |
 |------|--------|------|
-| `0 21 * * *` | `parse_work_log.py \| daily_digest.py` | 매일 21시 다이제스트 생성 + 전송 |
+| `0 21 * * *` | `parse_work_log.py \| daily_digest.py` | 매일 21시 다이제스트 |
+| `0 21 * * 0` | `weekly_digest.py` | 매주 일요일 21시 주간 리포트 |
+
+## Telegram 설정
+
+`telegram.conf`에서 모든 스크립트가 공통 참조:
+- `BOT_TOKEN`, `CHAT_ID`: 필수
+- `THREAD_SESSION`, `THREAD_DAILY`, `THREAD_WEEKLY`: Group Topics 분리 (선택)
+
+## 피드백 루프
+
+```
+세션 → 요약 → work-log → 다이제스트 → work-context.md
+                                              ↓
+다음 세션 시작 ← memory/work-context.md ←────┘
+```
+
+각 프로젝트의 `~/.claude/projects/{project}/memory/work-context.md`에 기록.
+글로벌 규칙 `work-context-loop.md`가 세션 시작 시 참조를 안내.
 
 ## Scripts
 
-| Script | Tier | Purpose | Args |
-|--------|------|---------|------|
-| `session_logger.py` | 1 (0 tokens) | CC 세션 로그 기록 | stdin JSON (CC 훅) |
-| `parse_work_log.py` | 1 (0 tokens) | .md → 구조화 JSON | `--date YYYY-MM-DD` |
-| `daily_digest.py` | 2 (LLM) | 요약 + 텔레그램 전송 | `--dry-run`, `--no-llm` |
-
-## Input / Output
-
-### Input
-
-| Source | Purpose |
-|--------|---------|
-| `work-log/YYYY-MM-DD.md` | 당일 세션 로그 |
-| goal-planner daily YAML | 목표 대비 갭 분석 (optional) |
-| `{baseDir}/references/prompt-template.md` | LLM 프롬프트 템플릿 |
-
-### Output — 텔레그램 메시지
-
-4개 섹션: 시간 요약, 레포별 작업, 목표 대비 진행, 패턴 피드백.
-텔레그램 4096자 제한 준수.
-
-**프롬프트 상세**: `{baseDir}/references/prompt-template.md` 참고
+| Script | Tier | Purpose |
+|--------|------|---------|
+| `session_logger.py` | 2 (LLM) | 세션 요약 + 태깅 + 로그 + 텔레그램 |
+| `parse_work_log.py` | 1 (0 tokens) | .md → 구조화 JSON |
+| `daily_digest.py` | 2 (LLM) | 일일 다이제스트 + context 갱신 |
+| `weekly_digest.py` | 2 (LLM) | 주간 리포트 + reflect |
+| `notify.sh` | 1 (0 tokens) | permission/idle/error 알림 |
 
 ## Token Usage
 
-- Session Logger + Parse: ~0 tokens (no LLM)
-- Daily Digest (haiku): ~300-500 tokens/day
+- Session Logger (haiku): ~500 tokens/세션
+- Daily Digest (haiku): ~300-500 tokens/일
+- Weekly Digest (haiku): ~500-800 tokens/주
 - claude CLI 미가용 시: 0 tokens (템플릿 fallback)
