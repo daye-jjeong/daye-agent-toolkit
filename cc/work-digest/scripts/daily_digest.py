@@ -14,32 +14,16 @@ import argparse
 import json
 import subprocess
 import sys
-import urllib.request
-import urllib.parse
-import urllib.error
 from datetime import datetime
 from pathlib import Path
 
+from _common import (
+    WEEKDAYS_KO, WORK_TAGS_SET,
+    format_tokens, send_telegram,
+)
+
 # ── Constants ────────────────────────────────────────
-WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
 TELEGRAM_MAX_CHARS = 4096
-BASE_DIR = Path(__file__).resolve().parent.parent
-TELEGRAM_CONF = BASE_DIR / "telegram.conf"
-
-
-def _load_telegram_conf() -> dict:
-    conf = {}
-    try:
-        for line in TELEGRAM_CONF.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                k, v = line.split("=", 1)
-                conf[k.strip()] = v.strip()
-    except FileNotFoundError:
-        pass
-    return conf
 
 
 # ── Message building ────────────────────────────────
@@ -70,11 +54,7 @@ def format_duration(total_min: int) -> str:
 
 
 def _format_tokens(n: int) -> str:
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    if n >= 1_000:
-        return f"{n / 1_000:.1f}K"
-    return str(n)
+    return format_tokens(n)
 
 
 def build_time_summary(summary: dict) -> str:
@@ -97,7 +77,6 @@ NOISE_PATTERNS = [
 ]
 
 # 태그 단어만 있는 요약은 노이즈 (예: "코딩", "리서치")
-WORK_TAG_WORDS = {"코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "기타"}
 
 
 def _clean_summary(raw: str) -> str:
@@ -110,7 +89,7 @@ def _clean_summary(raw: str) -> str:
         stripped = line.strip().strip("*").strip()
         if not stripped:
             continue
-        if stripped in WORK_TAG_WORDS:
+        if stripped in WORK_TAGS_SET:
             continue
         # 마크다운 구분선, 헤딩 스킵
         if stripped.startswith("---") or stripped.startswith("##"):
@@ -131,24 +110,31 @@ def _clean_topic(topic: str) -> str:
     return t
 
 
-def _collect_repo_topics(sessions: list[dict]) -> dict[str, list[str]]:
-    """Collect cleaned, non-empty work descriptions per repo. 중복 제거."""
-    repo_topics: dict[str, list[str]] = {}
+def _collect_repo_data(sessions: list[dict]) -> dict[str, dict]:
+    """세션 리스트에서 레포별 topics, duration, tokens를 한 패스로 수집."""
+    repos: dict[str, dict] = {}
     for s in sessions:
         repo = s["repo"]
-        if repo not in repo_topics:
-            repo_topics[repo] = []
-        # LLM 요약 우선
+        if repo not in repos:
+            repos[repo] = {"topics": [], "duration": 0, "tokens": 0}
+        rd = repos[repo]
+
+        # duration + tokens
+        rd["duration"] += s.get("duration_min") or 0
+        t = s.get("tokens") or {}
+        rd["tokens"] += sum(t.get(k, 0) for k in ("Input", "Output", "Cache read", "Cache create"))
+
+        # topics (LLM 요약 우선, 중복 제거)
         summary = _clean_summary(s.get("summary", ""))
         if summary:
-            # 중복 방지: 이미 비슷한 내용이 있으면 스킵
-            if not any(summary[:40] in existing for existing in repo_topics[repo]):
-                repo_topics[repo].append(summary)
+            # 이미 같은 내용이 있으면 스킵 (정확 일치)
+            if summary not in rd["topics"]:
+                rd["topics"].append(summary)
         else:
             cleaned = _clean_topic(s.get("topic", ""))
-            if cleaned and cleaned not in repo_topics[repo]:
-                repo_topics[repo].append(cleaned)
-    return repo_topics
+            if cleaned and cleaned not in rd["topics"]:
+                rd["topics"].append(cleaned)
+    return repos
 
 
 TAG_ICONS = {
@@ -188,29 +174,16 @@ def build_tag_section(sessions: list[dict]) -> str | None:
 
 def build_repos_section(summary: dict, sessions: list[dict]) -> str:
     """Build repos section sorted by session count descending."""
-    repos = summary["repos"]  # {repo: count}
-    repo_topics = _collect_repo_topics(sessions)
+    repo_counts = summary["repos"]  # {repo: count}
+    repo_data = _collect_repo_data(sessions)
 
-    # 레포별 총 작업시간 + 토큰 계산
-    repo_duration: dict[str, int] = {}
-    repo_tokens: dict[str, int] = {}
-    for s in sessions:
-        repo = s["repo"]
-        dur = s.get("duration_min") or 0
-        repo_duration[repo] = repo_duration.get(repo, 0) + dur
-        t = s.get("tokens") or {}
-        total_t = sum(t.get(k, 0) for k in ("Input", "Output", "Cache read", "Cache create"))
-        repo_tokens[repo] = repo_tokens.get(repo, 0) + total_t
-
-    sorted_repos = sorted(repos.items(), key=lambda x: x[1], reverse=True)
+    sorted_repos = sorted(repo_counts.items(), key=lambda x: x[1], reverse=True)
 
     lines = ["\U0001f4c2 레포별 작업:"]
     for repo, count in sorted_repos:
-        topics = repo_topics.get(repo, [])
-        dur = repo_duration.get(repo, 0)
-        dur_str = format_duration(dur) if dur > 0 else ""
-        tok = repo_tokens.get(repo, 0)
-        tok_str = _format_tokens(tok) if tok > 0 else ""
+        rd = repo_data.get(repo, {"topics": [], "duration": 0, "tokens": 0})
+        dur_str = format_duration(rd["duration"]) if rd["duration"] > 0 else ""
+        tok_str = _format_tokens(rd["tokens"]) if rd["tokens"] > 0 else ""
         parts = [f"{count}세션"]
         if dur_str:
             parts.append(dur_str)
@@ -220,7 +193,7 @@ def build_repos_section(summary: dict, sessions: list[dict]) -> str:
         lines.append(header)
         # 세션 수에 비례해 더 많이 표시 (최소 2, 최대 5)
         max_items = min(5, max(2, (count + 1) // 2))
-        for t in topics[:max_items]:
+        for t in rd["topics"][:max_items]:
             snippet = t[:120]
             if len(t) > 120:
                 snippet += "..."
@@ -421,43 +394,6 @@ def write_work_context(data: dict):
 
 
 
-# ── Telegram send ────────────────────────────────────
-
-def send_telegram(message: str) -> None:
-    """Send message to Telegram via Bot API (stdlib only, no requests)."""
-    conf = _load_telegram_conf()
-    bot_token = conf.get("BOT_TOKEN", "")
-    chat_id = conf.get("CHAT_ID_DAILY") or conf.get("CHAT_ID", "")
-    if not bot_token or not chat_id:
-        print("[daily_digest] telegram.conf 없음 — 전송 스킵", file=sys.stderr)
-        return
-
-    payload = {"chat_id": chat_id, "text": message}
-
-    data = urllib.parse.urlencode(payload).encode("utf-8")
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{bot_token}/sendMessage", data=data,
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            if result.get("ok"):
-                print("[daily_digest] Telegram 전송 완료", file=sys.stderr)
-            else:
-                print(f"[daily_digest] Telegram API error: {result}", file=sys.stderr)
-                sys.exit(1)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        print(f"[daily_digest] Telegram HTTP {e.code}: {body[:200]}", file=sys.stderr)
-        sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"[daily_digest] Telegram 연결 실패: {e.reason}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"[daily_digest] Telegram 전송 실패: {e}", file=sys.stderr)
-        sys.exit(1)
-
-
 # ── CLI ──────────────────────────────────────────────
 
 def main():
@@ -494,7 +430,12 @@ def main():
     if args.dry_run:
         print(message)
     else:
-        send_telegram(message)
+        ok = send_telegram(message, chat_id_key="CHAT_ID_DAILY")
+        if ok:
+            print("[daily_digest] Telegram 전송 완료", file=sys.stderr)
+        else:
+            print("[daily_digest] Telegram 전송 실패", file=sys.stderr)
+            sys.exit(1)
 
     # 작업 컨텍스트 갱신 (피드백 루프)
     write_work_context(data)

@@ -15,34 +15,17 @@ import sys
 import json
 import fcntl
 import subprocess
-import urllib.request
-import urllib.parse
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from _common import (
+    BASE_DIR, WEEKDAYS_KO, WORK_TAGS,
+    format_tokens, send_telegram,
+)
+
 KST = timezone(timedelta(hours=9))
-BASE_DIR = Path(__file__).resolve().parent.parent
 WORK_LOG_DIR = BASE_DIR / "work-log"
 STATE_FILE = WORK_LOG_DIR / "state" / "session_logger_state.json"
-WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
-
-TELEGRAM_CONF = BASE_DIR / "telegram.conf"
-
-
-def _load_telegram_conf() -> dict:
-    """telegram.conf에서 key=value 파싱."""
-    conf = {}
-    try:
-        for line in TELEGRAM_CONF.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                k, v = line.split("=", 1)
-                conf[k.strip()] = v.strip()
-    except FileNotFoundError:
-        pass
-    return conf
 
 
 # ── stdin / state ─────────────────────────────────
@@ -134,9 +117,6 @@ def extract_conversation(transcript_path: str) -> str:
         half = CONVERSATION_MAX_CHARS // 2
         combined = combined[:half] + "\n...(중략)...\n" + combined[-half:]
     return combined
-
-
-WORK_TAGS = ["코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "기타"]
 
 
 def summarize_session(conversation: str, repo: str) -> dict | None:
@@ -308,12 +288,7 @@ def parse_transcript(transcript_path: str) -> dict:
 # ── 세션 마커 ─────────────────────────────────────
 
 def _format_tokens(n: int) -> str:
-    """Format token count: 1234 → 1.2K, 1234567 → 1.2M"""
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M tokens"
-    if n >= 1_000:
-        return f"{n / 1_000:.1f}K tokens"
-    return f"{n} tokens"
+    return format_tokens(n, suffix=" tokens")
 
 
 def build_frontmatter(now):
@@ -403,12 +378,6 @@ def write_session_marker(session_id, data, now, repo):
 
 def send_session_telegram(data: dict, repo: str, duration_min: int | None):
     """세션 종료 시 요약을 텔레그램으로 전송."""
-    conf = _load_telegram_conf()
-    bot_token = conf.get("BOT_TOKEN", "")
-    chat_id = conf.get("CHAT_ID_SESSION") or conf.get("CHAT_ID", "")
-    if not bot_token or not chat_id:
-        return
-
     summary = data.get("summary")
     if isinstance(summary, dict):
         tag = summary.get("tag", "")
@@ -424,15 +393,7 @@ def send_session_telegram(data: dict, repo: str, duration_min: int | None):
     if len(msg) > 4096:
         msg = msg[:4090] + "..."
 
-    payload = {"chat_id": chat_id, "text": msg}
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{bot_token}/sendMessage",
-        data=urllib.parse.urlencode(payload).encode("utf-8"),
-    )
-    try:
-        urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
+    send_telegram(msg, chat_id_key="CHAT_ID_SESSION", silent=True)
 
 
 # ── main ──────────────────────────────────────────
