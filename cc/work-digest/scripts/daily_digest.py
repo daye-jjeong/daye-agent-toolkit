@@ -12,7 +12,6 @@ Usage:
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import urllib.request
@@ -24,10 +23,7 @@ from pathlib import Path
 # ── Constants ────────────────────────────────────────
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
 TELEGRAM_MAX_CHARS = 4096
-TOPIC_SNIPPET_MAX = 30
-TOPIC_SNIPPETS_PER_REPO = 2
 BASE_DIR = Path(__file__).resolve().parent.parent
-PROMPT_TEMPLATE = BASE_DIR / "references" / "prompt-template.md"
 TELEGRAM_CONF = BASE_DIR / "telegram.conf"
 
 
@@ -94,31 +90,63 @@ def build_time_summary(summary: dict) -> str:
     return line
 
 
+NOISE_PATTERNS = [
+    "<local-command-caveat>",
+    "<command-name>",
+    "Implement the following plan:",
+]
+
+# 태그 단어만 있는 요약은 노이즈 (예: "코딩", "리서치")
+WORK_TAG_WORDS = {"코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "기타"}
+
+
+def _clean_summary(raw: str) -> str:
+    """멀티라인 요약에서 의미 있는 내용만 추출."""
+    if not raw:
+        return ""
+    lines = raw.strip().splitlines()
+    cleaned_lines = []
+    for line in lines:
+        stripped = line.strip().strip("*").strip()
+        if not stripped:
+            continue
+        if stripped in WORK_TAG_WORDS:
+            continue
+        # 마크다운 구분선, 헤딩 스킵
+        if stripped.startswith("---") or stripped.startswith("##"):
+            continue
+        cleaned_lines.append(line.strip())
+    return " ".join(cleaned_lines)[:200]
+
+
 def _clean_topic(topic: str) -> str:
     """Clean up noisy topic strings."""
-    # Strip local-command-caveat wrapper
-    if topic.startswith("<local-command-caveat>"):
+    for pat in NOISE_PATTERNS:
+        if topic.startswith(pat):
+            return ""
+    t = topic.strip()
+    # URL만 있는 토픽은 스킵
+    if t.startswith("http://") or t.startswith("https://"):
         return ""
-    # Strip "Implement the following plan:" generic text
-    if topic.strip() == "Implement the following plan:":
-        return ""
-    return topic.strip()
+    return t
 
 
 def _collect_repo_topics(sessions: list[dict]) -> dict[str, list[str]]:
-    """Collect cleaned, non-empty topics per repo. summary 우선, fallback topic."""
+    """Collect cleaned, non-empty work descriptions per repo. 중복 제거."""
     repo_topics: dict[str, list[str]] = {}
     for s in sessions:
         repo = s["repo"]
         if repo not in repo_topics:
             repo_topics[repo] = []
-        # LLM 요약이 있으면 우선 사용
-        summary = s.get("summary", "").strip()
+        # LLM 요약 우선
+        summary = _clean_summary(s.get("summary", ""))
         if summary:
-            repo_topics[repo].append(summary)
+            # 중복 방지: 이미 비슷한 내용이 있으면 스킵
+            if not any(summary[:40] in existing for existing in repo_topics[repo]):
+                repo_topics[repo].append(summary)
         else:
             cleaned = _clean_topic(s.get("topic", ""))
-            if cleaned:
+            if cleaned and cleaned not in repo_topics[repo]:
                 repo_topics[repo].append(cleaned)
     return repo_topics
 
@@ -163,17 +191,38 @@ def build_repos_section(summary: dict, sessions: list[dict]) -> str:
     repos = summary["repos"]  # {repo: count}
     repo_topics = _collect_repo_topics(sessions)
 
+    # 레포별 총 작업시간 + 토큰 계산
+    repo_duration: dict[str, int] = {}
+    repo_tokens: dict[str, int] = {}
+    for s in sessions:
+        repo = s["repo"]
+        dur = s.get("duration_min") or 0
+        repo_duration[repo] = repo_duration.get(repo, 0) + dur
+        t = s.get("tokens") or {}
+        total_t = sum(t.get(k, 0) for k in ("Input", "Output", "Cache read", "Cache create"))
+        repo_tokens[repo] = repo_tokens.get(repo, 0) + total_t
+
     sorted_repos = sorted(repos.items(), key=lambda x: x[1], reverse=True)
 
-    lines = ["\U0001f4c2 레포별:"]
+    lines = ["\U0001f4c2 레포별 작업:"]
     for repo, count in sorted_repos:
         topics = repo_topics.get(repo, [])
-        lines.append(f"  {repo}  {count}세션")
-        for t in topics[:TOPIC_SNIPPETS_PER_REPO]:
-            # 요약은 100자까지 허용 (topic fallback은 30자)
-            max_len = 100 if len(t) > TOPIC_SNIPPET_MAX else TOPIC_SNIPPET_MAX
-            snippet = t[:max_len]
-            if len(t) > max_len:
+        dur = repo_duration.get(repo, 0)
+        dur_str = format_duration(dur) if dur > 0 else ""
+        tok = repo_tokens.get(repo, 0)
+        tok_str = _format_tokens(tok) if tok > 0 else ""
+        parts = [f"{count}세션"]
+        if dur_str:
+            parts.append(dur_str)
+        if tok_str:
+            parts.append(tok_str)
+        header = f"  ▸ {repo} ({', '.join(parts)})"
+        lines.append(header)
+        # 세션 수에 비례해 더 많이 표시 (최소 2, 최대 5)
+        max_items = min(5, max(2, (count + 1) // 2))
+        for t in topics[:max_items]:
+            snippet = t[:120]
+            if len(t) > 120:
                 snippet += "..."
             lines.append(f"    - {snippet}")
 
@@ -225,7 +274,7 @@ def build_pattern_feedback(summary: dict) -> str:
     return "\U0001f4a1 패턴 피드백:\n" + "\n".join(f"  {l}" for l in lines)
 
 
-def build_message(data: dict) -> str:
+def build_message(data: dict, use_llm: bool = False) -> str:
     """Build the full digest message from parsed JSON data."""
     date_str = data["date"]
     sessions = data.get("sessions", [])
@@ -248,12 +297,19 @@ def build_message(data: dict) -> str:
         sections.append(tag_section)
 
     # Repos
-    sections.append(build_repos_section(summary, sessions))
+    repos_section = build_repos_section(summary, sessions)
+    sections.append(repos_section)
 
     # Pattern feedback
     feedback = build_pattern_feedback(summary)
     if feedback:
         sections.append(feedback)
+
+    # LLM 정리 + 리뷰 (--no-llm이 아닐 때만)
+    if use_llm:
+        review = generate_review(repos_section)
+        if review:
+            sections.append(review)
 
     message = "\n\n".join(sections)
 
@@ -264,6 +320,44 @@ def build_message(data: dict) -> str:
         message = message[:max_len] + truncation_note
 
     return message
+
+
+REVIEW_TIMEOUT_SEC = 45
+
+
+def generate_review(repos_section: str) -> str | None:
+    """LLM으로 오늘의 정리 + 작업 내용 리뷰 생성."""
+    prompt = (
+        "다음은 오늘 하루 개발 작업 요약이다.\n\n"
+        f"{repos_section}\n\n"
+        "2개 섹션을 생성해라. 각 섹션은 2-3줄.\n\n"
+        "📝 오늘의 정리\n"
+        "- 오늘 전체 작업을 한 문단으로 정리. 핵심 성과 중심.\n\n"
+        "🔍 리뷰\n"
+        "- 오늘 작업 내용을 바탕으로, 후속으로 하면 좋을 작업을 구체적으로 제안.\n"
+        "- 미완성이거나 연결되는 작업, 놓쳤을 수 있는 것 중심.\n"
+        "- 일반론 말고 오늘 작업에 직접 연결되는 것만.\n\n"
+        "형식:\n"
+        "📝 오늘의 정리\n(내용)\n\n🔍 리뷰\n(내용)\n\n"
+        "한국어로. 간결하게. 총 300자 이내."
+    )
+
+    try:
+        result = subprocess.run(
+            ["claude", "-p", "--model", "haiku", "--no-session-persistence"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=REVIEW_TIMEOUT_SEC,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        print(f"[daily_digest] review: claude returned code {result.returncode}", file=sys.stderr)
+        if result.stderr:
+            print(f"[daily_digest] review stderr: {result.stderr[:200]}", file=sys.stderr)
+    except Exception as e:
+        print(f"[daily_digest] review generation failed: {e}", file=sys.stderr)
+    return None
 
 
 # ── Work context (feedback loop) ─────────────────────
@@ -325,81 +419,6 @@ def write_work_context(data: dict):
             print(f"[daily_digest] {repo} work-context 쓰기 실패: {e}",
                   file=sys.stderr)
 
-
-# ── LLM analysis via claude CLI ──────────────────────
-
-def _load_system_prompt() -> str:
-    """Load system prompt from prompt-template.md."""
-    try:
-        text = PROMPT_TEMPLATE.read_text(encoding="utf-8")
-        # Extract content between first ``` pair in ## System Prompt
-        in_block = False
-        lines = []
-        for line in text.splitlines():
-            if line.strip() == "```" and not in_block:
-                in_block = True
-                continue
-            if line.strip() == "```" and in_block:
-                break
-            if in_block:
-                lines.append(line)
-        return "\n".join(lines) if lines else ""
-    except FileNotFoundError:
-        return ""
-
-
-def analyze_with_llm(data: dict) -> str | None:
-    """Call claude CLI in print mode for natural language analysis.
-
-    Returns LLM-generated message, or None if claude CLI unavailable.
-    Uses haiku for cost efficiency (~0.001 USD per call).
-    """
-    system_prompt = _load_system_prompt()
-    json_str = json.dumps(data, ensure_ascii=False, indent=2)
-
-    user_prompt = (
-        f"다음은 오늘({data['date']})의 Claude Code 작업 로그 JSON입니다.\n\n"
-        f"{json_str}\n\n"
-        "위 데이터를 분석해서 일일 작업 다이제스트를 생성해주세요.\n"
-        "텔레그램 메시지 형태로, 4096자 이내로 작성해주세요.\n"
-        "4개 섹션: 오늘의 요약, 레포별 작업, 목표 대비 진행(목표 데이터 있을 때만), 패턴 피드백."
-    )
-
-    cmd = [
-        "claude", "-p",
-        "--model", "haiku",
-        "--no-session-persistence",
-    ]
-    if system_prompt:
-        cmd.extend(["--system-prompt", system_prompt])
-
-    try:
-        result = subprocess.run(
-            cmd,
-            input=user_prompt,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            output = result.stdout.strip()
-            # Truncate if over Telegram limit
-            if len(output) > TELEGRAM_MAX_CHARS:
-                output = output[:TELEGRAM_MAX_CHARS - 20] + "\n\n... (truncated)"
-            return output
-        print(f"[daily_digest] claude CLI returned code {result.returncode}", file=sys.stderr)
-        if result.stderr:
-            print(f"[daily_digest] stderr: {result.stderr[:200]}", file=sys.stderr)
-        return None
-    except FileNotFoundError:
-        print("[daily_digest] claude CLI not found — falling back to template", file=sys.stderr)
-        return None
-    except subprocess.TimeoutExpired:
-        print("[daily_digest] claude CLI timeout (60s) — falling back to template", file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f"[daily_digest] claude CLI error: {e} — falling back to template", file=sys.stderr)
-        return None
 
 
 # ── Telegram send ────────────────────────────────────
@@ -468,14 +487,9 @@ def main():
     # Empty day — no LLM needed
     if not data.get("sessions"):
         message = build_empty_message(data.get("date", "?"))
-    elif args.no_llm:
-        message = build_message(data)
     else:
-        # Try LLM first, fallback to template
-        message = analyze_with_llm(data)
-        if message is None:
-            print("[daily_digest] Using template fallback", file=sys.stderr)
-            message = build_message(data)
+        # 구조화된 템플릿 + LLM 리뷰 (--no-llm이면 리뷰 스킵)
+        message = build_message(data, use_llm=not args.no_llm)
 
     if args.dry_run:
         print(message)
