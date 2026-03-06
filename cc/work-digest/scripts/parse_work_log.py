@@ -142,11 +142,19 @@ def parse_session_block(lines: list[str]) -> dict | None:
                 token_summary_str = bq.group(3).strip()
             continue
 
-        # Summary (LLM 생성) — **요약**: [태그] 내용
+        # Summary (LLM 생성) — **요약**: [태그] 내용 (멀티라인)
         sm = RE_SUMMARY.match(stripped)
         if sm:
             tag = sm.group(1) or ""  # 태그 (없으면 빈 문자열)
-            summary = sm.group(2).strip()
+            summary_lines = [sm.group(2).strip()]
+            # 이어지는 줄도 요약에 포함 (### 헤더, **, 빈 줄 전까지)
+            while i < len(lines):
+                next_line = lines[i].strip()
+                if not next_line or next_line.startswith("###") or next_line.startswith("**"):
+                    break
+                summary_lines.append(next_line)
+                i += 1
+            summary = "\n".join(summary_lines)
             continue
 
         # Topic (fallback — 요약이 없는 세션)
