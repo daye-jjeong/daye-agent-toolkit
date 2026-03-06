@@ -15,6 +15,8 @@ import sys
 import json
 import fcntl
 import subprocess
+import urllib.request
+import urllib.parse
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -23,6 +25,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 WORK_LOG_DIR = BASE_DIR / "work-log"
 STATE_FILE = WORK_LOG_DIR / "state" / "session_logger_state.json"
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
+
+# Telegram (notify.sh와 동일)
+TELEGRAM_CHAT_ID = "8514441011"
+TELEGRAM_BOT_TOKEN = "8584213613:AAE5h2B3m9hGD1nIMUmLvcTmSwJDph25lic"
 
 
 # ── stdin / state ─────────────────────────────────
@@ -77,6 +83,105 @@ def detect_repo(cwd: str) -> str:
 # ── transcript 파싱 ───────────────────────────────
 
 IDLE_THRESHOLD_SEC = 300  # 5분 이상 gap = idle로 간주
+SUMMARY_TIMEOUT_SEC = 30
+CONVERSATION_MAX_CHARS = 8000  # haiku에 보낼 대화 최대 길이
+
+
+def extract_conversation(transcript_path: str) -> str:
+    """transcript에서 user/assistant 텍스트만 추출 (요약용)."""
+    parts = []
+    try:
+        with open(transcript_path, "r") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line.strip())
+                except json.JSONDecodeError:
+                    continue
+                entry_type = entry.get("type", "")
+                if entry_type not in ("user", "assistant"):
+                    continue
+                msg = entry.get("message", {})
+                content = msg.get("content", "") if isinstance(msg, dict) else ""
+                if isinstance(content, str) and content.strip():
+                    role = "User" if entry_type == "user" else "Assistant"
+                    parts.append(f"{role}: {content.strip()[:500]}")
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            text = block.get("text", "").strip()
+                            if text:
+                                role = "User" if entry_type == "user" else "Assistant"
+                                parts.append(f"{role}: {text[:500]}")
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    combined = "\n".join(parts)
+    if len(combined) > CONVERSATION_MAX_CHARS:
+        half = CONVERSATION_MAX_CHARS // 2
+        combined = combined[:half] + "\n...(중략)...\n" + combined[-half:]
+    return combined
+
+
+WORK_TAGS = ["코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "기타"]
+
+
+def summarize_session(conversation: str, repo: str) -> dict | None:
+    """claude CLI로 세션 요약 + 태그 생성. 실패 시 None.
+
+    Returns: {"tag": "코딩", "text": "요약 내용"} or None
+    """
+    if not conversation.strip():
+        return None
+    tags_str = ", ".join(WORK_TAGS)
+    prompt = (
+        f"레포: {repo}\n\n"
+        f"다음은 Claude Code 세션의 대화 내용이다.\n\n"
+        f"{conversation}\n\n"
+        "1줄째: 작업 유형 태그 하나를 골라라. "
+        f"선택지: {tags_str}\n"
+        "2줄째부터: 이 세션에서 한 작업을 한국어 2-3줄로 요약해라. "
+        "구체적으로 뭘 만들었는지, 뭘 고쳤는지, 뭘 조사했는지 중심으로. "
+        "파일 경로나 명령어는 생략하고 작업의 의미만 쓰라.\n\n"
+        "형식:\n[태그]\n요약 내용"
+    )
+    try:
+        result = subprocess.run(
+            ["claude", "-p", "--model", "haiku", "--no-session-persistence"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=SUMMARY_TIMEOUT_SEC,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return _parse_summary_response(result.stdout.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        pass
+    return None
+
+
+def _parse_summary_response(raw: str) -> dict:
+    """Parse '[태그]\\n요약' format from LLM response."""
+    lines = raw.strip().splitlines()
+    tag = "기타"
+    text_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        # [태그] 형식 감지
+        if stripped.startswith("[") and "]" in stripped:
+            candidate = stripped[1:stripped.index("]")].strip()
+            if candidate in WORK_TAGS:
+                tag = candidate
+                # 같은 줄에 태그 뒤 텍스트가 있으면 요약에 포함
+                rest = stripped[stripped.index("]") + 1:].strip()
+                if rest:
+                    text_lines.append(rest)
+                continue
+        if stripped:
+            text_lines.append(stripped)
+
+    text = "\n".join(text_lines)[:300]
+    return {"tag": tag, "text": text}
 
 
 def parse_transcript(transcript_path: str) -> dict:
@@ -221,7 +326,14 @@ def build_session_section(session_id, data, now, repo):
     lines.append(f"> 파일 {file_count}개 | {duration} | {token_str}")
     lines.append("")
 
-    if data["topic"]:
+    if data.get("summary"):
+        s = data["summary"]
+        tag = s.get("tag", "") if isinstance(s, dict) else ""
+        text = s.get("text", s) if isinstance(s, dict) else s
+        tag_prefix = f"[{tag}] " if tag else ""
+        lines.append(f"**요약**: {tag_prefix}{text}")
+        lines.append("")
+    elif data["topic"]:
         lines.append(f"**주제**: {data['topic']}")
         lines.append("")
 
@@ -273,6 +385,41 @@ def write_session_marker(session_id, data, now, repo):
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
+# ── Telegram ──────────────────────────────────────
+
+def send_session_telegram(data: dict, repo: str, duration_min: int | None):
+    """세션 종료 시 요약을 텔레그램으로 전송."""
+    summary = data.get("summary")
+    if isinstance(summary, dict):
+        tag = summary.get("tag", "")
+        text = summary.get("text", "")
+        tag_str = f"[{tag}] " if tag else ""
+        msg = f"✅ {repo} — {tag_str}{text}"
+    else:
+        topic = data.get("topic", "작업 완료")
+        msg = f"✅ {repo} — {topic[:100]}"
+
+    dur = f" ({duration_min}분)" if duration_min else ""
+    msg = f"{msg}{dur}"
+
+    # 4096자 제한
+    if len(msg) > 4096:
+        msg = msg[:4090] + "..."
+
+    payload = urllib.parse.urlencode({
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": msg,
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        data=payload,
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+    except Exception:
+        pass  # 알림 실패는 무시
+
+
 # ── main ──────────────────────────────────────────
 
 def main():
@@ -300,8 +447,19 @@ def main():
     if already_recorded(session_id, event):
         sys.exit(0)
 
+    # SessionEnd일 때만 LLM 요약 생성 (PreCompact는 스킵)
+    if event == "SessionEnd":
+        conversation = extract_conversation(transcript_path)
+        summary = summarize_session(conversation, repo)
+        if summary:
+            data["summary"] = summary
+
     # 세션 마커 기록
     write_session_marker(session_id, data, now, repo)
+
+    # SessionEnd: 요약 텔레그램 전송
+    if event == "SessionEnd":
+        send_session_telegram(data, repo, data.get("duration_min"))
 
 
 if __name__ == "__main__":
