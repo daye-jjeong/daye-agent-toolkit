@@ -47,6 +47,7 @@ RE_BLOCKQUOTE = re.compile(
 RE_TOKEN_ITEM = re.compile(r"^-\s+(\w[\w\s]*):\s*(.+)$")
 
 RE_TOPIC = re.compile(r"^\*\*주제\*\*:\s*(.+)$")
+RE_SUMMARY = re.compile(r"^\*\*요약\*\*:\s*(?:\[([^\]]+)\]\s*)?(.+)$")
 RE_FILE_ITEM = re.compile(r"^-\s+`(.+?)`\s*$")
 RE_CMD_ITEM = re.compile(r"^-\s+`(.+?)`\s*$")
 RE_ERROR_ITEM = re.compile(r"^-\s+(.+)$")
@@ -108,6 +109,8 @@ def parse_session_block(lines: list[str]) -> dict | None:
     file_count = 0
     duration_min = None
     topic = ""
+    summary = ""
+    tag = ""
     files: list[str] = []
     commands: list[str] = []
     errors: list[str] = []
@@ -146,7 +149,14 @@ def parse_session_block(lines: list[str]) -> dict | None:
                 token_summary_str = bq.group(3).strip()
             continue
 
-        # Topic
+        # Summary (LLM 생성) — **요약**: [태그] 내용
+        sm = RE_SUMMARY.match(stripped)
+        if sm:
+            tag = sm.group(1) or ""  # 태그 (없으면 빈 문자열)
+            summary = sm.group(2).strip()
+            continue
+
+        # Topic (fallback — 요약이 없는 세션)
         tm = RE_TOPIC.match(stripped)
         if tm:
             topic = tm.group(1).strip()
@@ -196,6 +206,8 @@ def parse_session_block(lines: list[str]) -> dict | None:
         "file_count": file_count,
         "duration_min": duration_min,
         "topic": topic,
+        "summary": summary,
+        "tag": tag,
         "files": files,
         "commands": commands,
         "errors": errors,
