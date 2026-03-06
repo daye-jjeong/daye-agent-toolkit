@@ -148,7 +148,12 @@ python3 compose-newspaper.py --general /tmp/general.json \
 
 # Enrich (영어 헤드라인 한국어 번역 + 요약 why 추가)
 python3 enrich.py extract --input /tmp/composed.json > /tmp/to_enrich.json
-# → 에이전트가 to_enrich.json을 읽고 enrichments.json 생성 (한국어 번역 + why)
+# → 에이전트가 to_enrich.json의 모든 항목에 대해 enrichments.json 생성
+#    품질 기준:
+#    - headline: 영어 → 자연스러운 한국어 번역 (영어 헤드라인이 HTML에 남으면 안 됨)
+#    - summary: RSS 원문 붙여넣기 금지. 기사 핵심을 한국어 1-2문장으로 요약
+#    - why: 왜 중요한가 1문장 (비즈니스/기술/사회 관점)
+#    - 모든 항목 빠짐없이 처리할 것. 일부만 하고 넘어가면 영어가 섞인 신문이 됨
 python3 enrich.py apply --input /tmp/composed.json \
   --enrichments /tmp/enrichments.json --output /tmp/composed.json
 

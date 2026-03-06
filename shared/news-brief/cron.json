@@ -5,6 +5,6 @@
 		"schedule": "0 8 * * *",
 		"target": "daily-newspaper",
 		"reason": "cron: daily-newspaper",
-		"instructions": "매일 아침 뉴스 브리핑 HTML을 생성하세요. General/AI/Ronik/Community 4개 파이프라인으로 뉴스 수집 → 정리 → HTML 렌더링. HTML 파일은 반드시 ~/.openclaw/media/ 디렉토리에 저장 (예: ~/.openclaw/media/mingming_daily_YYYY-MM-DD.html). 이 경로만 텔레그램 파일 전송이 허용됨. 완료 후 텔레그램 전송: `minions thread add --author {{agentId}} --mentions daye --tags alert --content \"...요약...\" --media ~/.openclaw/media/mingming_daily_YYYY-MM-DD.html` (--media 필수 — HTML 파일 첨부). routine complete 처리."
+		"instructions": "news-brief SKILL.md의 Quick Usage 섹션을 따라 Python 스크립트 파이프라인으로 뉴스 브리핑을 생성하세요. 반드시 {baseDir}/scripts/ 의 스크립트를 사용할 것 (SearXNG 직접 검색 금지). enrich 단계의 품질 기준은 SKILL.md에 명시된 대로 준수할 것. HTML은 brain/library/reports/daily-newspaper_YYYY-MM-DD.html 에 저장하세요. 완료 후: `minions thread add --author {{agentId}} --mentions mingming --tags alert --content \"...요약...\" --media <HTML 절대경로>` 로 오케스트레이터에게 전달. routine complete 처리."
 	}
 ]
