@@ -26,9 +26,23 @@ WORK_LOG_DIR = BASE_DIR / "work-log"
 STATE_FILE = WORK_LOG_DIR / "state" / "session_logger_state.json"
 WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
-# Telegram (notify.sh와 동일)
-TELEGRAM_CHAT_ID = "8514441011"
-TELEGRAM_BOT_TOKEN = "8584213613:AAE5h2B3m9hGD1nIMUmLvcTmSwJDph25lic"
+TELEGRAM_CONF = BASE_DIR / "telegram.conf"
+
+
+def _load_telegram_conf() -> dict:
+    """telegram.conf에서 key=value 파싱."""
+    conf = {}
+    try:
+        for line in TELEGRAM_CONF.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                conf[k.strip()] = v.strip()
+    except FileNotFoundError:
+        pass
+    return conf
 
 
 # ── stdin / state ─────────────────────────────────
@@ -389,6 +403,13 @@ def write_session_marker(session_id, data, now, repo):
 
 def send_session_telegram(data: dict, repo: str, duration_min: int | None):
     """세션 종료 시 요약을 텔레그램으로 전송."""
+    conf = _load_telegram_conf()
+    bot_token = conf.get("BOT_TOKEN", "")
+    chat_id = conf.get("CHAT_ID", "")
+    thread_id = conf.get("THREAD_SESSION", "")
+    if not bot_token or not chat_id:
+        return
+
     summary = data.get("summary")
     if isinstance(summary, dict):
         tag = summary.get("tag", "")
@@ -401,23 +422,21 @@ def send_session_telegram(data: dict, repo: str, duration_min: int | None):
 
     dur = f" ({duration_min}분)" if duration_min else ""
     msg = f"{msg}{dur}"
-
-    # 4096자 제한
     if len(msg) > 4096:
         msg = msg[:4090] + "..."
 
-    payload = urllib.parse.urlencode({
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": msg,
-    }).encode("utf-8")
+    payload = {"chat_id": chat_id, "text": msg}
+    if thread_id:
+        payload["message_thread_id"] = thread_id
+
     req = urllib.request.Request(
-        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-        data=payload,
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        data=urllib.parse.urlencode(payload).encode("utf-8"),
     )
     try:
         urllib.request.urlopen(req, timeout=10)
     except Exception:
-        pass  # 알림 실패는 무시
+        pass
 
 
 # ── main ──────────────────────────────────────────
