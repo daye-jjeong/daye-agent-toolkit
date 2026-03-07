@@ -12,7 +12,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
-from db import get_conn, get_coach_state, set_coach_state
+from db import get_conn, get_coach_state
 
 KST = timezone(timedelta(hours=9))
 app = Server("life-dashboard")
@@ -50,7 +50,7 @@ async def list_tools() -> list[Tool]:
     ]
 
 
-def _build_date_summary(conn, date_str: str) -> dict:
+def _build_date_summary(conn, date_str: str, coach_state: dict | None = None) -> dict:
     stats = conn.execute(
         "SELECT * FROM daily_stats WHERE date = ?", (date_str,)
     ).fetchone()
@@ -58,11 +58,12 @@ def _build_date_summary(conn, date_str: str) -> dict:
     if not stats:
         return {"date": date_str, "has_data": False}
 
+    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     activities = conn.execute("""
         SELECT repo, tag, summary, start_at, end_at, duration_min
-        FROM activities WHERE date(start_at) = ? AND source = 'cc'
+        FROM activities WHERE start_at >= ? AND start_at < ? AND source = 'cc'
         ORDER BY start_at
-    """, (date_str,)).fetchall()
+    """, (date_str, next_date)).fetchall()
 
     return {
         "date": date_str,
@@ -84,7 +85,7 @@ def _build_date_summary(conn, date_str: str) -> dict:
             }
             for a in activities
         ],
-        "coach_state": get_coach_state(conn),
+        "coach_state": coach_state if coach_state is not None else get_coach_state(conn),
     }
 
 
@@ -102,10 +103,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         elif name == "get_weekly_summary":
             end = arguments.get("end_date") or datetime.now(KST).strftime("%Y-%m-%d")
             end_dt = datetime.strptime(end, "%Y-%m-%d")
+            state = get_coach_state(conn)
             days = []
             for i in range(6, -1, -1):
                 d = (end_dt - timedelta(days=i)).strftime("%Y-%m-%d")
-                days.append(_build_date_summary(conn, d))
+                days.append(_build_date_summary(conn, d, coach_state=state))
             total_hours = sum(d.get("work_hours", 0) for d in days if d["has_data"])
             active_days = sum(1 for d in days if d["has_data"])
             result = {
@@ -113,7 +115,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "total_work_hours": round(total_hours, 1),
                 "active_days": active_days,
                 "daily": days,
-                "coach_state": get_coach_state(conn),
+                "coach_state": state,
             }
         else:
             result = {"error": f"Unknown tool: {name}"}

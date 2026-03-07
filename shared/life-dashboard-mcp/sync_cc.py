@@ -15,7 +15,7 @@ from pathlib import Path
 
 _WORK_DIGEST_SCRIPTS = Path(__file__).resolve().parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WORK_DIGEST_SCRIPTS))
-from parse_work_log import parse_work_log
+from parse_work_log import parse_work_log, TEST_KEYWORDS, TEST_PATTERNS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import get_conn, upsert_activity, update_daily_stats
@@ -48,10 +48,9 @@ def sync_date(conn, date_str: str) -> int:
 
         has_tests = 0
         has_commits = 0
-        test_keywords = {"pytest", "jest", "test", "vitest"}
         for cmd in s.get("commands", []):
             cmd_lower = cmd.lower()
-            if any(kw in cmd_lower for kw in test_keywords):
+            if any(kw in cmd_lower for kw in TEST_KEYWORDS) or any(pat in cmd_lower for pat in TEST_PATTERNS):
                 has_tests = 1
             if "git commit" in cmd_lower:
                 has_commits = 1

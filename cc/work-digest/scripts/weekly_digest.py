@@ -18,10 +18,9 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from _common import WEEKDAYS_KO, send_telegram as _send_telegram
+from _common import WEEKDAYS_KO, TAG_ICONS, TELEGRAM_MAX_CHARS, send_telegram as _send_telegram
 
 KST = timezone(timedelta(hours=9))
-TELEGRAM_MAX_CHARS = 4096
 
 PARSE_SCRIPT = Path(__file__).resolve().parent / "parse_work_log.py"
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -110,13 +109,6 @@ def aggregate_week(week_data: dict) -> dict:
 
 
 # ── Message building ────────────────────────────
-
-TAG_ICONS = {
-    "코딩": "\U0001f4bb", "디버깅": "\U0001f41b", "리서치": "\U0001f50d",
-    "리뷰": "\U0001f4dd", "ops": "\u2699\ufe0f", "설정": "\U0001f527",
-    "문서": "\U0001f4d6", "설계": "\U0001f4d0", "리팩토링": "\u267b\ufe0f",
-    "기타": "\U0001f4a1",
-}
 
 
 def format_duration(total_min: int) -> str:

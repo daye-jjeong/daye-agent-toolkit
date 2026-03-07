@@ -3,20 +3,26 @@
 
 import json
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 
 DB_DIR = Path.home() / "life-dashboard"
 DB_PATH = DB_DIR / "data.db"
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
+_schema_initialized = False
+
 
 def get_conn() -> sqlite3.Connection:
+    global _schema_initialized
     DB_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.executescript(SCHEMA_PATH.read_text())
+    if not _schema_initialized:
+        conn.executescript(SCHEMA_PATH.read_text())
+        _schema_initialized = True
     return conn
 
 
@@ -37,11 +43,12 @@ def upsert_activity(conn: sqlite3.Connection, data: dict):
 
 
 def update_daily_stats(conn: sqlite3.Connection, date_str: str):
+    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     rows = conn.execute("""
         SELECT tag, repo, duration_min, start_at, end_at
         FROM activities
-        WHERE date(start_at) = ? AND source = 'cc'
-    """, (date_str,)).fetchall()
+        WHERE start_at >= ? AND start_at < ? AND source = 'cc'
+    """, (date_str, next_date)).fetchall()
 
     if not rows:
         conn.execute("DELETE FROM daily_stats WHERE date = ?", (date_str,))

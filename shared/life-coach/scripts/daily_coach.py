@@ -20,19 +20,12 @@ from db import get_conn, get_coach_state, set_coach_state
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
-from _common import send_telegram, WEEKDAYS_KO
+from _common import send_telegram, WEEKDAYS_KO, TAG_ICONS, TELEGRAM_MAX_CHARS
 
 KST = timezone(timedelta(hours=9))
-TELEGRAM_MAX_CHARS = 4096
 COACHING_TIMEOUT_SEC = 45
 OVERWORK_THRESHOLD_HOURS = 8
 PROMPTS_PATH = Path(__file__).resolve().parent.parent / "references" / "coaching-prompts.md"
-
-TAG_ICONS = {
-    "코딩": "💻", "디버깅": "🐛", "리서치": "🔍", "리뷰": "📝",
-    "ops": "⚙️", "설정": "🔧", "문서": "📖", "설계": "📐",
-    "리팩토링": "♻️", "기타": "💡",
-}
 
 
 def get_today_data(conn, date_str: str) -> dict:
@@ -43,11 +36,12 @@ def get_today_data(conn, date_str: str) -> dict:
     if not stats:
         return {"date": date_str, "has_data": False}
 
+    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     activities = conn.execute("""
         SELECT repo, tag, summary, start_at, end_at, duration_min, token_total
-        FROM activities WHERE date(start_at) = ? AND source = 'cc'
+        FROM activities WHERE start_at >= ? AND start_at < ? AND source = 'cc'
         ORDER BY start_at
-    """, (date_str,)).fetchall()
+    """, (date_str, next_date)).fetchall()
 
     return {
         "date": date_str,
@@ -99,22 +93,27 @@ def build_data_section(data: dict) -> str:
     return "\n".join(lines)
 
 
-def build_template_report(data: dict, coach_state: dict) -> str:
-    date_str = data["date"]
+def _build_header(date_str: str) -> str:
     dt = datetime.strptime(date_str, "%Y-%m-%d")
     weekday = WEEKDAYS_KO[dt.weekday()]
+    return f"🏋️ {dt.month}/{dt.day}({weekday}) 데일리 코칭"
 
-    sections = []
-    sections.append(f"🏋️ {dt.month}/{dt.day}({weekday}) 데일리 코칭")
+
+def _build_stats_line(data: dict) -> str:
+    return (
+        f"⏱ {data['session_count']}세션 · {data['work_hours']}시간 "
+        f"· {data['first_session']}~{data['last_session_end']}"
+    )
+
+
+def build_template_report(data: dict, coach_state: dict) -> str:
+    sections = [_build_header(data["date"])]
 
     if not data["has_data"]:
         sections.append("오늘 기록된 세션 없음.")
         return "\n\n".join(sections)
 
-    sections.append(
-        f"⏱ {data['session_count']}세션 · {data['work_hours']}시간 "
-        f"· {data['first_session']}~{data['last_session_end']}"
-    )
+    sections.append(_build_stats_line(data))
 
     tags = data.get("tag_breakdown", {})
     if tags:
@@ -168,10 +167,9 @@ def generate_llm_coaching(data_section: str, tone_level: int) -> str | None:
     return None
 
 
-def update_overwork_tracking(conn, data: dict):
-    state = get_coach_state(conn)
-    overwork_days = int(state.get("consecutive_overwork_days", "0"))
-    level = int(state.get("escalation_level", "0"))
+def update_overwork_tracking(conn, data: dict, coach_state: dict):
+    overwork_days = int(coach_state.get("consecutive_overwork_days", "0"))
+    level = int(coach_state.get("escalation_level", "0"))
 
     if data["has_data"] and data["work_hours"] >= OVERWORK_THRESHOLD_HOURS:
         overwork_days += 1
@@ -202,7 +200,7 @@ def main():
     conn = get_conn()
     data = get_today_data(conn, args.date)
     coach_state = get_coach_state(conn)
-    level = update_overwork_tracking(conn, data)
+    level = update_overwork_tracking(conn, data, coach_state)
 
     if not data["has_data"] or args.no_llm:
         message = build_template_report(data, coach_state)
@@ -210,13 +208,8 @@ def main():
         data_section = build_data_section(data)
         llm_result = generate_llm_coaching(data_section, level)
         if llm_result:
-            dt = datetime.strptime(args.date, "%Y-%m-%d")
-            weekday = WEEKDAYS_KO[dt.weekday()]
-            header = f"🏋️ {dt.month}/{dt.day}({weekday}) 데일리 코칭"
-            stats_line = (
-                f"⏱ {data['session_count']}세션 · {data['work_hours']}시간 "
-                f"· {data['first_session']}~{data['last_session_end']}"
-            )
+            header = _build_header(args.date)
+            stats_line = _build_stats_line(data)
             message = f"{header}\n\n{stats_line}\n\n{llm_result}\n\n⚡ 코치 레벨: {level}"
         else:
             message = build_template_report(data, coach_state)

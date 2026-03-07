@@ -12,6 +12,7 @@ stdin: { session_id, transcript_path, cwd, hook_event_name, ... }
 """
 
 import sys
+import os
 import json
 import re
 import fcntl
@@ -415,13 +416,12 @@ def write_session_marker(session_id, data, now, repo):
     """세션 마커를 daily log에 append."""
     WORK_LOG_DIR.mkdir(parents=True, exist_ok=True)
     daily_file = WORK_LOG_DIR / f"{now.strftime('%Y-%m-%d')}.md"
-    is_new = not daily_file.exists()
     section = build_session_section(session_id, data, now, repo)
 
     with open(daily_file, "a") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
-            if is_new:
+            if os.fstat(f.fileno()).st_size == 0:
                 f.write(build_frontmatter(now))
             f.write(section)
         finally:
