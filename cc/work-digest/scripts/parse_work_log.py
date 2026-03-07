@@ -33,14 +33,17 @@ RE_SESSION_HEADER = re.compile(
     r"\)\s*$"
 )
 
-# > 파일 3개 | 7분  OR  > 수정 파일 3개 | 7분  OR  > 파일 3개 | 7분 | 1.2M tokens
+# > 파일 3개 | 7분  OR  > 파일 3개 | 7분 | 1.2M tokens  OR  ... | commit
 RE_BLOCKQUOTE = re.compile(
-    r"^>\s+(?:수정\s+)?파일\s+(\d+)개\s*\|\s*(\d+|[?？])분(?:\s*\|\s*(.+tokens))?"
+    r"^>\s+(?:수정\s+)?파일\s+(\d+)개\s*\|\s*(\d+|[?？])분(?:\s*\|\s*(.+tokens))?(?:\s*\|\s*(commit))?"
 )
 RE_TOKEN_ITEM = re.compile(r"^-\s+(\w[\w\s]*):\s*(.+)$")
 
 RE_TOPIC = re.compile(r"^\*\*주제\*\*:\s*(.+)$")
 RE_SUMMARY = re.compile(r"^\*\*요약\*\*:\s*(?:\[([^\]]+)\]\s*)?(.+)$")
+RE_DECISIONS = re.compile(r"^\*\*결정\*\*:\s*(.+)$")
+RE_MISTAKES = re.compile(r"^\*\*시행착오\*\*:\s*(.+)$")
+RE_PATTERNS = re.compile(r"^\*\*패턴\*\*:\s*(.+)$")
 RE_FILE_ITEM = re.compile(r"^-\s+`(.+?)`\s*$")
 RE_CMD_ITEM = re.compile(r"^-\s+`(.+?)`\s*$")
 RE_ERROR_ITEM = re.compile(r"^-\s+(.+)$")
@@ -110,6 +113,10 @@ def parse_session_block(lines: list[str]) -> dict | None:
     errors: list[str] = []
     tokens: dict[str, int] = {}
     token_summary_str = ""
+    has_commits_from_meta = False
+    decisions: list[str] = []
+    mistakes: list[str] = []
+    patterns: list[str] = []
 
     current_subsection: str | None = None
     # State for multi-line backtick commands
@@ -141,6 +148,8 @@ def parse_session_block(lines: list[str]) -> dict | None:
             duration_min = int(dur_str) if dur_str.isdigit() else None
             if bq.group(3):
                 token_summary_str = bq.group(3).strip()
+            if bq.group(4):
+                has_commits_from_meta = True
             continue
 
         # Summary (LLM 생성) — **요약**: [태그] 내용 (멀티라인)
@@ -162,6 +171,20 @@ def parse_session_block(lines: list[str]) -> dict | None:
         tm = RE_TOPIC.match(stripped)
         if tm:
             topic = tm.group(1).strip()
+            continue
+
+        # Behavioral signals
+        dm = RE_DECISIONS.match(stripped)
+        if dm:
+            decisions = [s.strip() for s in dm.group(1).split(" ; ") if s.strip()]
+            continue
+        mm = RE_MISTAKES.match(stripped)
+        if mm:
+            mistakes = [s.strip() for s in mm.group(1).split(" ; ") if s.strip()]
+            continue
+        pm = RE_PATTERNS.match(stripped)
+        if pm:
+            patterns = [s.strip() for s in pm.group(1).split(" ; ") if s.strip()]
             continue
 
         # Subsection header
@@ -214,6 +237,10 @@ def parse_session_block(lines: list[str]) -> dict | None:
         "files": files,
         "commands": commands,
         "errors": errors,
+        "decisions": decisions,
+        "mistakes": mistakes,
+        "patterns": patterns,
+        "has_commits_meta": has_commits_from_meta,
         "tokens": tokens if tokens else None,
         "token_summary": token_summary_str or None,
     }
@@ -293,6 +320,9 @@ def parse_work_log(date_str: str) -> dict:
                                 break
                 if not has_commits and "git commit" in cmd_lower:
                     has_commits = True
+
+            if not has_commits and s.get("has_commits_meta"):
+                has_commits = True
 
         # Aggregate token usage
         total_api_calls = 0

@@ -18,9 +18,10 @@ sys.path.insert(0, str(_WORK_DIGEST_SCRIPTS))
 from parse_work_log import parse_work_log, TEST_KEYWORDS, TEST_PATTERNS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from db import get_conn, upsert_activity, update_daily_stats
+from db import get_conn, upsert_activity, update_daily_stats, insert_behavioral_signal
 
 KST = timezone(timedelta(hours=9))
+_SIGNAL_TYPE_MAP = {"decisions": "decision", "mistakes": "mistake", "patterns": "pattern"}
 
 
 def sync_date(conn, date_str: str) -> int:
@@ -52,12 +53,12 @@ def sync_date(conn, date_str: str) -> int:
                 end_at = None
 
             has_tests = 0
-            has_commits = 0
+            has_commits = 1 if s.get("has_commits_meta") else 0
             for cmd in s.get("commands", []):
                 cmd_lower = cmd.lower()
                 if any(kw in cmd_lower for kw in TEST_KEYWORDS) or any(pat in cmd_lower for pat in TEST_PATTERNS):
                     has_tests = 1
-                if "git commit" in cmd_lower:
+                if not has_commits and "git commit" in cmd_lower:
                     has_commits = 1
 
             tokens = s.get("tokens") or {}
@@ -82,6 +83,19 @@ def sync_date(conn, date_str: str) -> int:
             }
             upsert_activity(conn, activity)
             count += 1
+
+            try:
+                for plural, singular in _SIGNAL_TYPE_MAP.items():
+                    for content in s.get(plural, []):
+                        insert_behavioral_signal(conn, {
+                            "session_id": session_id,
+                            "date": date_str,
+                            "signal_type": singular,
+                            "content": content,
+                            "repo": s.get("repo", ""),
+                        })
+            except Exception as e:
+                print(f"[sync_cc] failed to sync behavioral signals for {session_id}: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[sync_cc] failed to sync session {session_id}: {e}", file=sys.stderr)
 

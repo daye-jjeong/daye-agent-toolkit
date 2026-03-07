@@ -103,8 +103,33 @@ def strip_system_tags(text: str) -> str:
 # ── transcript 파싱 ───────────────────────────────
 
 IDLE_THRESHOLD_SEC = 300  # 5분 이상 gap = idle로 간주
-SUMMARY_TIMEOUT_SEC = 30
-CONVERSATION_MAX_CHARS = 8000  # haiku에 보낼 대화 최대 길이
+SUMMARY_TIMEOUT_SEC = 60
+CONVERSATION_MAX_CHARS = 8000
+
+
+def _extract_text_from_entry(entry: dict) -> str | None:
+    """transcript 엔트리에서 텍스트 추출. 시스템 태그 제거."""
+    msg = entry.get("message", {})
+    content = msg.get("content", "") if isinstance(msg, dict) else ""
+    texts = []
+    if isinstance(content, str) and content.strip():
+        cleaned = strip_system_tags(content.strip())
+        if cleaned:
+            texts.append(cleaned[:500])
+    elif isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                cleaned = strip_system_tags(block.get("text", "").strip())
+                if cleaned:
+                    texts.append(cleaned[:500])
+    return "\n".join(texts) if texts else None
+
+
+def _truncate_text(text: str, max_chars: int = CONVERSATION_MAX_CHARS) -> str:
+    if len(text) > max_chars:
+        half = max_chars // 2
+        text = text[:half] + "\n...(중략)...\n" + text[-half:]
+    return text
 
 
 def extract_conversation(transcript_path: str) -> str:
@@ -120,28 +145,33 @@ def extract_conversation(transcript_path: str) -> str:
                 entry_type = entry.get("type", "")
                 if entry_type not in ("user", "assistant"):
                     continue
-                msg = entry.get("message", {})
-                content = msg.get("content", "") if isinstance(msg, dict) else ""
-                if isinstance(content, str) and content.strip():
-                    cleaned = strip_system_tags(content.strip())
-                    if cleaned:
-                        role = "User" if entry_type == "user" else "Assistant"
-                        parts.append(f"{role}: {cleaned[:500]}")
-                elif isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            cleaned = strip_system_tags(block.get("text", "").strip())
-                            if cleaned:
-                                role = "User" if entry_type == "user" else "Assistant"
-                                parts.append(f"{role}: {cleaned[:500]}")
+                text = _extract_text_from_entry(entry)
+                if text:
+                    role = "User" if entry_type == "user" else "Assistant"
+                    parts.append(f"{role}: {text}")
     except (FileNotFoundError, PermissionError):
         pass
+    return _truncate_text("\n".join(parts))
 
-    combined = "\n".join(parts)
-    if len(combined) > CONVERSATION_MAX_CHARS:
-        half = CONVERSATION_MAX_CHARS // 2
-        combined = combined[:half] + "\n...(중략)...\n" + combined[-half:]
-    return combined
+
+def extract_user_messages(transcript_path: str) -> str:
+    """transcript에서 user 메시지만 추출 (행동 추출용)."""
+    parts = []
+    try:
+        with open(transcript_path, "r") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line.strip())
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("type") != "user":
+                    continue
+                text = _extract_text_from_entry(entry)
+                if text:
+                    parts.append(text)
+    except (FileNotFoundError, PermissionError):
+        pass
+    return _truncate_text("\n---\n".join(parts))
 
 
 def summarize_session(conversation: str, repo: str) -> dict | None:
@@ -177,7 +207,7 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
     )
     try:
         result = subprocess.run(
-            ["claude", "-p", "--model", "haiku", "--no-session-persistence"],
+            ["claude", "-p", "--model", "sonnet", "--no-session-persistence"],
             input=prompt,
             capture_output=True,
             text=True,
@@ -185,8 +215,12 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return _parse_summary_response(result.stdout.strip())
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
-        pass
+    except subprocess.TimeoutExpired:
+        print(f"[session_logger] summarize_session timed out ({SUMMARY_TIMEOUT_SEC}s)", file=sys.stderr)
+    except FileNotFoundError:
+        print("[session_logger] 'claude' CLI not found on PATH", file=sys.stderr)
+    except Exception as e:
+        print(f"[session_logger] summarize_session failed: {type(e).__name__}: {e}", file=sys.stderr)
     return None
 
 
@@ -239,9 +273,98 @@ def _parse_summary_response(raw: str) -> dict:
         if stripped:
             text_lines.append(stripped)
 
-    text = "\n".join(text_lines)[:300]
+    text = _clean_summary_text("\n".join(text_lines))
     tag = _reclassify_tag(tag, text)
     return {"tag": tag, "text": text}
+
+
+# 코드블록, 파일 경로, 마크다운 문법을 정제
+_CODE_BLOCK_RE = re.compile(r"```[\s\S]*?```")
+_FILE_PATH_RE = re.compile(r"(?:~?/[\w._-]+){2,}")
+_MD_HEADER_RE = re.compile(r"^#{1,4}\s+", re.MULTILINE)
+
+
+def _clean_summary_text(text: str) -> str:
+    """LLM 요약에서 코드블록, 파일경로, 마크다운 문법 제거."""
+    text = _CODE_BLOCK_RE.sub("", text)
+    # 인라인 코드: 백틱만 벗기고 내용은 유지
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = _FILE_PATH_RE.sub("", text)
+    text = _MD_HEADER_RE.sub("", text)
+    # 연속 공백/빈줄 정리
+    text = re.sub(r"\n{2,}", "\n", text)
+    text = re.sub(r"  +", " ", text)
+    return text.strip()[:300]
+
+
+BEHAVIOR_TIMEOUT_SEC = 60
+
+
+def extract_behavioral_signals(user_messages: str, repo: str) -> dict | None:
+    """sonnet으로 사용자 행동 신호 추출. 실패 시 None.
+
+    Returns: {"decisions": [...], "mistakes": [...], "patterns": [...]} or None
+    """
+    if not user_messages.strip():
+        return None
+    prompt = (
+        f"레포: {repo}\n\n"
+        "다음은 Claude Code 세션에서 사용자가 보낸 메시지들이다.\n\n"
+        f"{user_messages}\n\n"
+        "이 사용자의 행동 신호를 추출해라. 각 항목은 1줄, 30자 이내.\n"
+        "- decisions: 사용자가 명시적 선택을 한 것 (A 대신 B 선택 등)\n"
+        "- mistakes: 되돌린 것, 교정한 것, 시행착오\n"
+        "- patterns: 관찰되는 작업 습관 (좋든 나쁘든)\n"
+        "없으면 빈 배열.\n\n"
+        'JSON으로만 출력. 다른 텍스트 없이:\n'
+        '{"decisions": [...], "mistakes": [...], "patterns": [...]}'
+    )
+    try:
+        result = subprocess.run(
+            ["claude", "-p", "--model", "sonnet", "--no-session-persistence"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=BEHAVIOR_TIMEOUT_SEC,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return _parse_signals_response(result.stdout.strip())
+    except subprocess.TimeoutExpired:
+        print(f"[session_logger] extract_behavioral_signals timed out ({BEHAVIOR_TIMEOUT_SEC}s)", file=sys.stderr)
+    except FileNotFoundError:
+        print("[session_logger] 'claude' CLI not found on PATH", file=sys.stderr)
+    except Exception as e:
+        print(f"[session_logger] extract_behavioral_signals failed: {type(e).__name__}: {e}", file=sys.stderr)
+    return None
+
+
+def _parse_signals_response(raw: str) -> dict | None:
+    """Parse JSON behavioral signals from LLM response."""
+    # JSON 블록 추출 (```json ... ``` 또는 bare JSON)
+    cleaned = raw.strip()
+    if "```" in cleaned:
+        match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", cleaned)
+        if match:
+            cleaned = match.group(1)
+    # { 로 시작하는 부분 찾기
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1:
+        return None
+    try:
+        data = json.loads(cleaned[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    result = {}
+    for key in ("decisions", "mistakes", "patterns"):
+        items = data.get(key, [])
+        if isinstance(items, list):
+            result[key] = [str(item)[:60] for item in items if item]
+        else:
+            result[key] = []
+    if not any(result.values()):
+        return None
+    return result
 
 
 def parse_transcript(transcript_path: str) -> dict:
@@ -256,6 +379,7 @@ def parse_transcript(transcript_path: str) -> dict:
     token_cache_read = 0
     token_cache_create = 0
     api_calls = 0
+    has_commits = False
 
     try:
         with open(transcript_path, "r") as f:
@@ -315,6 +439,8 @@ def parse_transcript(transcript_path: str) -> dict:
                         if tool == "Bash":
                             cmd = inp.get("command", "")
                             if cmd:
+                                if not has_commits and "git commit" in cmd.lower():
+                                    has_commits = True
                                 commands_run.append(cmd[:80])
 
                 # Tool results (errors)
@@ -355,6 +481,7 @@ def parse_transcript(transcript_path: str) -> dict:
         "topic": first_user_msg,
         "duration_min": duration_min,
         "end_time": end_time_str,
+        "has_commits": has_commits,
         "tokens": {
             "input": token_input,
             "output": token_output,
@@ -397,7 +524,8 @@ def build_session_section(session_id, data, now, repo):
     tokens = data.get("tokens", {})
     total_tokens = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
     token_str = _format_tokens(total_tokens)
-    lines.append(f"> 파일 {file_count}개 | {duration} | {token_str}")
+    commit_flag = " | commit" if data.get("has_commits") else ""
+    lines.append(f"> 파일 {file_count}개 | {duration} | {token_str}{commit_flag}")
     lines.append("")
 
     if data.get("summary"):
@@ -410,6 +538,18 @@ def build_session_section(session_id, data, now, repo):
     elif data["topic"]:
         lines.append(f"**주제**: {data['topic']}")
         lines.append("")
+
+    signals = data.get("behavioral_signals")
+    if signals:
+        if signals.get("decisions"):
+            lines.append(f"**결정**: {' ; '.join(signals['decisions'])}")
+            lines.append("")
+        if signals.get("mistakes"):
+            lines.append(f"**시행착오**: {' ; '.join(signals['mistakes'])}")
+            lines.append("")
+        if signals.get("patterns"):
+            lines.append(f"**패턴**: {' ; '.join(signals['patterns'])}")
+            lines.append("")
 
     if data["files"]:
         lines.append("### 수정된 파일")
@@ -507,12 +647,33 @@ def main():
     if already_recorded(session_id, event):
         sys.exit(0)
 
-    # SessionEnd일 때만 LLM 요약 생성 (PreCompact는 스킵)
+    # SessionEnd일 때만 LLM 요약 + 행동 추출 (PreCompact는 스킵)
     if event == "SessionEnd":
+        from concurrent.futures import ThreadPoolExecutor
+
         conversation = extract_conversation(transcript_path)
-        summary = summarize_session(conversation, repo)
-        if summary:
-            data["summary"] = summary
+        user_msgs = extract_user_messages(transcript_path)
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                summary_future = pool.submit(summarize_session, conversation, repo)
+                signals_future = pool.submit(extract_behavioral_signals, user_msgs, repo)
+
+                try:
+                    summary = summary_future.result(timeout=SUMMARY_TIMEOUT_SEC + 10)
+                    if summary:
+                        data["summary"] = summary
+                except Exception as e:
+                    print(f"[session_logger] summary future failed: {e}", file=sys.stderr)
+
+                try:
+                    signals = signals_future.result(timeout=BEHAVIOR_TIMEOUT_SEC + 10)
+                    if signals:
+                        data["behavioral_signals"] = signals
+                except Exception as e:
+                    print(f"[session_logger] signals future failed: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[session_logger] ThreadPool failed: {e}", file=sys.stderr)
 
     # 세션 마커 기록
     write_session_marker(session_id, data, now, repo)

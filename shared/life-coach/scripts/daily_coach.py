@@ -15,7 +15,7 @@ from pathlib import Path
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from db import get_conn, get_coach_state, set_coach_state
+from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -44,6 +44,16 @@ def get_today_data(conn, date_str: str) -> dict:
     """, (date_str, next_date)).fetchall()
 
     sessions = [dict(a) for a in activities]
+
+    # 오늘의 행동 신호
+    signals = conn.execute("""
+        SELECT signal_type, content FROM behavioral_signals WHERE date = ?
+    """, (date_str,)).fetchall()
+    today_signals = [{"type": r["signal_type"], "content": r["content"]} for r in signals]
+
+    # 최근 7일 반복 패턴
+    repeated = get_repeated_signals(conn, date_str, days=7, min_count=2)
+
     return {
         "date": date_str,
         "has_data": True,
@@ -55,6 +65,8 @@ def get_today_data(conn, date_str: str) -> dict:
         "repos": json.loads(stats["repos"]) if stats["repos"] else {},
         "sessions": sessions,
         "token_total": sum(s.get("token_total") or 0 for s in sessions),
+        "behavioral_signals": today_signals,
+        "repeated_patterns": repeated,
     }
 
 
@@ -128,6 +140,33 @@ def _build_pattern_feedback(data: dict) -> str | None:
     return "💡 패턴 피드백:\n" + "\n".join(f"  {ln}" for ln in lines)
 
 
+def _build_behavioral_section(data: dict) -> str | None:
+    """오늘의 행동 신호 + 반복 패턴."""
+    lines = []
+    signals = data.get("behavioral_signals", [])
+    if signals:
+        by_type: dict[str, list[str]] = {}
+        for s in signals:
+            by_type.setdefault(s["type"], []).append(s["content"])
+        type_labels = {"decision": "결정", "mistake": "시행착오", "pattern": "패턴"}
+        for t, label in type_labels.items():
+            items = by_type.get(t, [])
+            if items:
+                lines.append(f"  {label}: {', '.join(items[:5])}")
+
+    repeated = data.get("repeated_patterns", [])
+    if repeated:
+        if lines:
+            lines.append("")
+        lines.append("  ⚠️ 반복 패턴 (최근 7일):")
+        for r in repeated:
+            lines.append(f"    - \"{r['content']}\" ({r['count']}회)")
+
+    if not lines:
+        return None
+    return "🧠 행동 신호:\n" + "\n".join(lines)
+
+
 def build_template_report(data: dict, coach_state: dict) -> str:
     sections = [_build_header(data["date"])]
 
@@ -161,6 +200,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
     feedback = _build_pattern_feedback(data)
     if feedback:
         sections.append(feedback)
+
+    behavior = _build_behavioral_section(data)
+    if behavior:
+        sections.append(behavior)
 
     level = int(coach_state.get("escalation_level", "0"))
     sections.append(f"⚡ 코치 레벨: {level}")

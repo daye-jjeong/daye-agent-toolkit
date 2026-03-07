@@ -42,3 +42,17 @@ INSERT OR IGNORE INTO coach_state (key, value) VALUES
     ('escalation_level', '0'),
     ('consecutive_overwork_days', '0'),
     ('consecutive_no_exercise_days', '0');
+
+CREATE TABLE IF NOT EXISTS behavioral_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    signal_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    repo TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_unique ON behavioral_signals(session_id, signal_type, content);
+CREATE INDEX IF NOT EXISTS idx_signals_date ON behavioral_signals(date);
+CREATE INDEX IF NOT EXISTS idx_signals_type ON behavioral_signals(signal_type);
