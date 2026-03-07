@@ -1,0 +1,6 @@
+{
+  "name": "life-coach",
+  "version": "0.1.0",
+  "description": "일일/주간 라이프 코칭 — 작업 패턴 분석, 자동화 제안, 건강 넛지. 코칭, 리뷰, 하루 정리, 방향성, 과작업, 운동이 필요할 때 사용.",
+  "entrypoint": "SKILL.md"
+}
