@@ -4,7 +4,7 @@
 # 수동 테스트: echo '{}' | ./notify.sh permission "승인 대기"
 #
 # stop 이벤트는 session_logger.py가 LLM 요약과 함께 전송하므로
-# 이 스크립트에서는 permission/idle/error만 처리한다.
+# 이 스크립트에서는 Notification만 처리한다.
 
 set -euo pipefail
 
@@ -40,9 +40,22 @@ MSG="${2:-}"
 # stop 이벤트는 session_logger.py가 처리 → 스킵
 [ "$EVENT" = "stop" ] && exit 0
 
-# JSON에서 session_id 추출
-SID="$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | cut -c1-8)"
+# JSON에서 필드 추출 (grep 실패 시 빈 문자열)
+SID="$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | cut -c1-8 || true)"
 [ -z "$SID" ] && SID="manual"
+
+# stdin JSON에서 notification 상세 정보 추출
+NOTIF_TYPE="$(echo "$INPUT" | grep -o '"notification_type":"[^"]*"' | cut -d'"' -f4 || true)"
+TRANSCRIPT="$(echo "$INPUT" | grep -o '"transcript_path":"[^"]*"' | cut -d'"' -f4 || true)"
+
+# transcript에서 마지막 assistant 텍스트 추출
+LAST_MSG=""
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  # 마지막 assistant 메시지의 text 블록을 추출 (200자 제한)
+  RAW="$(grep '"type":"assistant"' "$TRANSCRIPT" | tail -1 | grep -o '"text":"[^"]*"' | tail -1 | cut -d'"' -f4 | cut -c1-200 || true)"
+  # JSON 이스케이프(\n, \t) → 실제 문자로 변환
+  LAST_MSG="$(printf '%b' "$RAW")"
+fi
 
 # 중복 알림 방지: 같은 세션에서 30초 이내 재알림 스킵
 DEDUP_DIR="/tmp/claude-notify-dedup"
@@ -59,26 +72,44 @@ fi
 echo "$NOW" > "$DEDUP_FILE"
 find "$DEDUP_DIR" -type f -mmin +60 -delete 2>/dev/null || true
 
-# 이벤트별 기본 메시지 + 이모지
-case "$EVENT" in
-  permission) EMOJI="🔐"; [ -z "$MSG" ] && MSG="승인 대기 중" ;;
-  idle)       EMOJI="⏳"; [ -z "$MSG" ] && MSG="입력 대기 중" ;;
-  error)      EMOJI="❌"; [ -z "$MSG" ] && MSG="오류 발생" ;;
-  *)          EMOJI="🔔"; [ -z "$MSG" ] && MSG="알림이 있습니다" ;;
+# notification_type 기반 이모지/메시지 결정
+case "${NOTIF_TYPE:-}" in
+  permission_prompt)
+    EMOJI="🔐"
+    [ -z "$MSG" ] && MSG="승인 대기 중"
+    ;;
+  idle_prompt)
+    EMOJI="⏳"
+    [ -z "$MSG" ] && MSG="입력 대기 중"
+    ;;
+  *)
+    case "$EVENT" in
+      permission) EMOJI="🔐"; [ -z "$MSG" ] && MSG="승인 대기 중" ;;
+      idle)       EMOJI="⏳"; [ -z "$MSG" ] && MSG="입력 대기 중" ;;
+      error)      EMOJI="❌"; [ -z "$MSG" ] && MSG="오류 발생" ;;
+      *)          EMOJI="🔔"; [ -z "$MSG" ] && MSG="알림이 있습니다" ;;
+    esac
+    ;;
 esac
 
 PROJECT="$(basename "${PWD:-unknown}")"
 BRANCH="$(git branch --show-current 2>/dev/null || echo '-')"
 
-TEXT="${EMOJI} *Claude Code* \`${SID}\`
+# 마지막 어시스턴트 메시지 컨텍스트
+CONTEXT=""
+if [ -n "${LAST_MSG:-}" ]; then
+  CONTEXT="
+${LAST_MSG}"
+fi
+
+TEXT="${EMOJI} Claude Code ${SID}
 ${MSG}
-📂 \`${PROJECT}\` (\`${BRANCH}\`)"
+📂 ${PROJECT} (${BRANCH})${CONTEXT}"
 
 # 백그라운드 전송 — hook 블로킹 최소화
 curl -sf -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
-  -d chat_id="$CHAT_ID" \
-  -d text="$TEXT" \
-  -d parse_mode="Markdown" \
+  --data-urlencode "chat_id=$CHAT_ID" \
+  --data-urlencode "text=$TEXT" \
   >/dev/null 2>&1 &
 
 exit 0

@@ -105,18 +105,25 @@ worktree 생성 후 바로 작업:
 - 테스트 전부 실행, 통과 확인
 - **"다 했다"고 판단한 후에만** 리뷰로 넘어감
 
-### 6. 완료 리뷰
-- `git diff` 전체를 `superpowers:code-reviewer` 서브에이전트 1개에 전달
-- plan이 있으면 plan 대비 누락 체크 포함
-- Critical/Important 이슈 수정 후 커밋
+### 6. 마무리 리뷰 (자동 실행)
+자기 검증(5단계) 통과 후 **사용자 호출 없이** 아래를 자동 실행한다:
 
-### 7. Simplify
-- 리뷰 이슈 수정 후 `simplify` 스킬 실행
+**6a. Simplify**
+- `/simplify` 스킬 실행
 - 3개 병렬 에이전트(Code Reuse, Code Quality, Efficiency)가 diff를 분석하고 직접 수정
 - 수정사항이 있으면 커밋
 
-### 8. 완료
-- simplify 완료 후, 사용자에게 완료 제안
+**6b. PR Review**
+- `/pr-review-toolkit:review-pr` 스킬 실행
+- Critical/Important 이슈 수정 후 커밋
+
+**6c. 수렴 확인**
+- 6a+6b에서 수정한 코드가 있으면 `tsc --noEmit` + 관련 테스트 실행
+- 통과하면 완료로 간주
+- 2회 이상 반복된 리뷰 지적 패턴은 `review-learning-loop` 규칙에 따라 auto memory에 기록
+
+### 7. 완료
+- 마무리 리뷰 완료 후, 사용자에게 완료 제안
 - 사용자가 OK하면 **작업 완료 방법** (위 우선순위) 따라 실행
 - 사용자가 요청하기 전에 자동 완료하지 않음
 
@@ -165,10 +172,10 @@ M과 동일한 구조. 다음만 다름:
 [S] worktree → 직접 코딩 → 테스트 실행 → 완료 (프로젝트 스킬 우선)
 
 [M] worktree → brainstorming → (plan) → 메인 구현 (TDD or 수동검증)
-    → 자기 검증 → 완료 리뷰 (1 서브에이전트) → simplify → 완료
+    → 자기 검증 → [자동] simplify → pr-review → 수렴 확인 → 완료
 
 [L] worktree → brainstorming → plan → 메인 구현 (+ Ralph 평가)
-    → 자기 검증 → 완료 리뷰 → simplify → 완료
+    → 자기 검증 → [자동] simplify → pr-review → 수렴 확인 → 완료
 
 [핸드오프] 이전: WIP 커밋 + plan 업데이트 → 새 세션: 자동 감지 → 이어서
 ```

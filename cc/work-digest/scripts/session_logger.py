@@ -13,6 +13,7 @@ stdin: { session_id, transcript_path, cwd, hook_event_name, ... }
 
 import sys
 import json
+import re
 import fcntl
 import subprocess
 from datetime import datetime, timezone, timedelta
@@ -77,6 +78,27 @@ def detect_repo(cwd: str) -> str:
     return Path(cwd).name
 
 
+# ── 시스템 태그 제거 ──────────────────────────────
+
+_SYSTEM_TAG_RE = re.compile(
+    r"<(?:system-reminder|local-command-caveat|antml:\w+|available-deferred-tools"
+    r"|fast_mode_info|EXTREMELY_\w*IMPORTANT)"
+    r"[^>]*>[\s\S]*?</(?:system-reminder|local-command-caveat|antml:\w+"
+    r"|available-deferred-tools|fast_mode_info|EXTREMELY_\w*IMPORTANT)>",
+)
+
+
+def strip_system_tags(text: str) -> str:
+    """시스템 주입 태그 제거 (<system-reminder>, <local-command-caveat> 등)."""
+    cleaned = _SYSTEM_TAG_RE.sub("", text)
+    # 닫히지 않은 태그도 제거 (truncated content)
+    cleaned = re.sub(
+        r"<(?:system-reminder|local-command-caveat)[^>]*>.*",
+        "", cleaned, flags=re.DOTALL,
+    )
+    return cleaned.strip()
+
+
 # ── transcript 파싱 ───────────────────────────────
 
 IDLE_THRESHOLD_SEC = 300  # 5분 이상 gap = idle로 간주
@@ -100,15 +122,17 @@ def extract_conversation(transcript_path: str) -> str:
                 msg = entry.get("message", {})
                 content = msg.get("content", "") if isinstance(msg, dict) else ""
                 if isinstance(content, str) and content.strip():
-                    role = "User" if entry_type == "user" else "Assistant"
-                    parts.append(f"{role}: {content.strip()[:500]}")
+                    cleaned = strip_system_tags(content.strip())
+                    if cleaned:
+                        role = "User" if entry_type == "user" else "Assistant"
+                        parts.append(f"{role}: {cleaned[:500]}")
                 elif isinstance(content, list):
                     for block in content:
                         if isinstance(block, dict) and block.get("type") == "text":
-                            text = block.get("text", "").strip()
-                            if text:
+                            cleaned = strip_system_tags(block.get("text", "").strip())
+                            if cleaned:
                                 role = "User" if entry_type == "user" else "Assistant"
-                                parts.append(f"{role}: {text[:500]}")
+                                parts.append(f"{role}: {cleaned[:500]}")
     except (FileNotFoundError, PermissionError):
         pass
 
@@ -215,10 +239,14 @@ def parse_transcript(transcript_path: str) -> dict:
                     if isinstance(content, list):
                         for block in content:
                             if isinstance(block, dict) and block.get("type") == "text":
-                                first_user_msg = block.get("text", "")[:120]
-                                break
+                                raw = strip_system_tags(block.get("text", ""))
+                                if raw:
+                                    first_user_msg = raw[:120]
+                                    break
                     elif isinstance(content, str):
-                        first_user_msg = content[:120]
+                        raw = strip_system_tags(content)
+                        if raw:
+                            first_user_msg = raw[:120]
 
                 # Token usage (from assistant responses)
                 if entry_type == "assistant" and isinstance(msg, dict):
