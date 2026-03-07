@@ -39,7 +39,7 @@ def get_today_data(conn, date_str: str) -> dict:
     activities = conn.execute("""
         SELECT repo, tag, summary, start_at, end_at, duration_min,
                token_total, error_count, has_tests, has_commits
-        FROM activities WHERE start_at >= ? AND start_at < ? AND source = 'cc'
+        FROM activities WHERE start_at >= ? AND start_at < ?
         ORDER BY start_at
     """, (date_str, next_date)).fetchall()
 
