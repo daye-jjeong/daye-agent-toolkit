@@ -104,3 +104,25 @@ def set_coach_state(conn: sqlite3.Connection, key: str, value: str):
         VALUES (?, ?, datetime('now','localtime'))
         ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
     """, (key, value))
+
+
+def insert_behavioral_signal(conn: sqlite3.Connection, signal: dict):
+    conn.execute("""
+        INSERT INTO behavioral_signals (session_id, date, signal_type, content, repo)
+        VALUES (:session_id, :date, :signal_type, :content, :repo)
+    """, signal)
+
+
+def get_repeated_signals(conn: sqlite3.Connection, date_str: str, days: int = 7, min_count: int = 2) -> list[dict]:
+    """최근 N일간 반복된 행동 신호 집계."""
+    since = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
+    rows = conn.execute("""
+        SELECT content, signal_type, COUNT(*) as cnt
+        FROM behavioral_signals
+        WHERE date >= ? AND signal_type IN ('mistake', 'pattern')
+        GROUP BY content
+        HAVING cnt >= ?
+        ORDER BY cnt DESC
+        LIMIT 10
+    """, (since, min_count)).fetchall()
+    return [{"content": r["content"], "signal_type": r["signal_type"], "count": r["cnt"]} for r in rows]
