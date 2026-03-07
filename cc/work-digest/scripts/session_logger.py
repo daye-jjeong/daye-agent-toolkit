@@ -297,12 +297,22 @@ def parse_transcript(transcript_path: str) -> dict:
                 active_sec += gap
         duration_min = max(1, int(active_sec / 60))
 
+    # 종료 시간: 마지막 타임스탬프를 KST로 변환
+    end_time_str = None
+    if timestamps:
+        last_ts = timestamps[-1]
+        if last_ts.tzinfo is None:
+            last_ts = last_ts.replace(tzinfo=timezone.utc)
+        end_kst = last_ts.astimezone(KST)
+        end_time_str = end_kst.strftime("%H:%M")
+
     return {
         "files": sorted(files_modified),
         "commands": commands_run[:10],
         "errors": errors[:5],
         "topic": first_user_msg,
         "duration_min": duration_min,
+        "end_time": end_time_str,
         "tokens": {
             "input": token_input,
             "output": token_output,
@@ -331,9 +341,14 @@ def build_frontmatter(now):
 def build_session_section(session_id, data, now, repo):
     time_str = now.strftime("%H:%M")
     sid_short = session_id[:8] if session_id else "unknown"
+    end_time = data.get("end_time")
+    if end_time and end_time != time_str:
+        time_range = f"{time_str}~{end_time}"
+    else:
+        time_range = time_str
 
     lines = []
-    lines.append(f"## 세션 {time_str} ({sid_short}, {repo})")
+    lines.append(f"## 세션 {time_range} ({sid_short}, {repo})")
 
     file_count = len(data["files"])
     duration = f"{data['duration_min']}분" if data["duration_min"] else "?분"

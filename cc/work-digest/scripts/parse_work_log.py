@@ -26,7 +26,7 @@ WORK_LOG_DIR = BASE_DIR / "work-log"
 #   ## 세션 13:46 (8ed2bc46, daye-agent-toolkit)         ← session_logger.py
 #   ## 세션 13:46 (claude-code, 8ed2bc46, daye-agent-toolkit)  ← vault/openclaw
 RE_SESSION_HEADER = re.compile(
-    r"^##\s+세션\s+(\d{1,2}:\d{2})\s+\("
+    r"^##\s+세션\s+(\d{1,2}:\d{2})(?:~(\d{1,2}:\d{2}))?\s+\("
     r"(?:[\w-]+,\s*)?"                          # optional tool name prefix
     r"([0-9a-f]{8}),\s*"                        # session_id (8-hex)
     r"([^\)]+)"                                 # repo name
@@ -96,8 +96,9 @@ def parse_session_block(lines: list[str]) -> dict | None:
         return None
 
     time_str = header_match.group(1)
-    session_id = header_match.group(2)
-    repo = header_match.group(3).strip()
+    end_time = header_match.group(2)  # None if legacy format (no ~end)
+    session_id = header_match.group(3)
+    repo = header_match.group(4).strip()
 
     file_count = 0
     duration_min = None
@@ -202,6 +203,7 @@ def parse_session_block(lines: list[str]) -> dict | None:
 
     return {
         "time": time_str,
+        "end_time": end_time,
         "session_id": session_id,
         "repo": repo,
         "file_count": file_count,
