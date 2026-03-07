@@ -18,7 +18,7 @@ sys.path.insert(0, str(_WORK_DIGEST_SCRIPTS))
 from parse_work_log import parse_work_log, TEST_KEYWORDS, TEST_PATTERNS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from db import get_conn, upsert_activity, update_daily_stats
+from db import get_conn, upsert_activity, update_daily_stats, insert_behavioral_signal
 
 KST = timezone(timedelta(hours=9))
 
@@ -82,6 +82,16 @@ def sync_date(conn, date_str: str) -> int:
             }
             upsert_activity(conn, activity)
             count += 1
+
+            for signal_type in ("decisions", "mistakes", "patterns"):
+                for content in s.get(signal_type, []):
+                    insert_behavioral_signal(conn, {
+                        "session_id": session_id,
+                        "date": date_str,
+                        "signal_type": signal_type.rstrip("s"),  # decisions → decision
+                        "content": content,
+                        "repo": s.get("repo", ""),
+                    })
         except Exception as e:
             print(f"[sync_cc] failed to sync session {session_id}: {e}", file=sys.stderr)
 
