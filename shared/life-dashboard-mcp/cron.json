@@ -1,0 +1,9 @@
+[
+  {
+    "schedule": "50 20 * * *",
+    "command": "python3 {baseDir}/sync_cc.py --days 1 && python3 {baseDir}/sync_calendar.py --days 1",
+    "description": "CC + 캘린더 데이터 SQLite 동기화",
+    "scope": "system",
+    "name": "life-dashboard-sync"
+  }
+]

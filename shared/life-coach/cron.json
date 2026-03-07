@@ -1,7 +1,9 @@
 [
   {
     "schedule": "0 21 * * *",
-    "command": "python3 {baseDir}/../life-dashboard-mcp/sync_cc.py --days 1 && python3 {baseDir}/../life-dashboard-mcp/sync_calendar.py --days 1 && python3 {baseDir}/scripts/daily_coach.py",
-    "description": "CC + 캘린더 sync + 일일 코칭 리포트"
+    "command": "1. life-dashboard MCP의 get_today_summary 도구로 오늘 데이터 조회\n2. life-coach 스킬의 references/coaching-prompts.md 일일 코칭 프레임을 적용하여 500자 이내 코칭 생성\n3. 텔레그램 CHAT_ID_COACH 채널로 전송",
+    "description": "LLM 일일 코칭 리포트",
+    "scope": "system",
+    "name": "life-coach-daily"
   }
 ]

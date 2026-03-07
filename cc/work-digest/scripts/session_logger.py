@@ -158,17 +158,18 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
         f"{conversation}\n\n"
         "1줄째: 작업 유형 태그 하나를 골라라. "
         f"선택지: {tags_str}\n"
-        "태그 선택 기준:\n"
-        "- 코딩: 새 기능 구현, 파일 생성\n"
-        "- 디버깅: 버그 수정, 에러 해결\n"
-        "- 리서치: 조사, 탐색, 문서 읽기\n"
-        "- 리뷰: 코드 리뷰, PR 리뷰\n"
-        "- ops: 배포, 인프라, 서버 운영\n"
-        "- 설정: 환경 설정, 설치, 구성 변경\n"
-        "- 문서: README, 문서 작성\n"
-        "- 설계: 브레인스토밍, plan 작성, 아키텍처 설계\n"
-        "- 리팩토링: 기존 코드 구조 변경, 정리, 통합\n"
-        "- 기타: 위 어디에도 해당하지 않을 때만 사용\n\n"
+        "태그 선택 기준 (가장 비중이 큰 작업 기준으로 1개만):\n"
+        "- 코딩: 새 기능 구현, 파일 생성, 스크립트 작성\n"
+        "- 디버깅: 버그 수정, 에러 해결, 원인 분석\n"
+        "- 리서치: 조사, 탐색, 문서 읽기, 영상 정리, 비교 분석\n"
+        "- 리뷰: 코드 리뷰, PR 리뷰, 감사(audit)\n"
+        "- ops: 배포, 인프라, 서버 운영, 에이전트 레지스트리, 큐 관리\n"
+        "- 설정: 환경 설정, 설치, 구성 변경, alias 추가\n"
+        "- 문서: README, 문서 작성, SKILL.md 작성\n"
+        "- 설계: 브레인스토밍, plan 작성, 아키텍처 설계, 스킬 설계\n"
+        "- 리팩토링: 기존 코드 구조 변경, 정리, 통합, 마이그레이션\n"
+        "- 기타: 위 9개 중 어느 것도 맞지 않을 때만. "
+        "복합 작업이면 가장 비중이 큰 것을 골라라. 기타를 쓰지 마라.\n\n"
         "2줄째부터: 이 세션에서 한 작업을 한국어 2-3줄로 요약해라. "
         "구체적으로 뭘 만들었는지, 뭘 고쳤는지, 뭘 조사했는지 중심으로. "
         "파일 경로나 명령어는 생략하고 작업의 의미만 쓰라.\n\n"
@@ -187,6 +188,34 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
     except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
         pass
     return None
+
+
+_TAG_KEYWORDS = {
+    "디버깅": ["디버깅", "버그", "에러", "fix", "debug", "원인 파악", "원인 분석"],
+    "코딩": ["구현", "생성", "추가", "작성", "신규", "feat", "implement"],
+    "리서치": ["리서치", "조사", "탐색", "분석", "비교", "검토", "파악"],
+    "설계": ["설계", "design", "plan", "브레인스토밍", "아키텍처"],
+    "리팩토링": ["리팩토링", "refactor", "통합", "정리", "마이그레이션"],
+    "ops": ["배포", "deploy", "인프라", "레지스트리", "큐", "크론", "cron"],
+    "설정": ["설정", "설치", "config", "alias", "환경"],
+    "리뷰": ["리뷰", "review", "감사", "audit"],
+    "문서": ["문서", "README", "SKILL.md", "doc"],
+}
+
+
+def _reclassify_tag(tag: str, text: str) -> str:
+    """tag가 '기타'이면 summary 키워드로 재분류."""
+    if tag != "기타" or not text:
+        return tag
+    text_lower = text.lower()
+    best_tag = "기타"
+    best_count = 0
+    for candidate, keywords in _TAG_KEYWORDS.items():
+        count = sum(1 for kw in keywords if kw in text_lower)
+        if count > best_count:
+            best_count = count
+            best_tag = candidate
+    return best_tag if best_count > 0 else "기타"
 
 
 def _parse_summary_response(raw: str) -> dict:
@@ -211,6 +240,7 @@ def _parse_summary_response(raw: str) -> dict:
             text_lines.append(stripped)
 
     text = "\n".join(text_lines)[:300]
+    tag = _reclassify_tag(tag, text)
     return {"tag": tag, "text": text}
 
 
