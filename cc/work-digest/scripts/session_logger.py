@@ -12,6 +12,7 @@ stdin: { session_id, transcript_path, cwd, hook_event_name, ... }
 """
 
 import sys
+import os
 import json
 import re
 import fcntl
@@ -157,6 +158,17 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
         f"{conversation}\n\n"
         "1줄째: 작업 유형 태그 하나를 골라라. "
         f"선택지: {tags_str}\n"
+        "태그 선택 기준:\n"
+        "- 코딩: 새 기능 구현, 파일 생성\n"
+        "- 디버깅: 버그 수정, 에러 해결\n"
+        "- 리서치: 조사, 탐색, 문서 읽기\n"
+        "- 리뷰: 코드 리뷰, PR 리뷰\n"
+        "- ops: 배포, 인프라, 서버 운영\n"
+        "- 설정: 환경 설정, 설치, 구성 변경\n"
+        "- 문서: README, 문서 작성\n"
+        "- 설계: 브레인스토밍, plan 작성, 아키텍처 설계\n"
+        "- 리팩토링: 기존 코드 구조 변경, 정리, 통합\n"
+        "- 기타: 위 어디에도 해당하지 않을 때만 사용\n\n"
         "2줄째부터: 이 세션에서 한 작업을 한국어 2-3줄로 요약해라. "
         "구체적으로 뭘 만들었는지, 뭘 고쳤는지, 뭘 조사했는지 중심으로. "
         "파일 경로나 명령어는 생략하고 작업의 의미만 쓰라.\n\n"
@@ -297,12 +309,22 @@ def parse_transcript(transcript_path: str) -> dict:
                 active_sec += gap
         duration_min = max(1, int(active_sec / 60))
 
+    # 종료 시간: 마지막 타임스탬프를 KST로 변환
+    end_time_str = None
+    if timestamps:
+        last_ts = timestamps[-1]
+        if last_ts.tzinfo is None:
+            last_ts = last_ts.replace(tzinfo=timezone.utc)
+        end_kst = last_ts.astimezone(KST)
+        end_time_str = end_kst.strftime("%H:%M")
+
     return {
         "files": sorted(files_modified),
         "commands": commands_run[:10],
         "errors": errors[:5],
         "topic": first_user_msg,
         "duration_min": duration_min,
+        "end_time": end_time_str,
         "tokens": {
             "input": token_input,
             "output": token_output,
@@ -331,9 +353,14 @@ def build_frontmatter(now):
 def build_session_section(session_id, data, now, repo):
     time_str = now.strftime("%H:%M")
     sid_short = session_id[:8] if session_id else "unknown"
+    end_time = data.get("end_time")
+    if end_time and end_time != time_str:
+        time_range = f"{time_str}~{end_time}"
+    else:
+        time_range = time_str
 
     lines = []
-    lines.append(f"## 세션 {time_str} ({sid_short}, {repo})")
+    lines.append(f"## 세션 {time_range} ({sid_short}, {repo})")
 
     file_count = len(data["files"])
     duration = f"{data['duration_min']}분" if data["duration_min"] else "?분"
@@ -389,13 +416,12 @@ def write_session_marker(session_id, data, now, repo):
     """세션 마커를 daily log에 append."""
     WORK_LOG_DIR.mkdir(parents=True, exist_ok=True)
     daily_file = WORK_LOG_DIR / f"{now.strftime('%Y-%m-%d')}.md"
-    is_new = not daily_file.exists()
     section = build_session_section(session_id, data, now, repo)
 
     with open(daily_file, "a") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
-            if is_new:
+            if os.fstat(f.fileno()).st_size == 0:
                 f.write(build_frontmatter(now))
             f.write(section)
         finally:

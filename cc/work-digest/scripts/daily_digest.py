@@ -18,12 +18,9 @@ from datetime import datetime
 from pathlib import Path
 
 from _common import (
-    WEEKDAYS_KO, WORK_TAGS_SET,
+    WEEKDAYS_KO, WORK_TAGS_SET, TAG_ICONS, TELEGRAM_MAX_CHARS,
     format_tokens, send_telegram,
 )
-
-# ── Constants ────────────────────────────────────────
-TELEGRAM_MAX_CHARS = 4096
 
 
 # ── Message building ────────────────────────────────
@@ -136,17 +133,6 @@ def _collect_repo_data(sessions: list[dict]) -> dict[str, dict]:
                 rd["topics"].append(cleaned)
     return repos
 
-
-TAG_ICONS = {
-    "코딩": "\U0001f4bb",
-    "디버깅": "\U0001f41b",
-    "리서치": "\U0001f50d",
-    "리뷰": "\U0001f4dd",
-    "ops": "\u2699\ufe0f",
-    "설정": "\U0001f527",
-    "문서": "\U0001f4d6",
-    "기타": "\U0001f4a1",
-}
 
 
 def build_tag_section(sessions: list[dict]) -> str | None:
