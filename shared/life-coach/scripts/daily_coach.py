@@ -20,12 +20,13 @@ from db import get_conn, get_coach_state, set_coach_state
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
-from _common import send_telegram, WEEKDAYS_KO, TAG_ICONS, TELEGRAM_MAX_CHARS
+from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGRAM_MAX_CHARS
 
 KST = timezone(timedelta(hours=9))
 COACHING_TIMEOUT_SEC = 45
 OVERWORK_THRESHOLD_HOURS = 8
 PROMPTS_PATH = Path(__file__).resolve().parent.parent / "references" / "coaching-prompts.md"
+PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 
 def get_today_data(conn, date_str: str) -> dict:
@@ -38,11 +39,13 @@ def get_today_data(conn, date_str: str) -> dict:
 
     next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     activities = conn.execute("""
-        SELECT repo, tag, summary, start_at, end_at, duration_min, token_total
+        SELECT repo, tag, summary, start_at, end_at, duration_min,
+               token_total, error_count, has_tests, has_commits
         FROM activities WHERE start_at >= ? AND start_at < ? AND source = 'cc'
         ORDER BY start_at
     """, (date_str, next_date)).fetchall()
 
+    sessions = [dict(a) for a in activities]
     return {
         "date": date_str,
         "has_data": True,
@@ -52,7 +55,8 @@ def get_today_data(conn, date_str: str) -> dict:
         "last_session_end": stats["last_session_end"],
         "tag_breakdown": json.loads(stats["tag_breakdown"]) if stats["tag_breakdown"] else {},
         "repos": json.loads(stats["repos"]) if stats["repos"] else {},
-        "sessions": [dict(a) for a in activities],
+        "sessions": sessions,
+        "token_total": sum(s.get("token_total") or 0 for s in sessions),
     }
 
 
@@ -65,6 +69,9 @@ def build_data_section(data: dict) -> str:
     lines.append(f"날짜: {date_str} ({weekday})")
     lines.append(f"총 작업: {data['work_hours']}시간, {data['session_count']}세션")
     lines.append(f"시간대: {data['first_session']} ~ {data['last_session_end']}")
+    token_total = data.get("token_total", 0)
+    if token_total > 0:
+        lines.append(f"토큰: {format_tokens(token_total)} tokens")
 
     tags = data.get("tag_breakdown", {})
     if tags:
@@ -100,10 +107,67 @@ def _build_header(date_str: str) -> str:
 
 
 def _build_stats_line(data: dict) -> str:
-    return (
+    line = (
         f"⏱ {data['session_count']}세션 · {data['work_hours']}시간 "
         f"· {data['first_session']}~{data['last_session_end']}"
     )
+    token_total = data.get("token_total", 0)
+    if token_total > 0:
+        line += f" · {format_tokens(token_total)} tokens"
+    return line
+
+
+def _build_repos_detail(data: dict) -> str | None:
+    """레포별 세션 상세."""
+    sessions = data.get("sessions", [])
+    if not sessions:
+        return None
+    repo_groups: dict[str, list[dict]] = {}
+    for s in sessions:
+        repo = s.get("repo") or "unknown"
+        repo_groups.setdefault(repo, []).append(s)
+
+    lines = ["📂 레포별:"]
+    for repo, sess in sorted(repo_groups.items(), key=lambda x: len(x[1]), reverse=True):
+        total_dur = sum(s.get("duration_min", 0) for s in sess)
+        total_tok = sum(s.get("token_total", 0) for s in sess)
+        parts = [f"{len(sess)}세션"]
+        if total_dur > 0:
+            h, m = divmod(total_dur, 60)
+            parts.append(f"{h}시간 {m}분" if h else f"{m}분")
+        if total_tok > 0:
+            parts.append(f"{format_tokens(total_tok)} tokens")
+        lines.append(f"  ▸ {repo} ({', '.join(parts)})")
+        for s in sess[:3]:
+            start = (s.get("start_at") or "")[11:16] or "?"
+            tag = s.get("tag", "")
+            summary = (s.get("summary") or "")[:80]
+            lines.append(f"    - {start} [{tag}] {summary}")
+    return "\n".join(lines)
+
+
+def _build_pattern_feedback(data: dict) -> str | None:
+    """규칙 기반 패턴 피드백."""
+    if not data.get("has_data"):
+        return None
+    lines = []
+    repos = data.get("repos", {})
+    if len(repos) >= 3:
+        lines.append(f"• {len(repos)}개 레포 컨텍스트 스위칭")
+    sessions = data.get("sessions", [])
+    total_errors = sum(s.get("error_count", 0) for s in sessions)
+    if total_errors > 0:
+        lines.append(f"• 에러 {total_errors}건 발생")
+    if not any(s.get("has_tests") for s in sessions):
+        lines.append("• 테스트 실행 0건")
+    if not any(s.get("has_commits") for s in sessions):
+        lines.append("• 커밋 0건")
+    token_total = data.get("token_total", 0)
+    if token_total > 0:
+        lines.append(f"• 총 {format_tokens(token_total)} tokens 사용")
+    if not lines:
+        return None
+    return "💡 패턴 피드백:\n" + "\n".join(f"  {l}" for l in lines)
 
 
 def build_template_report(data: dict, coach_state: dict) -> str:
@@ -121,12 +185,9 @@ def build_template_report(data: dict, coach_state: dict) -> str:
                  sorted(tags.items(), key=lambda x: x[1], reverse=True)]
         sections.append("🏷 " + " · ".join(parts))
 
-    repos = data.get("repos", {})
-    if repos:
-        repo_lines = ["📂 레포별:"]
-        for r, c in sorted(repos.items(), key=lambda x: x[1], reverse=True)[:5]:
-            repo_lines.append(f"  ▸ {r} ({c}세션)")
-        sections.append("\n".join(repo_lines))
+    repos_detail = _build_repos_detail(data)
+    if repos_detail:
+        sections.append(repos_detail)
 
     nudges = []
     if data["work_hours"] >= OVERWORK_THRESHOLD_HOURS:
@@ -138,6 +199,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
         nudges.append(f"🔥 {overwork_days}일 연속 과작업 — 번아웃 위험")
     if nudges:
         sections.append("\n".join(nudges))
+
+    feedback = _build_pattern_feedback(data)
+    if feedback:
+        sections.append(feedback)
 
     level = int(coach_state.get("escalation_level", "0"))
     sections.append(f"⚡ 코치 레벨: {level}")
@@ -195,6 +260,49 @@ def update_overwork_tracking(conn, data: dict, coach_state: dict):
     return level
 
 
+def _find_project_memory(repo_name: str) -> Path | None:
+    if not PROJECTS_DIR.exists():
+        return None
+    for entry in PROJECTS_DIR.iterdir():
+        if entry.is_dir() and entry.name.endswith(repo_name):
+            return entry / "memory"
+    return None
+
+
+def write_work_context(data: dict):
+    """레포별 work-context.md를 각 프로젝트 auto memory에 기록."""
+    sessions = data.get("sessions", [])
+    if not sessions:
+        return
+    date_str = data["date"]
+    repo_sessions: dict[str, list[dict]] = {}
+    for s in sessions:
+        repo = s.get("repo") or "unknown"
+        repo_sessions.setdefault(repo, []).append(s)
+    for repo, sess in repo_sessions.items():
+        memory_dir = _find_project_memory(repo)
+        if not memory_dir:
+            continue
+        lines = [
+            "# 최근 작업 컨텍스트",
+            f"<!-- auto-generated by daily_coach.py | {date_str} -->",
+            "",
+        ]
+        for s in sess:
+            tag = s.get("tag", "").strip()
+            start = (s.get("start_at") or "")[11:16] or ""
+            sm = (s.get("summary") or "").strip()
+            if sm:
+                prefix = f"[{tag}] " if tag else ""
+                lines.append(f"- {start} {prefix}{sm}")
+        lines.append("")
+        try:
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            (memory_dir / "work-context.md").write_text("\n".join(lines), encoding="utf-8")
+        except Exception as e:
+            print(f"[daily_coach] {repo} work-context write failed: {e}", file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Daily coaching report")
     parser.add_argument("--dry-run", action="store_true")
@@ -235,6 +343,8 @@ def main():
         else:
             print("[daily_coach] telegram failed (check CHAT_ID_COACH)", file=sys.stderr)
             sys.exit(1)
+
+    write_work_context(data)
 
 
 if __name__ == "__main__":
