@@ -5,10 +5,10 @@ description: 일일/주간 라이프 코칭 — 작업 패턴 분석, 자동화 
 
 # Life Coach Skill
 
-**Version:** 0.1.0 | **Status:** P1
+**Version:** 0.2.0 | **Status:** P2
 
 CC/OpenClaw/Calendar 활동 데이터를 기반으로 일일/주간 코칭 리포트를 생성한다.
-데이터는 life-dashboard-mcp에서 조회.
+데이터는 life-dashboard-mcp에서 조회. work-digest의 다이제스트 기능을 흡수.
 
 ## 온디맨드 사용 (/coach)
 
@@ -27,31 +27,37 @@ coach_state의 escalation_level에 따라 톤 변경:
 
 ### 일일 코칭 구성
 
-1. **오늘의 정리** — 작업 시간, 레포별 요약, 태그 비율
-2. **코칭** — 과작업, 수면 패턴, 집중도 기반 제안
-3. **자동화 제안** — 반복 명령/작업 감지
-4. **내일 캘린더** — 예정된 일정 (P2에서 추가)
-5. **건강 넛지** — 운동, 휴식
+1. **오늘의 정리** — 작업 시간, 세션 상세, 토큰 사용량
+2. **레포별 상세** — 세션 수, 작업시간, 토큰, 요약 (daily_digest에서 이관)
+3. **코칭** — 과작업, 수면 패턴, 집중도 기반 제안
+4. **패턴 피드백** — 컨텍스트 스위칭, 에러, 테스트/커밋 현황
+5. **자동화 제안** — 반복 명령/작업 감지
+6. **건강 넛지** — 운동, 휴식
 
-### 주간 코칭 구성 (P2에서 추가)
+### 주간 코칭 구성
 
-주간 트렌드 분석 + 방향성 코칭.
+1. **주간 정리** — 총 세션, 시간, 토큰
+2. **일별 활동** — 바 차트 (daily_stats 기반)
+3. **태그/레포 분포** — 작업 유형 편중 분석
+4. **방향성 코칭** — 주간 트렌드 기반 다음 주 방향 제안
+5. **다음 주 생각해볼 것** — 패턴 기반 reflect 질문
 
 ## 자동화
 
 | Cron | Script | 설명 |
 |------|--------|------|
 | `0 21 * * *` | `scripts/daily_coach.py` | 매일 21시 코칭 리포트 |
-| `0 21 * * 0` | (P2) `scripts/weekly_coach.py` | 주간 코칭 |
+| `0 21 * * 0` | `scripts/weekly_coach.py` | 매주 일요일 21시 주간 코칭 |
 
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `daily_coach.py` | 일일 코칭 리포트 → 텔레그램 |
+| `daily_coach.py` | 일일 코칭 리포트 + work-context 갱신 → 텔레그램 |
+| `weekly_coach.py` | 주간 코칭 리포트 + work-context 갱신 → 텔레그램 |
 
 ## References
 
 | File | 내용 |
 |------|------|
-| `references/coaching-prompts.md` | LLM 코칭 프롬프트 템플릿 |
+| `references/coaching-prompts.md` | LLM 코칭 프롬프트 (일일 + 주간) |
