@@ -151,6 +151,7 @@ def generate_llm_coaching(data_section: str, tone_level: int) -> str | None:
     try:
         template = PROMPTS_PATH.read_text(encoding="utf-8")
     except FileNotFoundError:
+        print(f"[daily_coach] prompt template not found: {PROMPTS_PATH}, using fallback", file=sys.stderr)
         template = "데이터를 보고 코칭해라."
 
     prompt = template.replace("{data_section}", data_section).replace("{tone_level}", tone_desc)
@@ -162,6 +163,10 @@ def generate_llm_coaching(data_section: str, tone_level: int) -> str | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
+        if result.returncode != 0:
+            print(f"[daily_coach] claude exit code {result.returncode}: {result.stderr.strip()}", file=sys.stderr)
+    except FileNotFoundError:
+        print("[daily_coach] claude CLI not found", file=sys.stderr)
     except Exception as e:
         print(f"[daily_coach] LLM failed: {e}", file=sys.stderr)
     return None
@@ -198,26 +203,28 @@ def main():
     args = parser.parse_args()
 
     conn = get_conn()
-    data = get_today_data(conn, args.date)
-    coach_state = get_coach_state(conn)
-    level = update_overwork_tracking(conn, data, coach_state)
+    try:
+        data = get_today_data(conn, args.date)
+        coach_state = get_coach_state(conn)
+        level = update_overwork_tracking(conn, data, coach_state)
+        coach_state = get_coach_state(conn)  # re-read after update
 
-    if not data["has_data"] or args.no_llm:
-        message = build_template_report(data, coach_state)
-    else:
-        data_section = build_data_section(data)
-        llm_result = generate_llm_coaching(data_section, level)
-        if llm_result:
-            header = _build_header(args.date)
-            stats_line = _build_stats_line(data)
-            message = f"{header}\n\n{stats_line}\n\n{llm_result}\n\n⚡ 코치 레벨: {level}"
-        else:
+        if not data["has_data"] or args.no_llm:
             message = build_template_report(data, coach_state)
+        else:
+            data_section = build_data_section(data)
+            llm_result = generate_llm_coaching(data_section, level)
+            if llm_result:
+                header = _build_header(args.date)
+                stats_line = _build_stats_line(data)
+                message = f"{header}\n\n{stats_line}\n\n{llm_result}\n\n⚡ 코치 레벨: {level}"
+            else:
+                message = build_template_report(data, coach_state)
 
-    if len(message) > TELEGRAM_MAX_CHARS:
-        message = message[:TELEGRAM_MAX_CHARS - 20] + "\n\n... (truncated)"
-
-    conn.close()
+        if len(message) > TELEGRAM_MAX_CHARS:
+            message = message[:TELEGRAM_MAX_CHARS - 20] + "\n\n... (truncated)"
+    finally:
+        conn.close()
 
     if args.dry_run:
         print(message)

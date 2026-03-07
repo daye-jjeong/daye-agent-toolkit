@@ -98,11 +98,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = _build_date_summary(conn, today)
 
         elif name == "get_date_summary":
-            result = _build_date_summary(conn, arguments["date"])
+            date_arg = arguments.get("date", "")
+            try:
+                datetime.strptime(date_arg, "%Y-%m-%d")
+            except ValueError:
+                result = {"error": f"Invalid date format. Expected YYYY-MM-DD, got: {date_arg}"}
+                return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
+            result = _build_date_summary(conn, date_arg)
 
         elif name == "get_weekly_summary":
             end = arguments.get("end_date") or datetime.now(KST).strftime("%Y-%m-%d")
-            end_dt = datetime.strptime(end, "%Y-%m-%d")
+            try:
+                end_dt = datetime.strptime(end, "%Y-%m-%d")
+            except ValueError:
+                result = {"error": f"Invalid date format. Expected YYYY-MM-DD, got: {end}"}
+                return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
             state = get_coach_state(conn)
             days = []
             for i in range(6, -1, -1):
@@ -121,6 +131,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = {"error": f"Unknown tool: {name}"}
 
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
+    except Exception as e:
+        print(f"[life-dashboard] tool error: {name}: {e}", file=sys.stderr)
+        return [TextContent(type="text", text=json.dumps({"error": str(e)}, ensure_ascii=False))]
     finally:
         conn.close()
 
