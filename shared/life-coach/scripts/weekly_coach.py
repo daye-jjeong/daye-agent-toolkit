@@ -16,7 +16,7 @@ from pathlib import Path
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from db import get_conn, get_coach_state
+from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -91,6 +91,12 @@ def get_week_data(conn, dates: list[str]) -> dict:
                 "work_hours": 0,
             })
 
+    # health data
+    exercises = query_exercises(conn, mon, sun)
+    symptoms = query_symptoms(conn, mon, sun)
+    meals = query_meals(conn, mon, sun)
+    checkins = query_check_ins(conn, mon, sun)
+
     return {
         "dates": dates,
         "daily": daily,
@@ -100,6 +106,10 @@ def get_week_data(conn, dates: list[str]) -> dict:
         "tags": tags,
         "repos": repos,
         "context_rows": [dict(r) for r in context_rows],
+        "exercises": exercises,
+        "symptoms": symptoms,
+        "meals": meals,
+        "check_ins": checkins,
     }
 
 
@@ -184,6 +194,38 @@ def _build_reflect_section(data: dict) -> str | None:
     return "\n".join(lines)
 
 
+def _build_health_weekly(data: dict) -> str | None:
+    lines = []
+
+    exercises = data.get("exercises", [])
+    if exercises:
+        ex_days = len(set(e["date"] for e in exercises))
+        total_min = sum(e["duration_min"] for e in exercises)
+        pt_count = len([e for e in exercises if e["type"] == "PT"])
+        lines.append(f"  운동 {ex_days}일 ({total_min}분) · PT {pt_count}회/2")
+
+    symptoms = data.get("symptoms", [])
+    if symptoms:
+        lines.append(f"  증상 {len(symptoms)}건")
+
+    meals = data.get("meals", [])
+    if meals:
+        eaten = len([m for m in meals if not m.get("skipped")])
+        skipped = len([m for m in meals if m.get("skipped")])
+        lines.append(f"  식사 {eaten}끼 · 거름 {skipped}끼")
+
+    checkins = data.get("check_ins", [])
+    if checkins:
+        sleep_data = [c["sleep_hours"] for c in checkins if c.get("sleep_hours")]
+        if sleep_data:
+            avg_sleep = sum(sleep_data) / len(sleep_data)
+            lines.append(f"  평균 수면 {avg_sleep:.1f}h ({len(checkins)}일 체크인)")
+
+    if not lines:
+        return None
+    return "💊 주간 건강:\n" + "\n".join(lines)
+
+
 def build_template_report(data: dict, coach_state: dict) -> str:
     sections = [_build_header(data["dates"])]
 
@@ -201,6 +243,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
     repos_section = _build_repos_section(data)
     if repos_section:
         sections.append(repos_section)
+
+    health_weekly = _build_health_weekly(data)
+    if health_weekly:
+        sections.append(health_weekly)
 
     reflect = _build_reflect_section(data)
     if reflect:
