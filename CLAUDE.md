@@ -41,7 +41,7 @@ _infra/       — 빌드/설치/동기화 스크립트
 
 | 스킬 | 설명 |
 |------|------|
-| banksalad-import | 뱅크샐러드 → Obsidian vault import |
+| banksalad-import | 뱅크샐러드 → life-dashboard SQLite DB import |
 | gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
 | health-coach | 맞춤 건강 조언 + 운동 추천 |
 | health-tracker | 운동/증상/PT 트래킹 |

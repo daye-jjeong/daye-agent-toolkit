@@ -56,3 +56,54 @@ CREATE TABLE IF NOT EXISTS behavioral_signals (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_unique ON behavioral_signals(session_id, signal_type, content);
 CREATE INDEX IF NOT EXISTS idx_signals_date ON behavioral_signals(date);
 CREATE INDEX IF NOT EXISTS idx_signals_type ON behavioral_signals(signal_type);
+
+-- ── Finance (banksalad import) ──────────────
+
+CREATE TABLE IF NOT EXISTS finance_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    time TEXT,
+    amount REAL NOT NULL,
+    currency TEXT DEFAULT 'KRW',
+    tx_type TEXT,
+    category_l1 TEXT,
+    category_l2 TEXT,
+    merchant TEXT,
+    payment TEXT,
+    memo TEXT,
+    import_key TEXT NOT NULL UNIQUE,
+    source TEXT DEFAULT 'banksalad',
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_fin_tx_date ON finance_transactions(date);
+CREATE INDEX IF NOT EXISTS idx_fin_tx_category ON finance_transactions(category_l1);
+
+CREATE TABLE IF NOT EXISTS finance_investments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_name TEXT NOT NULL,
+    product_type TEXT,
+    institution TEXT,
+    invested REAL DEFAULT 0,
+    current_value REAL DEFAULT 0,
+    return_pct REAL DEFAULT 0,
+    currency TEXT DEFAULT 'KRW',
+    source TEXT DEFAULT 'banksalad',
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(product_name, institution)
+);
+
+CREATE TABLE IF NOT EXISTS finance_loans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    loan_name TEXT NOT NULL,
+    loan_type TEXT,
+    institution TEXT,
+    principal REAL DEFAULT 0,
+    outstanding REAL DEFAULT 0,
+    interest_rate REAL DEFAULT 0,
+    start_date TEXT,
+    end_date TEXT,
+    source TEXT DEFAULT 'banksalad',
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(loan_name, institution, principal)
+);

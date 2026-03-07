@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Import banksalad export xlsx into Obsidian vault as Dataview-queryable markdown.
+Import banksalad export xlsx into life-dashboard SQLite DB.
 
 Usage:
   python import_banksalad.py <zip_or_xlsx>
@@ -12,8 +12,8 @@ ZIP password: 0830 (banksalad 고정)
 """
 
 import argparse
-import os
 import re
+import sqlite3
 import sys
 import tempfile
 import zipfile
@@ -21,9 +21,11 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# ── 설정 ──────────────────────────────────────
-VAULT_DIR = Path(os.environ.get("BANKSALAD_VAULT", "~/openclaw/vault")).expanduser()
-FINANCE_DIR = VAULT_DIR / "finance"
+# life-dashboard-mcp의 db 모듈 import
+_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+sys.path.insert(0, str(_DASHBOARD_DIR))
+from db import get_conn  # noqa: E402
+
 ZIP_PASSWORD = b"0830"
 EXCEL_EPOCH = datetime(1899, 12, 30)
 
@@ -44,7 +46,6 @@ def parse_xlsx(xlsx_path):
 
         # sheet name → file mapping
         wb = ET.fromstring(z.read("xl/workbook.xml"))
-        sheet_names = [s.get("name") for s in wb.findall(".//s:sheet", NS)]
 
         rels = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
         rid_map = {}
@@ -102,13 +103,6 @@ def excel_to_time(fraction):
         return ""
 
 
-def sanitize_filename(name, max_len=60):
-    """파일시스템 안전한 이름으로 변환."""
-    name = re.sub(r'[\\/:*?"<>|\n\r\t]', "", name)
-    name = name.replace(" ", "_").strip("._")
-    return name[:max_len] if name else "unknown"
-
-
 def safe_float(val, default=0.0):
     try:
         return float(val) if val else default
@@ -117,22 +111,13 @@ def safe_float(val, default=0.0):
 
 
 # ── 거래내역 import ───────────────────────────
-def import_transactions(sheet_rows, dry_run=False):
-    """Sheet2 (가계부 내역) → finance/transactions/YYYY-MM/*.md"""
+def import_transactions(conn, sheet_rows, dry_run=False):
+    """Sheet2 (가계부 내역) → finance_transactions 테이블"""
     print("=== Transactions ===")
-    tx_dir = FINANCE_DIR / "transactions"
 
-    # first row is header
     if not sheet_rows:
         print("  No transaction data found.")
         return
-
-    # column mapping from first row
-    header_row = sheet_rows[0][1]
-    col_map = {}
-    for col, val in header_row.items():
-        col_map[val] = col
-    # Expected: 날짜=A, 시간=B, 타입=C, 대분류=D, 소분류=E, 내용=F, 금액=G, 화폐=H, 결제수단=I, 메모=J
 
     new, skip, total = 0, 0, 0
     for row_num, cells in sheet_rows[1:]:
@@ -152,79 +137,41 @@ def import_transactions(sheet_rows, dry_run=False):
         memo = cells.get("J", "")
 
         total += 1
-        month = date_str[:7]  # YYYY-MM
-        month_dir = tx_dir / month
-
-        # filename with dedup key
-        import_key = f"{date_str}_{time_str}_{amount}_{content}"[:100]
-        safe_content = sanitize_filename(content) if content else sanitize_filename(cat1)
-        fname = f"{date_str}_{safe_content}_{int(amount)}.md"
-        fpath = month_dir / fname
-
-        if fpath.exists():
-            skip += 1
-            continue
-
-        # frontmatter
-        fm_lines = [
-            "---",
-            "type: transaction",
-            f"date: {date_str}",
-        ]
-        if time_str:
-            fm_lines.append(f'time: "{time_str}"')
-        fm_lines.append(f"amount: {amount}")
-        fm_lines.append(f"currency: {currency}")
-        if tx_type:
-            fm_lines.append(f"tx_type: {tx_type}")
-        if cat1:
-            fm_lines.append(f"category_l1: {cat1}")
-        if cat2 and cat2 != "미분류":
-            fm_lines.append(f"category_l2: {cat2}")
-        if content:
-            fm_lines.append(f"merchant: {content}")
-        if payment:
-            fm_lines.append(f"payment: {payment}")
-        needs_review = not cat1 or cat1 == "미분류"
-        if needs_review:
-            fm_lines.append("needs_review: true")
-        fm_lines.extend([
-            "source: banksalad",
-            f'import_key: "{import_key}"',
-        ])
-        if memo:
-            fm_lines.append(f"memo: {memo}")
-        fm_lines.append("---")
-
-        # title
-        display_name = content or cat1 or "거래"
-        title = f"# {display_name} ({amount:+,.0f} {currency})"
-
-        md_content = "\n".join(fm_lines) + f"\n\n{title}\n"
+        import_key = f"{date_str}_{time_str}_{amount}_{content}_{payment}"[:120]
 
         if dry_run:
             if new < 3:
-                print(f"  [dry-run] {fpath.relative_to(VAULT_DIR)}")
+                print(f"  [dry-run] {date_str} {content} {amount:+,.0f}")
             new += 1
             continue
 
-        month_dir.mkdir(parents=True, exist_ok=True)
-        fpath.write_text(md_content, encoding="utf-8")
-        new += 1
+        try:
+            conn.execute("""
+                INSERT INTO finance_transactions
+                    (date, time, amount, currency, tx_type, category_l1,
+                     category_l2, merchant, payment, memo, import_key)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                date_str, time_str or None, amount, currency,
+                tx_type or None, cat1 or None,
+                cat2 if cat2 and cat2 != "미분류" else None,
+                content or None, payment or None, memo or None,
+                import_key,
+            ))
+            new += 1
+        except sqlite3.IntegrityError:
+            skip += 1
 
-        if new % 200 == 0:
-            print(f"  Progress: {new + skip}/{total}...")
-
+    if not dry_run:
+        conn.commit()
     print(f"  Result: {new} new, {skip} skipped (dup), {total} total")
 
 
 # ── 투자현황 import ───────────────────────────
-def import_investments(sheet_rows, dry_run=False):
-    """Sheet1 section 5 (투자현황) → finance/investments/*.md"""
+def import_investments(conn, sheet_rows, dry_run=False):
+    """Sheet1 section 5 (투자현황) → finance_investments 테이블"""
     print("=== Investments ===")
-    inv_dir = FINANCE_DIR / "investments"
 
-    # find section 5 start
     start_idx = None
     for i, (row_num, cells) in enumerate(sheet_rows):
         for val in cells.values():
@@ -238,14 +185,11 @@ def import_investments(sheet_rows, dry_run=False):
         print("  Investment section not found.")
         return
 
-    # header row is start_idx + 2 (skip description row)
     header_idx = start_idx + 2
     if header_idx >= len(sheet_rows):
         print("  No investment header found.")
         return
 
-    # parse rows until 총계 row
-    export_date = datetime.now().strftime("%Y-%m-%d")
     new, updated = 0, 0
 
     for i in range(header_idx + 1, len(sheet_rows)):
@@ -268,56 +212,42 @@ def import_investments(sheet_rows, dry_run=False):
         if invested == 0 and current_val == 0:
             continue
 
-        safe_name = sanitize_filename(name)
-        safe_inst = sanitize_filename(institution)
-        fname = f"{safe_name}_{safe_inst}.md"
-        fpath = inv_dir / fname
-
-        fm_lines = [
-            "---",
-            "type: investment",
-            f"product_type: {product_type}",
-            f"institution: {institution}",
-            f"invested: {invested}",
-            f"current_value: {current_val}",
-            f"return_pct: {round(return_pct, 2)}",
-            "currency: KRW",
-            "source: banksalad",
-            f"updated: {export_date}",
-            "---",
-        ]
-
-        pnl = current_val - invested
-        title = f"# {name}"
-        body = f"\n{institution} | 투자원금 {invested:,.0f} → 평가 {current_val:,.0f} ({return_pct:+.1f}%)"
-
-        md_content = "\n".join(fm_lines) + f"\n\n{title}\n{body}\n"
-
         if dry_run:
             if new + updated < 3:
-                print(f"  [dry-run] {fname} ({current_val:,.0f})")
-            if fpath.exists():
-                updated += 1
-            else:
-                new += 1
+                print(f"  [dry-run] {name} ({current_val:,.0f})")
+            new += 1
             continue
 
-        inv_dir.mkdir(parents=True, exist_ok=True)
-        is_update = fpath.exists()
-        fpath.write_text(md_content, encoding="utf-8")
-        if is_update:
+        exists = conn.execute(
+            "SELECT 1 FROM finance_investments WHERE product_name=? AND institution=?",
+            (name, institution),
+        ).fetchone()
+        conn.execute("""
+            INSERT INTO finance_investments
+                (product_name, product_type, institution, invested,
+                 current_value, return_pct)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(product_name, institution) DO UPDATE SET
+                product_type=excluded.product_type,
+                invested=excluded.invested,
+                current_value=excluded.current_value,
+                return_pct=excluded.return_pct,
+                updated_at=datetime('now','localtime')
+        """, (name, product_type, institution, invested, current_val, round(return_pct, 2)))
+        if exists:
             updated += 1
         else:
             new += 1
 
+    if not dry_run:
+        conn.commit()
     print(f"  Result: {new} new, {updated} updated")
 
 
 # ── 대출현황 import ───────────────────────────
-def import_loans(sheet_rows, dry_run=False):
-    """Sheet1 section 6 (대출현황) → finance/loans/*.md"""
+def import_loans(conn, sheet_rows, dry_run=False):
+    """Sheet1 section 6 (대출현황) → finance_loans 테이블"""
     print("=== Loans ===")
-    loan_dir = FINANCE_DIR / "loans"
 
     start_idx = None
     for i, (row_num, cells) in enumerate(sheet_rows):
@@ -334,7 +264,6 @@ def import_loans(sheet_rows, dry_run=False):
 
     header_idx = start_idx + 2
     new, updated = 0, 0
-    seen_loan_names = set()
 
     for i in range(header_idx + 1, len(sheet_rows)):
         row_num, cells = sheet_rows[i]
@@ -354,65 +283,45 @@ def import_loans(sheet_rows, dry_run=False):
         rate = safe_float(cells.get("H", ""))
         start_serial = cells.get("I", "")
         end_serial = cells.get("J", "")
-        start_date = excel_to_date(start_serial) if start_serial else ""
-        end_date = excel_to_date(end_serial) if end_serial else ""
-
-        safe_name = sanitize_filename(name)
-        safe_inst = sanitize_filename(institution)
-        fname = f"{safe_name}_{safe_inst}.md"
-        fpath = loan_dir / fname
-        # 같은 이름의 대출이 여러 건일 수 있음 (예: 마이너스통장 2개)
-        if fpath.exists() or fname in seen_loan_names:
-            fname = f"{safe_name}_{safe_inst}_{int(principal)}.md"
-            fpath = loan_dir / fname
-        seen_loan_names.add(fname)
-
-        fm_lines = [
-            "---",
-            "type: loan",
-            f"loan_type: {loan_type}",
-            f"institution: {institution}",
-            f"principal: {principal}",
-            f"outstanding: {outstanding}",
-            f"interest_rate: {rate}",
-        ]
-        if start_date:
-            fm_lines.append(f"start_date: {start_date}")
-        if end_date:
-            fm_lines.append(f"end_date: {end_date}")
-        fm_lines.extend([
-            "source: banksalad",
-            f"updated: {datetime.now().strftime('%Y-%m-%d')}",
-            "---",
-        ])
-
-        title = f"# {name}"
-        body = f"\n{institution} | 원금 {principal:,.0f} | 잔액 {outstanding:,.0f} | 금리 {rate}%"
-
-        md_content = "\n".join(fm_lines) + f"\n\n{title}\n{body}\n"
+        start_date = excel_to_date(start_serial) if start_serial else None
+        end_date = excel_to_date(end_serial) if end_serial else None
 
         if dry_run:
-            print(f"  [dry-run] {fname}")
-            if fpath.exists():
-                updated += 1
-            else:
-                new += 1
+            print(f"  [dry-run] {name} (잔액 {outstanding:,.0f})")
+            new += 1
             continue
 
-        loan_dir.mkdir(parents=True, exist_ok=True)
-        is_update = fpath.exists()
-        fpath.write_text(md_content, encoding="utf-8")
-        if is_update:
+        exists = conn.execute(
+            "SELECT 1 FROM finance_loans WHERE loan_name=? AND institution=? AND principal=?",
+            (name, institution, principal),
+        ).fetchone()
+        conn.execute("""
+            INSERT INTO finance_loans
+                (loan_name, loan_type, institution, principal,
+                 outstanding, interest_rate, start_date, end_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(loan_name, institution, principal) DO UPDATE SET
+                loan_type=excluded.loan_type,
+                outstanding=excluded.outstanding,
+                interest_rate=excluded.interest_rate,
+                start_date=excluded.start_date,
+                end_date=excluded.end_date,
+                updated_at=datetime('now','localtime')
+        """, (name, loan_type, institution, principal, outstanding, rate, start_date, end_date))
+        if exists:
             updated += 1
         else:
             new += 1
 
+    if not dry_run:
+        conn.commit()
     print(f"  Result: {new} new, {updated} updated")
 
 
 # ── zip 처리 ──────────────────────────────────
 def extract_xlsx_from_zip(zip_path):
     """Password-protected zip에서 xlsx 추출."""
+    import shutil
     with tempfile.TemporaryDirectory() as tmpdir:
         with zipfile.ZipFile(zip_path) as z:
             z.extractall(tmpdir, pwd=ZIP_PASSWORD)
@@ -420,8 +329,6 @@ def extract_xlsx_from_zip(zip_path):
         if not xlsx_files:
             print(f"Error: No xlsx found in {zip_path}")
             sys.exit(1)
-        # copy to a stable temp location (tmpdir will be cleaned up)
-        import shutil
         dest = Path(tempfile.mktemp(suffix=".xlsx"))
         shutil.copy2(xlsx_files[0], dest)
         return dest
@@ -437,14 +344,12 @@ def find_latest_banksalad_zip():
         elif f.suffix == ".zip" and re.search(r"\d{4}-\d{2}-\d{2}.*~.*\d{4}-\d{2}-\d{2}", f.name):
             candidates.append(f)
     if not candidates:
-        # try URL-encoded or broken filenames with date range pattern
         for f in downloads.iterdir():
             if f.suffix == ".zip" and "~" in f.name and re.search(r"\d{4}-\d{2}-\d{2}", f.name):
                 candidates.append(f)
     if not candidates:
         print("Error: ~/Downloads에서 뱅크샐러드 zip 파일을 찾을 수 없습니다.")
         sys.exit(1)
-    # most recently modified
     candidates.sort(key=lambda f: f.stat().st_mtime, reverse=True)
     print(f"Found: {candidates[0].name}")
     return candidates[0]
@@ -452,19 +357,12 @@ def find_latest_banksalad_zip():
 
 # ── main ──────────────────────────────────────
 def main():
-    global VAULT_DIR, FINANCE_DIR
-
-    parser = argparse.ArgumentParser(description="Import banksalad xlsx to Obsidian vault")
+    parser = argparse.ArgumentParser(description="Import banksalad xlsx to life-dashboard DB")
     parser.add_argument("input", nargs="?", type=Path, help="Path to banksalad zip or xlsx")
     parser.add_argument("--latest", action="store_true", help="~/Downloads에서 최신 zip 자동 탐색")
     parser.add_argument("--type", default="all", choices=["all", "transactions", "investments", "loans"])
-    parser.add_argument("--dry-run", action="store_true", help="Parse only, don't write files")
-    parser.add_argument("--vault", type=Path, help="Obsidian vault path (default: ~/openclaw/vault)")
+    parser.add_argument("--dry-run", action="store_true", help="Parse only, don't write to DB")
     args = parser.parse_args()
-
-    if args.vault:
-        VAULT_DIR = args.vault.expanduser()
-        FINANCE_DIR = VAULT_DIR / "finance"
 
     # resolve input
     if args.latest:
@@ -497,12 +395,17 @@ def main():
     if args.dry_run:
         print("[DRY RUN MODE]")
 
+    conn = None if args.dry_run else get_conn()
+
     if args.type in ("all", "investments") and sheet1_name:
-        import_investments(sheets[sheet1_name], args.dry_run)
+        import_investments(conn, sheets[sheet1_name], args.dry_run)
     if args.type in ("all", "loans") and sheet1_name:
-        import_loans(sheets[sheet1_name], args.dry_run)
+        import_loans(conn, sheets[sheet1_name], args.dry_run)
     if args.type in ("all", "transactions") and sheet2_name:
-        import_transactions(sheets[sheet2_name], args.dry_run)
+        import_transactions(conn, sheets[sheet2_name], args.dry_run)
+
+    if conn:
+        conn.close()
 
     # cleanup
     if tmp_xlsx and tmp_xlsx.exists():
