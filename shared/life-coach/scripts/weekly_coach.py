@@ -2,15 +2,14 @@
 """Weekly Coach — life-dashboard data-based weekly coaching report.
 
 Usage:
-    python3 weekly_coach.py                 # LLM coaching + telegram
-    python3 weekly_coach.py --dry-run       # stdout only
-    python3 weekly_coach.py --no-llm        # template only
+    python3 weekly_coach.py                    # template report → telegram
+    python3 weekly_coach.py --dry-run          # stdout only
+    python3 weekly_coach.py --json             # JSON data (for LLM on-demand coaching)
     python3 weekly_coach.py --date 2026-03-02  # specific week (any date in that week)
 """
 
 import argparse
 import json
-import subprocess
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -24,8 +23,6 @@ sys.path.insert(0, str(_WD_SCRIPTS))
 from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGRAM_MAX_CHARS
 
 KST = timezone(timedelta(hours=9))
-COACHING_TIMEOUT_SEC = 60
-PROMPTS_PATH = Path(__file__).resolve().parent.parent / "references" / "coaching-prompts.md"
 
 from _helpers import find_project_memory
 
@@ -187,30 +184,6 @@ def _build_reflect_section(data: dict) -> str | None:
     return "\n".join(lines)
 
 
-def build_data_section(data: dict) -> str:
-    """LLM 프롬프트에 전달할 데이터 텍스트."""
-    mon, sun = data["dates"][0], data["dates"][6]
-    lines = [
-        f"기간: {mon} ~ {sun}",
-        f"총: {data['total_sessions']}세션, {data['total_hours']}시간, {format_tokens(data['total_tokens'])} tokens",
-        "",
-        "일별:",
-    ]
-    for d in data["daily"]:
-        lines.append(f"  {d['date']}({d['weekday']}): {d['sessions']}세션, {d['work_hours']}h")
-    tags = data.get("tags", {})
-    if tags:
-        lines.append("")
-        tag_parts = [f"{t} {c}건" for t, c in sorted(tags.items(), key=lambda x: x[1], reverse=True)]
-        lines.append(f"태그: {', '.join(tag_parts)}")
-    repos = data.get("repos", {})
-    if repos:
-        lines.append("")
-        repo_parts = [f"{r}({c}세션)" for r, c in sorted(repos.items(), key=lambda x: x[1], reverse=True)]
-        lines.append(f"레포: {', '.join(repo_parts)}")
-    return "\n".join(lines)
-
-
 def build_template_report(data: dict, coach_state: dict) -> str:
     sections = [_build_header(data["dates"])]
 
@@ -237,42 +210,6 @@ def build_template_report(data: dict, coach_state: dict) -> str:
     sections.append(f"⚡ 코치 레벨: {level}")
 
     return "\n\n".join(sections)
-
-
-def generate_llm_coaching(data_section: str, tone_level: int) -> str | None:
-    tone_desc = f"Level {tone_level}"
-    try:
-        full_template = PROMPTS_PATH.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        full_template = ""
-
-    # 주간 섹션 추출
-    marker = "## 주간 코칭"
-    idx = full_template.find(marker)
-    if idx >= 0:
-        template = full_template[idx:]
-    else:
-        template = (
-            "다음은 주간 작업 데이터이다.\n\n{data_section}\n\n"
-            "주간 트렌드와 방향성 코칭을 해라. 톤: {tone_level}. 한국어. 500자 이내."
-        )
-
-    prompt = template.replace("{data_section}", data_section).replace("{tone_level}", tone_desc)
-
-    try:
-        result = subprocess.run(
-            ["claude", "-p", "--model", "haiku", "--no-session-persistence"],
-            input=prompt, capture_output=True, text=True, timeout=COACHING_TIMEOUT_SEC,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-        if result.returncode != 0:
-            print(f"[weekly_coach] claude exit code {result.returncode}: {result.stderr.strip()}", file=sys.stderr)
-    except FileNotFoundError:
-        print("[weekly_coach] claude CLI not found", file=sys.stderr)
-    except Exception as e:
-        print(f"[weekly_coach] LLM failed: {e}", file=sys.stderr)
-    return None
 
 
 def write_weekly_context(data: dict):
@@ -316,8 +253,8 @@ def write_weekly_context(data: dict):
 
 def main():
     parser = argparse.ArgumentParser(description="Weekly coaching report")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--no-llm", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", help="stdout only")
+    parser.add_argument("--json", action="store_true", help="JSON data for LLM on-demand coaching")
     parser.add_argument("--date", default=datetime.now(KST).strftime("%Y-%m-%d"),
                         help="Any date in the target week")
     args = parser.parse_args()
@@ -327,19 +264,14 @@ def main():
     try:
         data = get_week_data(conn, dates)
         coach_state = get_coach_state(conn)
-        level = int(coach_state.get("escalation_level", "0"))
 
-        if data["total_sessions"] == 0 or args.no_llm:
-            message = build_template_report(data, coach_state)
-        else:
-            data_section = build_data_section(data)
-            llm_result = generate_llm_coaching(data_section, level)
-            if llm_result:
-                header = _build_header(dates)
-                stats = _build_weekly_stats(data)
-                message = f"{header}\n\n{stats}\n\n{llm_result}\n\n⚡ 코치 레벨: {level}"
-            else:
-                message = build_template_report(data, coach_state)
+        if args.json:
+            # context_rows is for work-context only, not needed in JSON output
+            output = {k: v for k, v in data.items() if k != "context_rows"}
+            print(json.dumps(output, ensure_ascii=False, indent=2, default=str))
+            return
+
+        message = build_template_report(data, coach_state)
 
         if len(message) > TELEGRAM_MAX_CHARS:
             message = message[:TELEGRAM_MAX_CHARS - 20] + "\n\n... (truncated)"

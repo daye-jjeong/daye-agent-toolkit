@@ -2,14 +2,13 @@
 """Daily Coach — life-dashboard data-based daily coaching report.
 
 Usage:
-    python3 daily_coach.py                 # LLM coaching + telegram
+    python3 daily_coach.py                 # template report → telegram
     python3 daily_coach.py --dry-run       # stdout only
-    python3 daily_coach.py --no-llm        # template only
+    python3 daily_coach.py --json          # JSON data (for LLM on-demand coaching)
 """
 
 import argparse
 import json
-import subprocess
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -23,9 +22,7 @@ sys.path.insert(0, str(_WD_SCRIPTS))
 from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGRAM_MAX_CHARS
 
 KST = timezone(timedelta(hours=9))
-COACHING_TIMEOUT_SEC = 45
 OVERWORK_THRESHOLD_HOURS = 8
-PROMPTS_PATH = Path(__file__).resolve().parent.parent / "references" / "coaching-prompts.md"
 
 from _helpers import find_project_memory
 
@@ -59,46 +56,6 @@ def get_today_data(conn, date_str: str) -> dict:
         "sessions": sessions,
         "token_total": sum(s.get("token_total") or 0 for s in sessions),
     }
-
-
-def build_data_section(data: dict) -> str:
-    lines = []
-    date_str = data["date"]
-    dt = datetime.strptime(date_str, "%Y-%m-%d")
-    weekday = WEEKDAYS_KO[dt.weekday()]
-
-    lines.append(f"날짜: {date_str} ({weekday})")
-    lines.append(f"총 작업: {data['work_hours']}시간, {data['session_count']}세션")
-    lines.append(f"시간대: {data['first_session']} ~ {data['last_session_end']}")
-    token_total = data.get("token_total", 0)
-    if token_total > 0:
-        lines.append(f"토큰: {format_tokens(token_total)} tokens")
-
-    tags = data.get("tag_breakdown", {})
-    if tags:
-        tag_parts = [f"{TAG_ICONS.get(t, '💡')}{t} {c}건" for t, c in
-                     sorted(tags.items(), key=lambda x: x[1], reverse=True)]
-        lines.append(f"작업 유형: {', '.join(tag_parts)}")
-
-    repos = data.get("repos", {})
-    if repos:
-        repo_parts = [f"{r}({c}세션)" for r, c in
-                      sorted(repos.items(), key=lambda x: x[1], reverse=True)]
-        lines.append(f"레포: {', '.join(repo_parts)}")
-
-    sessions = data.get("sessions", [])
-    if sessions:
-        lines.append("")
-        lines.append("세션별:")
-        for s in sessions[:8]:
-            start = s.get("start_at", "")[11:16] if s.get("start_at") else "?"
-            tag = s.get("tag", "")
-            summary = (s.get("summary", "") or "")[:80]
-            repo = s.get("repo", "")
-            dur = s.get("duration_min", 0)
-            lines.append(f"- {start} [{tag}] {repo}: {summary} ({dur}분)")
-
-    return "\n".join(lines)
 
 
 def _build_header(date_str: str) -> str:
@@ -211,33 +168,6 @@ def build_template_report(data: dict, coach_state: dict) -> str:
     return "\n\n".join(sections)
 
 
-def generate_llm_coaching(data_section: str, tone_level: int) -> str | None:
-    tone_desc = f"Level {tone_level}"
-
-    try:
-        template = PROMPTS_PATH.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        print(f"[daily_coach] prompt template not found: {PROMPTS_PATH}, using fallback", file=sys.stderr)
-        template = "데이터를 보고 코칭해라."
-
-    prompt = template.replace("{data_section}", data_section).replace("{tone_level}", tone_desc)
-
-    try:
-        result = subprocess.run(
-            ["claude", "-p", "--model", "haiku", "--no-session-persistence"],
-            input=prompt, capture_output=True, text=True, timeout=COACHING_TIMEOUT_SEC,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-        if result.returncode != 0:
-            print(f"[daily_coach] claude exit code {result.returncode}: {result.stderr.strip()}", file=sys.stderr)
-    except FileNotFoundError:
-        print("[daily_coach] claude CLI not found", file=sys.stderr)
-    except Exception as e:
-        print(f"[daily_coach] LLM failed: {e}", file=sys.stderr)
-    return None
-
-
 def update_overwork_tracking(conn, data: dict, coach_state: dict):
     overwork_days = int(coach_state.get("consecutive_overwork_days", "0"))
     level = int(coach_state.get("escalation_level", "0"))
@@ -297,8 +227,8 @@ def write_work_context(data: dict):
 
 def main():
     parser = argparse.ArgumentParser(description="Daily coaching report")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--no-llm", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", help="stdout only")
+    parser.add_argument("--json", action="store_true", help="JSON data for LLM on-demand coaching")
     parser.add_argument("--date", default=datetime.now(KST).strftime("%Y-%m-%d"))
     args = parser.parse_args()
 
@@ -306,20 +236,14 @@ def main():
     try:
         data = get_today_data(conn, args.date)
         coach_state = get_coach_state(conn)
-        level = update_overwork_tracking(conn, data, coach_state)
+        update_overwork_tracking(conn, data, coach_state)
         coach_state = get_coach_state(conn)  # re-read after update
 
-        if not data["has_data"] or args.no_llm:
-            message = build_template_report(data, coach_state)
-        else:
-            data_section = build_data_section(data)
-            llm_result = generate_llm_coaching(data_section, level)
-            if llm_result:
-                header = _build_header(args.date)
-                stats_line = _build_stats_line(data)
-                message = f"{header}\n\n{stats_line}\n\n{llm_result}\n\n⚡ 코치 레벨: {level}"
-            else:
-                message = build_template_report(data, coach_state)
+        if args.json:
+            print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
+            return
+
+        message = build_template_report(data, coach_state)
 
         if len(message) > TELEGRAM_MAX_CHARS:
             message = message[:TELEGRAM_MAX_CHARS - 20] + "\n\n... (truncated)"

@@ -1,6 +1,6 @@
 # Life Coach P2 Implementation Plan
 
-**Status:** Task 1-6 완료, P2.5 리팩토링 남음
+**Status:** 완료 (P2 + P2.5 리팩토링)
 
 ## 완료된 작업 (이 세션)
 

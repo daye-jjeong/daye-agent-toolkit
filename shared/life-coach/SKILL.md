@@ -5,16 +5,27 @@ description: 일일/주간 라이프 코칭 — 작업 패턴 분석, 자동화 
 
 # Life Coach Skill
 
-**Version:** 0.2.0 | **Status:** P2
+**Version:** 0.3.0 | **Status:** P2.5
 
 CC/OpenClaw/Calendar 활동 데이터를 기반으로 일일/주간 코칭 리포트를 생성한다.
 데이터는 life-dashboard-mcp에서 조회. work-digest의 다이제스트 기능을 흡수.
 
 ## 온디맨드 사용 (/coach)
 
-1. life-dashboard MCP의 `get_today_summary` 도구 호출
-2. 결과를 바탕으로 아래 코칭 프레임 적용
-3. 세션 내에서 코칭 대화
+스크립트가 데이터를 수집하고, LLM이 직접 코칭을 수행한다.
+
+### 일일 코칭
+1. `python3 scripts/daily_coach.py --json` 실행 → JSON 데이터 획득
+2. `references/coaching-prompts.md`의 일일 코칭 프레임 적용
+3. 데이터 기반으로 코칭 대화
+
+### 주간 코칭
+1. `python3 scripts/weekly_coach.py --json` 실행 → JSON 데이터 획득
+2. `references/coaching-prompts.md`의 주간 코칭 프레임 적용
+3. 주간 트렌드 + 방향성 코칭 대화
+
+### 대안: MCP 도구 사용
+life-dashboard MCP의 `get_today_summary` 도구로도 데이터 조회 가능.
 
 ## 코칭 프레임
 
@@ -53,11 +64,19 @@ coach_state의 escalation_level에 따라 톤 변경:
 
 | Script | Purpose |
 |--------|---------|
-| `daily_coach.py` | 일일 코칭 리포트 + work-context 갱신 → 텔레그램 |
-| `weekly_coach.py` | 주간 코칭 리포트 + work-context 갱신 → 텔레그램 |
+| `daily_coach.py` | 일일 데이터 수집 + 템플릿 리포트 → 텔레그램 |
+| `weekly_coach.py` | 주간 데이터 수집 + 템플릿 리포트 → 텔레그램 |
+
+### 스크립트 플래그
+
+| 플래그 | 동작 |
+|--------|------|
+| (없음) | 템플릿 리포트 → 텔레그램 전송 (cron 기본) |
+| `--dry-run` | 템플릿 리포트 → stdout |
+| `--json` | 구조화 JSON 데이터 → stdout (온디맨드 LLM 코칭용) |
 
 ## References
 
 | File | 내용 |
 |------|------|
-| `references/coaching-prompts.md` | LLM 코칭 프롬프트 (일일 + 주간) |
+| `references/coaching-prompts.md` | LLM 코칭 프레임 (온디맨드에서 LLM이 직접 적용) |
