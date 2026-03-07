@@ -239,9 +239,28 @@ def _parse_summary_response(raw: str) -> dict:
         if stripped:
             text_lines.append(stripped)
 
-    text = "\n".join(text_lines)[:300]
+    text = _clean_summary_text("\n".join(text_lines))
     tag = _reclassify_tag(tag, text)
     return {"tag": tag, "text": text}
+
+
+# 코드블록, 파일 경로, 마크다운 문법을 정제
+_CODE_BLOCK_RE = re.compile(r"```[\s\S]*?```")
+_FILE_PATH_RE = re.compile(r"(?:~?/[\w._-]+){2,}")
+_MD_HEADER_RE = re.compile(r"^#{1,4}\s+", re.MULTILINE)
+
+
+def _clean_summary_text(text: str) -> str:
+    """LLM 요약에서 코드블록, 파일경로, 마크다운 문법 제거."""
+    text = _CODE_BLOCK_RE.sub("", text)
+    # 인라인 코드: 백틱만 벗기고 내용은 유지
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = _FILE_PATH_RE.sub("", text)
+    text = _MD_HEADER_RE.sub("", text)
+    # 연속 공백/빈줄 정리
+    text = re.sub(r"\n{2,}", "\n", text)
+    text = re.sub(r"  +", " ", text)
+    return text.strip()[:300]
 
 
 def parse_transcript(transcript_path: str) -> dict:
@@ -256,6 +275,7 @@ def parse_transcript(transcript_path: str) -> dict:
     token_cache_read = 0
     token_cache_create = 0
     api_calls = 0
+    has_commits = False
 
     try:
         with open(transcript_path, "r") as f:
@@ -315,6 +335,8 @@ def parse_transcript(transcript_path: str) -> dict:
                         if tool == "Bash":
                             cmd = inp.get("command", "")
                             if cmd:
+                                if not has_commits and "git commit" in cmd.lower():
+                                    has_commits = True
                                 commands_run.append(cmd[:80])
 
                 # Tool results (errors)
@@ -355,6 +377,7 @@ def parse_transcript(transcript_path: str) -> dict:
         "topic": first_user_msg,
         "duration_min": duration_min,
         "end_time": end_time_str,
+        "has_commits": has_commits,
         "tokens": {
             "input": token_input,
             "output": token_output,
@@ -397,7 +420,8 @@ def build_session_section(session_id, data, now, repo):
     tokens = data.get("tokens", {})
     total_tokens = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
     token_str = _format_tokens(total_tokens)
-    lines.append(f"> 파일 {file_count}개 | {duration} | {token_str}")
+    commit_flag = " | commit" if data.get("has_commits") else ""
+    lines.append(f"> 파일 {file_count}개 | {duration} | {token_str}{commit_flag}")
     lines.append("")
 
     if data.get("summary"):

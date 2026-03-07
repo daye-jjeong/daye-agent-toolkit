@@ -52,12 +52,12 @@ def sync_date(conn, date_str: str) -> int:
                 end_at = None
 
             has_tests = 0
-            has_commits = 0
+            has_commits = 1 if s.get("has_commits_meta") else 0
             for cmd in s.get("commands", []):
                 cmd_lower = cmd.lower()
                 if any(kw in cmd_lower for kw in TEST_KEYWORDS) or any(pat in cmd_lower for pat in TEST_PATTERNS):
                     has_tests = 1
-                if "git commit" in cmd_lower:
+                if not has_commits and "git commit" in cmd_lower:
                     has_commits = 1
 
             tokens = s.get("tokens") or {}

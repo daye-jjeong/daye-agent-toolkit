@@ -33,9 +33,9 @@ RE_SESSION_HEADER = re.compile(
     r"\)\s*$"
 )
 
-# > 파일 3개 | 7분  OR  > 수정 파일 3개 | 7분  OR  > 파일 3개 | 7분 | 1.2M tokens
+# > 파일 3개 | 7분  OR  > 파일 3개 | 7분 | 1.2M tokens  OR  ... | commit
 RE_BLOCKQUOTE = re.compile(
-    r"^>\s+(?:수정\s+)?파일\s+(\d+)개\s*\|\s*(\d+|[?？])분(?:\s*\|\s*(.+tokens))?"
+    r"^>\s+(?:수정\s+)?파일\s+(\d+)개\s*\|\s*(\d+|[?？])분(?:\s*\|\s*(.+tokens))?(?:\s*\|\s*(commit))?"
 )
 RE_TOKEN_ITEM = re.compile(r"^-\s+(\w[\w\s]*):\s*(.+)$")
 
@@ -110,6 +110,7 @@ def parse_session_block(lines: list[str]) -> dict | None:
     errors: list[str] = []
     tokens: dict[str, int] = {}
     token_summary_str = ""
+    has_commits_from_meta = False
 
     current_subsection: str | None = None
     # State for multi-line backtick commands
@@ -141,6 +142,8 @@ def parse_session_block(lines: list[str]) -> dict | None:
             duration_min = int(dur_str) if dur_str.isdigit() else None
             if bq.group(3):
                 token_summary_str = bq.group(3).strip()
+            if bq.group(4):
+                has_commits_from_meta = True
             continue
 
         # Summary (LLM 생성) — **요약**: [태그] 내용 (멀티라인)
@@ -214,6 +217,7 @@ def parse_session_block(lines: list[str]) -> dict | None:
         "files": files,
         "commands": commands,
         "errors": errors,
+        "has_commits_meta": has_commits_from_meta,
         "tokens": tokens if tokens else None,
         "token_summary": token_summary_str or None,
     }
@@ -293,6 +297,9 @@ def parse_work_log(date_str: str) -> dict:
                                 break
                 if not has_commits and "git commit" in cmd_lower:
                     has_commits = True
+
+            if not has_commits and s.get("has_commits_meta"):
+                has_commits = True
 
         # Aggregate token usage
         total_api_calls = 0
