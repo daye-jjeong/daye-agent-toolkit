@@ -107,6 +107,31 @@ SUMMARY_TIMEOUT_SEC = 60
 CONVERSATION_MAX_CHARS = 8000
 
 
+def _extract_text_from_entry(entry: dict) -> str | None:
+    """transcript 엔트리에서 텍스트 추출. 시스템 태그 제거."""
+    msg = entry.get("message", {})
+    content = msg.get("content", "") if isinstance(msg, dict) else ""
+    texts = []
+    if isinstance(content, str) and content.strip():
+        cleaned = strip_system_tags(content.strip())
+        if cleaned:
+            texts.append(cleaned[:500])
+    elif isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                cleaned = strip_system_tags(block.get("text", "").strip())
+                if cleaned:
+                    texts.append(cleaned[:500])
+    return "\n".join(texts) if texts else None
+
+
+def _truncate_text(text: str, max_chars: int = CONVERSATION_MAX_CHARS) -> str:
+    if len(text) > max_chars:
+        half = max_chars // 2
+        text = text[:half] + "\n...(중략)...\n" + text[-half:]
+    return text
+
+
 def extract_conversation(transcript_path: str) -> str:
     """transcript에서 user/assistant 텍스트만 추출 (요약용)."""
     parts = []
@@ -120,28 +145,13 @@ def extract_conversation(transcript_path: str) -> str:
                 entry_type = entry.get("type", "")
                 if entry_type not in ("user", "assistant"):
                     continue
-                msg = entry.get("message", {})
-                content = msg.get("content", "") if isinstance(msg, dict) else ""
-                if isinstance(content, str) and content.strip():
-                    cleaned = strip_system_tags(content.strip())
-                    if cleaned:
-                        role = "User" if entry_type == "user" else "Assistant"
-                        parts.append(f"{role}: {cleaned[:500]}")
-                elif isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            cleaned = strip_system_tags(block.get("text", "").strip())
-                            if cleaned:
-                                role = "User" if entry_type == "user" else "Assistant"
-                                parts.append(f"{role}: {cleaned[:500]}")
+                text = _extract_text_from_entry(entry)
+                if text:
+                    role = "User" if entry_type == "user" else "Assistant"
+                    parts.append(f"{role}: {text}")
     except (FileNotFoundError, PermissionError):
         pass
-
-    combined = "\n".join(parts)
-    if len(combined) > CONVERSATION_MAX_CHARS:
-        half = CONVERSATION_MAX_CHARS // 2
-        combined = combined[:half] + "\n...(중략)...\n" + combined[-half:]
-    return combined
+    return _truncate_text("\n".join(parts))
 
 
 def extract_user_messages(transcript_path: str) -> str:
@@ -156,26 +166,12 @@ def extract_user_messages(transcript_path: str) -> str:
                     continue
                 if entry.get("type") != "user":
                     continue
-                msg = entry.get("message", {})
-                content = msg.get("content", "") if isinstance(msg, dict) else ""
-                if isinstance(content, str) and content.strip():
-                    cleaned = strip_system_tags(content.strip())
-                    if cleaned:
-                        parts.append(cleaned[:500])
-                elif isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            cleaned = strip_system_tags(block.get("text", "").strip())
-                            if cleaned:
-                                parts.append(cleaned[:500])
+                text = _extract_text_from_entry(entry)
+                if text:
+                    parts.append(text)
     except (FileNotFoundError, PermissionError):
         pass
-
-    combined = "\n---\n".join(parts)
-    if len(combined) > CONVERSATION_MAX_CHARS:
-        half = CONVERSATION_MAX_CHARS // 2
-        combined = combined[:half] + "\n...(중략)...\n" + combined[-half:]
-    return combined
+    return _truncate_text("\n---\n".join(parts))
 
 
 def summarize_session(conversation: str, repo: str) -> dict | None:
@@ -219,7 +215,7 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return _parse_summary_response(result.stdout.strip())
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+    except Exception:
         pass
     return None
 
@@ -329,7 +325,7 @@ def extract_behavioral_signals(user_messages: str, repo: str) -> dict | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return _parse_signals_response(result.stdout.strip())
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+    except Exception:
         pass
     return None
 
@@ -538,13 +534,13 @@ def build_session_section(session_id, data, now, repo):
     signals = data.get("behavioral_signals")
     if signals:
         if signals.get("decisions"):
-            lines.append(f"**결정**: {', '.join(signals['decisions'])}")
+            lines.append(f"**결정**: {' ; '.join(signals['decisions'])}")
             lines.append("")
         if signals.get("mistakes"):
-            lines.append(f"**시행착오**: {', '.join(signals['mistakes'])}")
+            lines.append(f"**시행착오**: {' ; '.join(signals['mistakes'])}")
             lines.append("")
         if signals.get("patterns"):
-            lines.append(f"**패턴**: {', '.join(signals['patterns'])}")
+            lines.append(f"**패턴**: {' ; '.join(signals['patterns'])}")
             lines.append("")
 
     if data["files"]:
@@ -645,15 +641,22 @@ def main():
 
     # SessionEnd일 때만 LLM 요약 + 행동 추출 (PreCompact는 스킵)
     if event == "SessionEnd":
-        conversation = extract_conversation(transcript_path)
-        summary = summarize_session(conversation, repo)
-        if summary:
-            data["summary"] = summary
+        from concurrent.futures import ThreadPoolExecutor
 
+        conversation = extract_conversation(transcript_path)
         user_msgs = extract_user_messages(transcript_path)
-        signals = extract_behavioral_signals(user_msgs, repo)
-        if signals:
-            data["behavioral_signals"] = signals
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            summary_future = pool.submit(summarize_session, conversation, repo)
+            signals_future = pool.submit(extract_behavioral_signals, user_msgs, repo)
+
+            summary = summary_future.result()
+            if summary:
+                data["summary"] = summary
+
+            signals = signals_future.result()
+            if signals:
+                data["behavioral_signals"] = signals
 
     # 세션 마커 기록
     write_session_marker(session_id, data, now, repo)

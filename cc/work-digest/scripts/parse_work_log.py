@@ -176,15 +176,15 @@ def parse_session_block(lines: list[str]) -> dict | None:
         # Behavioral signals
         dm = RE_DECISIONS.match(stripped)
         if dm:
-            decisions = [s.strip() for s in dm.group(1).split(",") if s.strip()]
+            decisions = [s.strip() for s in dm.group(1).split(" ; ") if s.strip()]
             continue
         mm = RE_MISTAKES.match(stripped)
         if mm:
-            mistakes = [s.strip() for s in mm.group(1).split(",") if s.strip()]
+            mistakes = [s.strip() for s in mm.group(1).split(" ; ") if s.strip()]
             continue
         pm = RE_PATTERNS.match(stripped)
         if pm:
-            patterns = [s.strip() for s in pm.group(1).split(",") if s.strip()]
+            patterns = [s.strip() for s in pm.group(1).split(" ; ") if s.strip()]
             continue
 
         # Subsection header

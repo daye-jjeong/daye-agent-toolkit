@@ -108,7 +108,7 @@ def set_coach_state(conn: sqlite3.Connection, key: str, value: str):
 
 def insert_behavioral_signal(conn: sqlite3.Connection, signal: dict):
     conn.execute("""
-        INSERT INTO behavioral_signals (session_id, date, signal_type, content, repo)
+        INSERT OR IGNORE INTO behavioral_signals (session_id, date, signal_type, content, repo)
         VALUES (:session_id, :date, :signal_type, :content, :repo)
     """, signal)
 

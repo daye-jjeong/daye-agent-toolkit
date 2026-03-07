@@ -83,12 +83,13 @@ def sync_date(conn, date_str: str) -> int:
             upsert_activity(conn, activity)
             count += 1
 
-            for signal_type in ("decisions", "mistakes", "patterns"):
-                for content in s.get(signal_type, []):
+            _SIGNAL_TYPE_MAP = {"decisions": "decision", "mistakes": "mistake", "patterns": "pattern"}
+            for plural, singular in _SIGNAL_TYPE_MAP.items():
+                for content in s.get(plural, []):
                     insert_behavioral_signal(conn, {
                         "session_id": session_id,
                         "date": date_str,
-                        "signal_type": signal_type.rstrip("s"),  # decisions → decision
+                        "signal_type": singular,
                         "content": content,
                         "repo": s.get("repo", ""),
                     })
