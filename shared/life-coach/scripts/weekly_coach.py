@@ -49,7 +49,7 @@ def get_week_data(conn, dates: list[str]) -> dict:
     # 토큰 합계 (SQL SUM)
     token_row = conn.execute(
         "SELECT COALESCE(SUM(token_total), 0) AS total FROM activities "
-        "WHERE start_at >= ? AND start_at < ? AND source = 'cc'",
+        "WHERE start_at >= ? AND start_at < ?",
         (mon, next_sun),
     ).fetchone()
     total_tokens = token_row["total"]
@@ -57,7 +57,7 @@ def get_week_data(conn, dates: list[str]) -> dict:
     # work-context용 세션 요약 (필요 컬럼만)
     context_rows = conn.execute(
         "SELECT repo, summary, start_at FROM activities "
-        "WHERE start_at >= ? AND start_at < ? AND source = 'cc' ORDER BY start_at",
+        "WHERE start_at >= ? AND start_at < ? ORDER BY start_at",
         (mon, next_sun),
     ).fetchall()
 

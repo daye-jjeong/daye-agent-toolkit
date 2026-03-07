@@ -35,7 +35,7 @@ def upsert_activity(conn: sqlite3.Connection, data: dict):
             :start_at, :end_at, :duration_min, :file_count, :error_count,
             :has_tests, :has_commits, :token_total, :raw_json)
         ON CONFLICT(source, session_id) DO UPDATE SET
-            tag=excluded.tag, summary=excluded.summary,
+            repo=excluded.repo, tag=excluded.tag, summary=excluded.summary,
             end_at=excluded.end_at, duration_min=excluded.duration_min,
             file_count=excluded.file_count, token_total=excluded.token_total,
             raw_json=excluded.raw_json
@@ -47,7 +47,7 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
     rows = conn.execute("""
         SELECT tag, repo, duration_min, start_at, end_at
         FROM activities
-        WHERE start_at >= ? AND start_at < ? AND source = 'cc'
+        WHERE start_at >= ? AND start_at < ?
     """, (date_str, next_date)).fetchall()
 
     if not rows:
