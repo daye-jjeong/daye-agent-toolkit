@@ -129,3 +129,77 @@ CREATE TABLE IF NOT EXISTS finance_merchant_categories (
     category_l2 TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
+
+-- ── Health ──────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS health_exercises (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    type TEXT NOT NULL,
+    duration_min INTEGER NOT NULL,
+    exercises TEXT,
+    feeling TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(date, timestamp, type)
+);
+
+CREATE TABLE IF NOT EXISTS health_symptoms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    description TEXT NOT NULL,
+    trigger_factor TEXT,
+    duration TEXT,
+    status TEXT DEFAULT '진행중',
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(date, timestamp, type)
+);
+
+CREATE TABLE IF NOT EXISTS health_pt_homework (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exercise TEXT NOT NULL,
+    sets_reps TEXT,
+    notes TEXT,
+    status TEXT DEFAULT '할 일',
+    assigned_date TEXT NOT NULL,
+    completed_date TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(exercise, assigned_date)
+);
+
+CREATE TABLE IF NOT EXISTS health_check_ins (
+    date TEXT PRIMARY KEY,
+    sleep_hours REAL,
+    sleep_quality INTEGER,
+    steps INTEGER,
+    workout INTEGER DEFAULT 0,
+    stress INTEGER,
+    water_ml INTEGER,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS health_meals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    meal_type TEXT NOT NULL,
+    food_items TEXT,
+    portion TEXT,
+    skipped INTEGER DEFAULT 0,
+    calories INTEGER,
+    protein_g REAL,
+    carbs_g REAL,
+    fat_g REAL,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(date, timestamp, meal_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_health_exercises_date ON health_exercises(date);
+CREATE INDEX IF NOT EXISTS idx_health_symptoms_date ON health_symptoms(date);
+CREATE INDEX IF NOT EXISTS idx_health_meals_date ON health_meals(date);
