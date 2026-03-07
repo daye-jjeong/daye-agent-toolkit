@@ -131,7 +131,7 @@ def extract(data: dict) -> dict:
     }
 
 
-def apply(data: dict, enrichments: dict) -> dict:
+def apply(data: dict, enrichments: dict) -> tuple[dict, int]:
     """Apply enrichment data back into composed JSON."""
     applied = 0
 

@@ -1,6 +1,6 @@
 {
   "name": "news-brief",
-  "version": "1.0.0",
-  "description": "키워드 기반 뉴스 브리핑 생성",
+  "version": "0.5.0",
+  "description": "키워드 기반 뉴스 브리핑 + 로닉 임팩트 분석. 뉴스 요약, 데일리 브리핑, 밍밍 데일리, 속보 알림, RSS, AI 트렌드 분석이 필요할 때 사용.",
   "entrypoint": "SKILL.md"
 }

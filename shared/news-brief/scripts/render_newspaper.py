@@ -37,9 +37,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
 from html import escape
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kst_utils import KST
 
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 
@@ -319,7 +323,7 @@ def render_section(section: dict) -> str:
 
 
 def render(data: dict, weather: dict | None = None) -> str:
-    date_str = data.get("date", datetime.now().strftime("%Y-%m-%d"))
+    date_str = data.get("date", datetime.now(KST).strftime("%Y-%m-%d"))
     kdate = korean_date(date_str)
 
     weather_html = ""
