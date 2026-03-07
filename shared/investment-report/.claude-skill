@@ -1,6 +1,0 @@
-{
-  "name": "investment-report",
-  "version": "1.0.0",
-  "description": "포트폴리오 데이터 기반 투자 리포트 생성",
-  "entrypoint": "SKILL.md"
-}

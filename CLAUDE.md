@@ -45,12 +45,12 @@ _infra/       — 빌드/설치/동기화 스크립트
 | gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
 | health-coach | 맞춤 건강 조언 + 운동 추천 |
 | health-tracker | 운동/증상/PT 트래킹 |
-| investment-report | 일일 투자 리포트 |
-| investment-research | 투자 종목 리서치 |
+| investment-manager | 투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신 |
 | meal-tracker | 식사 기록 + 영양 모니터링 |
 | news-brief | 키워드 뉴스 브리핑 |
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |
+| spending-manager | 소비 분석 — 카테고리 요약, 추세, 미분류 정리, 예산 관리 |
 | stop-slop-kr | 한국어 AI 말투 교정 — 번역체, 아첨, 상투어 제거 |
 
 ### OpenClaw 전용 (5개) — `openclaw/` 디렉토리
