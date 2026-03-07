@@ -45,29 +45,28 @@ CC 세션 종료
 
 태그 종류: 코딩, 디버깅, 리서치, 리뷰, ops, 설정, 문서, 기타
 
-### Pipeline 2 — Daily Digest (Cron 21:00)
+### Pipeline 2 — Daily Digest (retired → life-coach로 이관)
 
 ```
 parse_work_log.py | daily_digest.py
-  → 태그 비율 + 레포별 요약 다이제스트 → 텔레그램
-  → 레포별 work-context.md → 프로젝트 auto memory
+  → life-coach/scripts/daily_coach.py가 대체
+  → 세션 상세 + 토큰 + 코칭이 하나의 리포트로 통합
 ```
 
-### Pipeline 3 — Weekly Digest (Cron 일요일 21:00)
+### Pipeline 3 — Weekly Digest (retired → life-coach로 이관)
 
 ```
-weekly_digest.py --date today
-  → 일별 활동 + 태그 분석 + 레포 순위 → 텔레그램
-  → 🔮 reflect 질문 (패턴 기반)
-  → 레포별 주간 work-context.md → 프로젝트 auto memory
+weekly_digest.py
+  → life-coach/scripts/weekly_coach.py가 대체
+  → 주간 트렌드 + 방향성 코칭으로 통합
 ```
 
 ## 자동화
 
 | Cron | Script | 설명 |
 |------|--------|------|
-| `0 21 * * *` | `parse_work_log.py \| daily_digest.py` | 매일 21시 다이제스트 |
-| `0 21 * * 0` | `weekly_digest.py` | 매주 일요일 21시 주간 리포트 |
+| ~~`0 21 * * *`~~ | ~~`daily_digest.py`~~ | retired → `life-coach/daily_coach.py` |
+| ~~`0 21 * * 0`~~ | ~~`weekly_digest.py`~~ | retired → `life-coach/weekly_coach.py` |
 
 ## Telegram 설정
 
