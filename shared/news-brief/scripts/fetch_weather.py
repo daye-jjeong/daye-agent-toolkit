@@ -15,7 +15,9 @@ import argparse
 import json
 import sys
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+KST = timezone(timedelta(hours=9))
 
 # WMO Weather interpretation codes → Korean
 WMO_KR = {
@@ -193,7 +195,7 @@ def main() -> None:
 
     result = {
         "location": location_kr,
-        "date": datetime.now().strftime("%Y-%m-%d"),
+        "date": datetime.now(KST).strftime("%Y-%m-%d"),
         "current_temp": temp,
         "feels_like": feels_like,
         "high": high,

@@ -27,7 +27,7 @@ import sys
 from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from kst_utils import extract_domain, format_pub_kst
+from kst_utils import KST, extract_domain, format_pub_kst
 
 # General news category order
 _GENERAL_SECTION_ORDER = ["국제", "국내", "경제", "기타"]
@@ -211,7 +211,7 @@ def compose(
     highlight: str = "",
 ) -> dict:
     """Compose pipeline outputs into render_newspaper.py input schema."""
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(KST).strftime("%Y-%m-%d")
     sections: list[dict] = []
 
     # General News — split by category (국제/국내/경제)

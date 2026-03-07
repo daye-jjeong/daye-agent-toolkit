@@ -38,7 +38,7 @@ DEFAULT_VAULT = os.path.expanduser("~/openclaw/vault")
 
 def render_markdown(payload: dict) -> str:
     """Render AI trends payload as markdown."""
-    date_iso = payload.get("date") or datetime.now().strftime("%Y-%m-%d")
+    date_iso = payload.get("date") or datetime.now(KST).strftime("%Y-%m-%d")
     title = payload.get("title") or f"AI Trends Briefing — {date_iso}"
     items = payload.get("items") or []
     briefing = payload.get("briefing") or ""
@@ -116,7 +116,7 @@ def main():
     args = ap.parse_args()
 
     payload = json.loads(sys.stdin.read() or "{}")
-    date_iso = payload.get("date") or datetime.now().strftime("%Y-%m-%d")
+    date_iso = payload.get("date") or datetime.now(KST).strftime("%Y-%m-%d")
 
     # Render markdown
     md_content = render_markdown(payload)

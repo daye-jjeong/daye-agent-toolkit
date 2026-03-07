@@ -26,6 +26,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kst_utils import KST
+
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 
 # Default vault path — override with --vault-dir
@@ -107,7 +110,7 @@ def render_section_md(section: dict) -> str:
 
 def render_vault_md(data: dict) -> str:
     """Render full vault markdown with YAML frontmatter."""
-    date_str = data.get("date", datetime.now().strftime("%Y-%m-%d"))
+    date_str = data.get("date", datetime.now(KST).strftime("%Y-%m-%d"))
     kdate = korean_date(date_str)
     highlight = data.get("highlight", "")
 
@@ -191,7 +194,7 @@ def main() -> None:
         with open(args.weather, "r", encoding="utf-8") as f:
             data["weather"] = json.load(f)
 
-    date_str = data.get("date", datetime.now().strftime("%Y-%m-%d"))
+    date_str = data.get("date", datetime.now(KST).strftime("%Y-%m-%d"))
     md = render_vault_md(data)
 
     # Write to vault/reports/news-brief/YYYY-MM-DD.md

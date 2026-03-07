@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import feedparser
 
 from html_source import fetch_entries as fetch_html_entries
-from kst_utils import format_pub_kst, parse_pub_date
+from kst_utils import KST, format_pub_kst, parse_pub_date
 
 # Low-signal patterns filtered from general news
 NOISE_PATTERNS = re.compile(
@@ -543,7 +543,7 @@ def main():
         return
 
     # Default text output (Telegram)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(KST).strftime("%Y-%m-%d")
     lines: list[str] = []
     lines.append(f"[뉴스/트렌드] 로봇·조리자동화 데일리 브리프 — {today}")
 
