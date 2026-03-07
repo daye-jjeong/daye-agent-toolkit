@@ -10,7 +10,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 Four-pipeline news briefing system:
 1. **General:** Korean/international general news + daily summary
-2. **AI Trends:** AI/tech RSS + community (HN, Reddit, PH, GitHub) + multi-agent analysis
+2. **AI Trends:** AI/tech RSS + community (HN, Reddit, PH, GitHub)
 3. **Ronik:** Robotics/kitchen automation RSS + Ronik impact analysis
 4. **Breaking:** 15분 간격 속보 알림 (keyword scoring, LLM 0 tokens)
 
@@ -18,8 +18,8 @@ Four-pipeline news briefing system:
 
 ```
 Pipeline 1 (General):  news_brief.py --output-format json  ─┐
-Pipeline 2 (AI):       AI Trends Team (3-agent)              ├→ compose-newspaper.py → enrich.py → render_newspaper.py → HTML
-Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┤                                     save_to_vault.py    → Vault
+Pipeline 2 (AI):       news_brief.py --output-format json  ─┤→ compose-newspaper.py → enrich.py → render_newspaper.py → HTML
+Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┤
 Community  (Reddit):   news_brief.py --output-format json  ─┘
 Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 ```
@@ -38,7 +38,6 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 3. `compose-newspaper.py` merges General + AI Trends + Ronik → newspaper schema
 4. `enrich.py extract` → agent가 한국어 번역 + 요약(why) 생성 → `enrich.py apply`
 5. `render_newspaper.py` renders enriched JSON → HTML newspaper
-6. `save_to_vault.py` saves to vault as structured markdown
 
 ## Input Files
 
@@ -48,7 +47,6 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 |------|---------|
 | `{baseDir}/references/general_feeds.txt` | General RSS feeds (연합뉴스, BBC Korean, Reuters, NYT 등) |
 | `{baseDir}/references/general_keywords.txt` | Broad keywords (경제, 정치, 국제, 과학 등) |
-| `{baseDir}/references/general_prompt.txt` | LLM prompt: 카테고리별 요약 + 오늘의 핵심 |
 
 ### Community — Reddit
 
@@ -59,21 +57,10 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 
 ### Pipeline 2 — AI Trends
 
-**자동 수집 (cron/단일 에이전트):**
-
 | File | Purpose |
 |------|---------|
 | `{baseDir}/references/ai_trends_feeds.txt` | AI RSS feeds — plain text URL 목록 (news_brief.py용) |
 | `{baseDir}/references/ai_trends_keywords.txt` | AI 키워드 필터 (GPT, Claude, LLM, transformer 등) |
-
-**멀티 에이전트 (수동/고품질):**
-
-| File | Purpose |
-|------|---------|
-| `{baseDir}/references/ai_trends_team/rss_sources.json` | AI RSS + community sources (13개) — 에이전트가 직접 web_fetch |
-| `{baseDir}/references/ai_trends_team/researcher.md` | Researcher agent prompt |
-| `{baseDir}/references/ai_trends_team/writer.md` | Writer agent prompt |
-| `{baseDir}/references/ai_trends_team/executor.md` | Executor agent prompt (compose flow) |
 
 ### Pipeline 3 — Ronik
 
@@ -81,7 +68,6 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 |------|---------|
 | `{baseDir}/references/rss_feeds.txt` | Ronik RSS feeds (robotics, QSR, Reuters tech) |
 | `{baseDir}/references/keywords.txt` | Ronik keywords (robot, kitchen automation, etc.) |
-| `{baseDir}/references/impact_prompt.txt` | LLM prompt: Ronik impact (기회/리스크/액션) |
 
 ### Pipeline 4 — Breaking
 
@@ -95,7 +81,6 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 | 산출물 | 경로 | 설명 |
 |--------|------|------|
 | HTML 신문 | `/tmp/mingming_daily.html` | 4개 파이프라인 종합 신문 |
-| Vault 마크다운 | `{vault-dir}/reports/news-brief/YYYY-MM-DD.md` | 구조화된 일일 브리핑 |
 | 속보 텍스트 | stdout | breaking-alert.py 감지 결과 |
 
 `render_newspaper.py`가 JSON → 신문 스타일 HTML 파일 생성.
@@ -135,8 +120,6 @@ python3 news_brief.py --feeds ../references/community_feeds.txt \
   --max-items 10 --since 24 --output-format json > /tmp/community.json
 ```
 
-Pipeline 2를 멀티 에이전트 팀으로 고품질 실행하려면 `references/ai_trends_team/` 참고.
-
 ### 2. 조합 + 보강 + 렌더링
 
 ```bash
@@ -163,15 +146,6 @@ python3 render_newspaper.py --input /tmp/composed.json \
   --weather /tmp/weather.json --output /tmp/mingming_daily.html
 ```
 
-### 3. 저장
-
-```bash
-# Vault 저장
-python3 save_to_vault.py --input /tmp/composed.json \
-  --weather /tmp/weather.json --vault-dir ~/openclaw/vault
-```
-
-
 ### Pipeline 4 — Breaking Alert (별도 cron)
 
 ```bash
@@ -196,18 +170,6 @@ python3 breaking-alert.py --sources ../references/ai_trends_team/rss_sources.jso
 | `breaking-alert.py` | 속보 알림 (tiered keyword + word boundary) | `--sources`, `--keywords`, `--since`, `--dry-run` |
 | `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo, 0 tokens) | `--location`, `--output` |
 | `render_newspaper.py` | JSON → 신문 스타일 HTML | `--input`, `--weather`, `--output` |
-| `save_to_vault.py` | 기사 vault 저장 | `--input`, `--vault-dir` |
-| `ai_trends_ingest.py` | AI 트렌드 vault 적재 | stdin JSON, `--vault-dir` |
-
-## References (AI Trends Team)
-
-| 파일 | 용도 |
-|------|------|
-| `references/ai_trends_team/executor.md` | AI Trends 실행자 프롬프트 |
-| `references/ai_trends_team/researcher.md` | AI Trends 리서처 프롬프트 |
-| `references/ai_trends_team/writer.md` | AI Trends 작성자 프롬프트 |
-| `references/ai_trends_team/rss_sources.json` | AI Trends RSS 소스 목록 (13개: 공식 블로그 + HN/Reddit/PH/GitHub) |
-
 **상세**: `{baseDir}/references/scripts-detail.md` 참고
 
 ## Token Usage
@@ -217,20 +179,13 @@ python3 breaking-alert.py --sources ../references/ai_trends_team/rss_sources.jso
 - Analysis: ~200-400 tokens (3 sentences x 5 items + daily bet)
 - Total: ~200-400 tokens/day
 
-## Vault Storage
-
-| 저장 위치 | 내용 |
-|-----------|------|
-| `{vault-dir}/reports/news-brief/YYYY-MM-DD.md` | 일일 뉴스 브리핑 (전체) |
-| `{vault-dir}/reports/ai-trends/YYYY-MM-DD.md` | AI 트렌드 상세 |
-
 ## Implementation Status
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | 1. RSS + Dedup | Complete | news_brief.py |
 | 2. Compose + KST | Complete | compose-newspaper.py, kst_utils.py |
-| 3. AI Trends Team | Complete | 3-agent (researcher/writer/executor) |
+| 3. AI Trends | Complete | news_brief.py + ai_trends_feeds.txt |
 | 4. Enrich + Render | Complete | enrich.py, render_newspaper.py |
 | 5. Breaking Alert | Complete | breaking-alert.py |
 | 6. Community (Reddit) | Complete | news_brief.py + community feeds |

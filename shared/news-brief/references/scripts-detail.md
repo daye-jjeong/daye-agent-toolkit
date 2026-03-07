@@ -76,25 +76,6 @@
 
 **Output:** `{location, date, current_temp, feels_like, high, low, humidity, condition, wind, outfit}`
 
-## `save_to_vault.py`
-
-**Purpose:** compose JSON → Obsidian vault 마크다운 저장
-
-**Inputs:**
-- `--input`: compose JSON 파일
-- `--weather`: 날씨 JSON (optional)
-- `--vault-dir` (default: ~/openclaw/vault): vault 경로
-
-**Output:** `{vault-dir}/reports/news-brief/YYYY-MM-DD.md`
-
-## `ai_trends_ingest.py`
-
-**Purpose:** AI Trends Writer JSON → vault 마크다운 저장
-
-**Input:** stdin으로 Writer vault JSON 수신
-
-**Output:** `{vault-dir}/reports/ai-trends/YYYY-MM-DD.md`
-
 ## `breaking-alert.py`
 
 **Purpose:** 15분 간격 속보 알림 (keyword scoring, LLM 0 tokens)

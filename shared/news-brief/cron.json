@@ -6,5 +6,13 @@
 		"target": "daily-newspaper",
 		"reason": "cron: daily-newspaper",
 		"instructions": "news-brief SKILL.md의 Quick Usage 섹션을 따라 Python 스크립트 파이프라인으로 뉴스 브리핑을 생성하세요. 반드시 {baseDir}/scripts/ 의 스크립트를 사용할 것 (SearXNG 직접 검색 금지). enrich 단계의 품질 기준은 SKILL.md에 명시된 대로 준수할 것. HTML은 brain/library/reports/daily-newspaper_YYYY-MM-DD.html 에 저장하세요. 완료 후: `minions thread add --author {{agentId}} --mentions mingming --tags alert --content \"...요약...\" --media <HTML 절대경로>` 로 오케스트레이터에게 전달. routine complete 처리."
+	},
+	{
+		"name": "breaking-alert",
+		"scope": "routine",
+		"schedule": "*/15 * * * *",
+		"target": "breaking-alert",
+		"reason": "cron: breaking-alert",
+		"instructions": "python3 {baseDir}/scripts/breaking-alert.py --sources {baseDir}/references/ai_trends_team/rss_sources.json --feeds {baseDir}/references/general_feeds.txt --keywords {baseDir}/references/breaking-keywords.txt --since 1 을 실행하세요. 출력이 있으면 `minions thread add --author {{agentId}} --mentions mingming --tags alert --content \"<출력 내용>\"` 로 전달. 출력이 없으면 아무것도 하지 마세요."
 	}
 ]
