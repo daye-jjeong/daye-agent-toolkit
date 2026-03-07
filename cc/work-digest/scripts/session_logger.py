@@ -297,6 +297,72 @@ def _clean_summary_text(text: str) -> str:
     return text.strip()[:300]
 
 
+BEHAVIOR_TIMEOUT_SEC = 60
+
+
+def extract_behavioral_signals(user_messages: str, repo: str) -> dict | None:
+    """sonnet으로 사용자 행동 신호 추출. 실패 시 None.
+
+    Returns: {"decisions": [...], "mistakes": [...], "patterns": [...]} or None
+    """
+    if not user_messages.strip():
+        return None
+    prompt = (
+        f"레포: {repo}\n\n"
+        "다음은 Claude Code 세션에서 사용자가 보낸 메시지들이다.\n\n"
+        f"{user_messages}\n\n"
+        "이 사용자의 행동 신호를 추출해라. 각 항목은 1줄, 30자 이내.\n"
+        "- decisions: 사용자가 명시적 선택을 한 것 (A 대신 B 선택 등)\n"
+        "- mistakes: 되돌린 것, 교정한 것, 시행착오\n"
+        "- patterns: 관찰되는 작업 습관 (좋든 나쁘든)\n"
+        "없으면 빈 배열.\n\n"
+        'JSON으로만 출력. 다른 텍스트 없이:\n'
+        '{"decisions": [...], "mistakes": [...], "patterns": [...]}'
+    )
+    try:
+        result = subprocess.run(
+            ["claude", "-p", "--model", "sonnet", "--no-session-persistence"],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=BEHAVIOR_TIMEOUT_SEC,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return _parse_signals_response(result.stdout.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        pass
+    return None
+
+
+def _parse_signals_response(raw: str) -> dict | None:
+    """Parse JSON behavioral signals from LLM response."""
+    # JSON 블록 추출 (```json ... ``` 또는 bare JSON)
+    cleaned = raw.strip()
+    if "```" in cleaned:
+        match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", cleaned)
+        if match:
+            cleaned = match.group(1)
+    # { 로 시작하는 부분 찾기
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1:
+        return None
+    try:
+        data = json.loads(cleaned[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    result = {}
+    for key in ("decisions", "mistakes", "patterns"):
+        items = data.get(key, [])
+        if isinstance(items, list):
+            result[key] = [str(item)[:60] for item in items if item]
+        else:
+            result[key] = []
+    if not any(result.values()):
+        return None
+    return result
+
+
 def parse_transcript(transcript_path: str) -> dict:
     """Parse .jsonl transcript — 수정 파일, 명령, 에러, 토픽, 토큰 추출."""
     files_modified = set()
@@ -469,6 +535,18 @@ def build_session_section(session_id, data, now, repo):
         lines.append(f"**주제**: {data['topic']}")
         lines.append("")
 
+    signals = data.get("behavioral_signals")
+    if signals:
+        if signals.get("decisions"):
+            lines.append(f"**결정**: {', '.join(signals['decisions'])}")
+            lines.append("")
+        if signals.get("mistakes"):
+            lines.append(f"**시행착오**: {', '.join(signals['mistakes'])}")
+            lines.append("")
+        if signals.get("patterns"):
+            lines.append(f"**패턴**: {', '.join(signals['patterns'])}")
+            lines.append("")
+
     if data["files"]:
         lines.append("### 수정된 파일")
         home = str(Path.home())
@@ -565,12 +643,17 @@ def main():
     if already_recorded(session_id, event):
         sys.exit(0)
 
-    # SessionEnd일 때만 LLM 요약 생성 (PreCompact는 스킵)
+    # SessionEnd일 때만 LLM 요약 + 행동 추출 (PreCompact는 스킵)
     if event == "SessionEnd":
         conversation = extract_conversation(transcript_path)
         summary = summarize_session(conversation, repo)
         if summary:
             data["summary"] = summary
+
+        user_msgs = extract_user_messages(transcript_path)
+        signals = extract_behavioral_signals(user_msgs, repo)
+        if signals:
+            data["behavioral_signals"] = signals
 
     # 세션 마커 기록
     write_session_marker(session_id, data, now, repo)
