@@ -26,7 +26,8 @@ KST = timezone(timedelta(hours=9))
 COACHING_TIMEOUT_SEC = 45
 OVERWORK_THRESHOLD_HOURS = 8
 PROMPTS_PATH = Path(__file__).resolve().parent.parent / "references" / "coaching-prompts.md"
-PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+from _helpers import find_project_memory
 
 
 def get_today_data(conn, date_str: str) -> dict:
@@ -167,7 +168,7 @@ def _build_pattern_feedback(data: dict) -> str | None:
         lines.append(f"• 총 {format_tokens(token_total)} tokens 사용")
     if not lines:
         return None
-    return "💡 패턴 피드백:\n" + "\n".join(f"  {l}" for l in lines)
+    return "💡 패턴 피드백:\n" + "\n".join(f"  {ln}" for ln in lines)
 
 
 def build_template_report(data: dict, coach_state: dict) -> str:
@@ -260,15 +261,6 @@ def update_overwork_tracking(conn, data: dict, coach_state: dict):
     return level
 
 
-def _find_project_memory(repo_name: str) -> Path | None:
-    if not PROJECTS_DIR.exists():
-        return None
-    for entry in PROJECTS_DIR.iterdir():
-        if entry.is_dir() and entry.name.endswith(repo_name):
-            return entry / "memory"
-    return None
-
-
 def write_work_context(data: dict):
     """레포별 work-context.md를 각 프로젝트 auto memory에 기록."""
     sessions = data.get("sessions", [])
@@ -280,7 +272,7 @@ def write_work_context(data: dict):
         repo = s.get("repo") or "unknown"
         repo_sessions.setdefault(repo, []).append(s)
     for repo, sess in repo_sessions.items():
-        memory_dir = _find_project_memory(repo)
+        memory_dir = find_project_memory(repo)
         if not memory_dir:
             continue
         lines = [

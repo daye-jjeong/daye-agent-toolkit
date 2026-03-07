@@ -26,7 +26,8 @@ from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGR
 KST = timezone(timedelta(hours=9))
 COACHING_TIMEOUT_SEC = 60
 PROMPTS_PATH = Path(__file__).resolve().parent.parent / "references" / "coaching-prompts.md"
-PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+from _helpers import find_project_memory
 
 
 def get_week_dates(ref_date: str) -> list[str]:
@@ -48,19 +49,25 @@ def get_week_data(conn, dates: list[str]) -> dict:
     ).fetchall()
     stats_by_date = {r["date"]: dict(r) for r in stats_rows}
 
-    # activities 조회 (주간 전체)
-    activities = conn.execute("""
-        SELECT repo, tag, summary, start_at, end_at, duration_min,
-               token_total, error_count, has_tests, has_commits
-        FROM activities WHERE start_at >= ? AND start_at < ? AND source = 'cc'
-        ORDER BY start_at
-    """, (mon, next_sun)).fetchall()
+    # 토큰 합계 (SQL SUM)
+    token_row = conn.execute(
+        "SELECT COALESCE(SUM(token_total), 0) AS total FROM activities "
+        "WHERE start_at >= ? AND start_at < ? AND source = 'cc'",
+        (mon, next_sun),
+    ).fetchone()
+    total_tokens = token_row["total"]
+
+    # work-context용 세션 요약 (필요 컬럼만)
+    context_rows = conn.execute(
+        "SELECT repo, summary, start_at FROM activities "
+        "WHERE start_at >= ? AND start_at < ? AND source = 'cc' ORDER BY start_at",
+        (mon, next_sun),
+    ).fetchall()
 
     # 일별 집계
     daily = []
     total_sessions = 0
     total_hours = 0.0
-    total_tokens = 0
     tags: dict[str, int] = {}
     repos: dict[str, int] = {}
 
@@ -87,11 +94,6 @@ def get_week_data(conn, dates: list[str]) -> dict:
                 "work_hours": 0,
             })
 
-    for a in activities:
-        total_tokens += a["token_total"] or 0
-
-    all_sessions = [dict(a) for a in activities]
-
     return {
         "dates": dates,
         "daily": daily,
@@ -100,7 +102,7 @@ def get_week_data(conn, dates: list[str]) -> dict:
         "total_tokens": total_tokens,
         "tags": tags,
         "repos": repos,
-        "sessions": all_sessions,
+        "context_rows": [dict(r) for r in context_rows],
     }
 
 
@@ -273,31 +275,22 @@ def generate_llm_coaching(data_section: str, tone_level: int) -> str | None:
     return None
 
 
-def _find_project_memory(repo_name: str) -> Path | None:
-    if not PROJECTS_DIR.exists():
-        return None
-    for entry in PROJECTS_DIR.iterdir():
-        if entry.is_dir() and entry.name.endswith(repo_name):
-            return entry / "memory"
-    return None
-
-
 def write_weekly_context(data: dict):
     """레포별 주간 work-context.md 갱신."""
     if data["total_sessions"] == 0:
         return
     mon, sun = data["dates"][0], data["dates"][6]
-    # 레포별 세션 요약
-    repo_summaries: dict[str, list[str]] = {}
-    for s in data.get("sessions", []):
-        repo = s.get("repo") or "unknown"
-        sm = (s.get("summary") or "").strip()
-        date_str = (s.get("start_at") or "")[:10]
+    # 레포별 세션 요약 (튜플로 저장하여 re-parse 방지)
+    repo_summaries: dict[str, list[tuple[str, str]]] = {}
+    for r in data.get("context_rows", []):
+        repo = r.get("repo") or "unknown"
+        sm = (r.get("summary") or "").strip()
+        date_str = (r.get("start_at") or "")[:10]
         if sm and date_str:
-            repo_summaries.setdefault(repo, []).append(f"{date_str}: {sm}")
+            repo_summaries.setdefault(repo, []).append((date_str, sm))
 
     for repo, count in data["repos"].items():
-        memory_dir = _find_project_memory(repo)
+        memory_dir = find_project_memory(repo)
         if not memory_dir:
             continue
         lines = [
@@ -307,14 +300,12 @@ def write_weekly_context(data: dict):
             f"이번 주 {count}세션 작업.",
             "",
         ]
-        for sm in repo_summaries.get(repo, [])[:8]:
+        for date_str, sm in repo_summaries.get(repo, [])[:8]:
             try:
-                date_part = sm.split(":")[0].strip()
-                dt = datetime.strptime(date_part, "%Y-%m-%d")
-                rest = sm[len(date_part) + 2:]
-                lines.append(f"- {dt.month}/{dt.day}: {rest}")
-            except (ValueError, IndexError):
-                lines.append(f"- {sm}")
+                dt = datetime.strptime(date_str, "%Y-%m-%d")
+                lines.append(f"- {dt.month}/{dt.day}: {sm}")
+            except ValueError:
+                lines.append(f"- {date_str}: {sm}")
         lines.append("")
         try:
             memory_dir.mkdir(parents=True, exist_ok=True)
