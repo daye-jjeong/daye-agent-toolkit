@@ -13,6 +13,7 @@ ZIP password: 0830 (banksalad 고정)
 
 import argparse
 import re
+import sqlite3
 import sys
 import tempfile
 import zipfile
@@ -158,8 +159,7 @@ def import_transactions(conn, sheet_rows, dry_run=False):
                 import_key,
             ))
             new += 1
-        except Exception:
-            # UNIQUE constraint → duplicate
+        except sqlite3.IntegrityError:
             skip += 1
 
     if not dry_run:
@@ -218,7 +218,11 @@ def import_investments(conn, sheet_rows, dry_run=False):
             new += 1
             continue
 
-        cur = conn.execute("""
+        exists = conn.execute(
+            "SELECT 1 FROM finance_investments WHERE product_name=? AND institution=?",
+            (name, institution),
+        ).fetchone()
+        conn.execute("""
             INSERT INTO finance_investments
                 (product_name, product_type, institution, invested,
                  current_value, return_pct)
@@ -230,10 +234,10 @@ def import_investments(conn, sheet_rows, dry_run=False):
                 return_pct=excluded.return_pct,
                 updated_at=datetime('now','localtime')
         """, (name, product_type, institution, invested, current_val, round(return_pct, 2)))
-        if cur.rowcount and cur.lastrowid:
-            new += 1
-        else:
+        if exists:
             updated += 1
+        else:
+            new += 1
 
     if not dry_run:
         conn.commit()
@@ -287,7 +291,11 @@ def import_loans(conn, sheet_rows, dry_run=False):
             new += 1
             continue
 
-        cur = conn.execute("""
+        exists = conn.execute(
+            "SELECT 1 FROM finance_loans WHERE loan_name=? AND institution=? AND principal=?",
+            (name, institution, principal),
+        ).fetchone()
+        conn.execute("""
             INSERT INTO finance_loans
                 (loan_name, loan_type, institution, principal,
                  outstanding, interest_rate, start_date, end_date)
@@ -300,10 +308,10 @@ def import_loans(conn, sheet_rows, dry_run=False):
                 end_date=excluded.end_date,
                 updated_at=datetime('now','localtime')
         """, (name, loan_type, institution, principal, outstanding, rate, start_date, end_date))
-        if cur.rowcount and cur.lastrowid:
-            new += 1
-        else:
+        if exists:
             updated += 1
+        else:
+            new += 1
 
     if not dry_run:
         conn.commit()

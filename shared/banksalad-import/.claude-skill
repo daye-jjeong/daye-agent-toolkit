@@ -1,6 +1,6 @@
 {
   "name": "banksalad-import",
-  "version": "0.3.0",
-  "description": "뱅크샐러드 → Obsidian vault import (거래내역, 투자, 대출)",
+  "version": "1.0.0",
+  "description": "뱅크샐러드 → life-dashboard SQLite DB import (거래내역, 투자, 대출)",
   "entrypoint": "SKILL.md"
 }
