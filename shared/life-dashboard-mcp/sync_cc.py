@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import get_conn, upsert_activity, update_daily_stats, insert_behavioral_signal
 
 KST = timezone(timedelta(hours=9))
+_SIGNAL_TYPE_MAP = {"decisions": "decision", "mistakes": "mistake", "patterns": "pattern"}
 
 
 def sync_date(conn, date_str: str) -> int:
@@ -83,16 +84,18 @@ def sync_date(conn, date_str: str) -> int:
             upsert_activity(conn, activity)
             count += 1
 
-            _SIGNAL_TYPE_MAP = {"decisions": "decision", "mistakes": "mistake", "patterns": "pattern"}
-            for plural, singular in _SIGNAL_TYPE_MAP.items():
-                for content in s.get(plural, []):
-                    insert_behavioral_signal(conn, {
-                        "session_id": session_id,
-                        "date": date_str,
-                        "signal_type": singular,
-                        "content": content,
-                        "repo": s.get("repo", ""),
-                    })
+            try:
+                for plural, singular in _SIGNAL_TYPE_MAP.items():
+                    for content in s.get(plural, []):
+                        insert_behavioral_signal(conn, {
+                            "session_id": session_id,
+                            "date": date_str,
+                            "signal_type": singular,
+                            "content": content,
+                            "repo": s.get("repo", ""),
+                        })
+            except Exception as e:
+                print(f"[sync_cc] failed to sync behavioral signals for {session_id}: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[sync_cc] failed to sync session {session_id}: {e}", file=sys.stderr)
 

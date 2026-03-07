@@ -120,7 +120,7 @@ def get_repeated_signals(conn: sqlite3.Connection, date_str: str, days: int = 7,
         SELECT content, signal_type, COUNT(*) as cnt
         FROM behavioral_signals
         WHERE date >= ? AND signal_type IN ('mistake', 'pattern')
-        GROUP BY content
+        GROUP BY content, signal_type
         HAVING cnt >= ?
         ORDER BY cnt DESC
         LIMIT 10

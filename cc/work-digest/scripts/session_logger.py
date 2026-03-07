@@ -215,8 +215,12 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return _parse_summary_response(result.stdout.strip())
-    except Exception:
-        pass
+    except subprocess.TimeoutExpired:
+        print(f"[session_logger] summarize_session timed out ({SUMMARY_TIMEOUT_SEC}s)", file=sys.stderr)
+    except FileNotFoundError:
+        print("[session_logger] 'claude' CLI not found on PATH", file=sys.stderr)
+    except Exception as e:
+        print(f"[session_logger] summarize_session failed: {type(e).__name__}: {e}", file=sys.stderr)
     return None
 
 
@@ -325,8 +329,12 @@ def extract_behavioral_signals(user_messages: str, repo: str) -> dict | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return _parse_signals_response(result.stdout.strip())
-    except Exception:
-        pass
+    except subprocess.TimeoutExpired:
+        print(f"[session_logger] extract_behavioral_signals timed out ({BEHAVIOR_TIMEOUT_SEC}s)", file=sys.stderr)
+    except FileNotFoundError:
+        print("[session_logger] 'claude' CLI not found on PATH", file=sys.stderr)
+    except Exception as e:
+        print(f"[session_logger] extract_behavioral_signals failed: {type(e).__name__}: {e}", file=sys.stderr)
     return None
 
 
@@ -646,17 +654,26 @@ def main():
         conversation = extract_conversation(transcript_path)
         user_msgs = extract_user_messages(transcript_path)
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            summary_future = pool.submit(summarize_session, conversation, repo)
-            signals_future = pool.submit(extract_behavioral_signals, user_msgs, repo)
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                summary_future = pool.submit(summarize_session, conversation, repo)
+                signals_future = pool.submit(extract_behavioral_signals, user_msgs, repo)
 
-            summary = summary_future.result()
-            if summary:
-                data["summary"] = summary
+                try:
+                    summary = summary_future.result(timeout=SUMMARY_TIMEOUT_SEC + 10)
+                    if summary:
+                        data["summary"] = summary
+                except Exception as e:
+                    print(f"[session_logger] summary future failed: {e}", file=sys.stderr)
 
-            signals = signals_future.result()
-            if signals:
-                data["behavioral_signals"] = signals
+                try:
+                    signals = signals_future.result(timeout=BEHAVIOR_TIMEOUT_SEC + 10)
+                    if signals:
+                        data["behavioral_signals"] = signals
+                except Exception as e:
+                    print(f"[session_logger] signals future failed: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[session_logger] ThreadPool failed: {e}", file=sys.stderr)
 
     # 세션 마커 기록
     write_session_marker(session_id, data, now, repo)
