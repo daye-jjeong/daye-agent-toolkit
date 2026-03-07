@@ -114,10 +114,12 @@ def extract(data: dict) -> dict:
         "items": items_to_enrich,
         "instructions": (
             "## 1. 각 항목 enrichment\n"
-            "- translate_headline: 한국어 제목 번역\n"
-            "- rewrite_summary: 한국어 1-2문장 요약 "
-            "(RSS 원문이 아닌 기사 핵심 내용)\n"
-            "- add_why: '왜 중요한가' 1문장 (비즈니스/기술/사회 관점, '→' 접두사 붙이지 말 것)\n\n"
+            "- translate_headline: 영어 제목을 자연스러운 한국어로 번역\n"
+            "- rewrite_summary: 영어 요약은 한국어로 번역. "
+            "RSS 원문 붙여넣기 금지, 기사 핵심을 한국어 1-2문장으로 새로 작성\n"
+            "- add_why: '왜 중요한가' 1문장 (비즈니스/기술/사회 관점, '→' 접두사 붙이지 말 것). "
+            "summary 복사 금지 — 반드시 다른 관점의 문장\n"
+            "- 최종 HTML에 영어 텍스트가 하나도 남으면 안 됨 (headline, summary, why 모두 한국어)\n\n"
             "## 2. highlight (필수)\n"
             "전체 기사를 종합해서 '오늘의 핵심' 2-3문장을 작성하세요.\n"
             "- 섹션 카테고리 나열 금지 ('AI·테크 트렌드와 글로벌 뉴스 종합' 같은 건 의미 없음)\n"

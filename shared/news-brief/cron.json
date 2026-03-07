@@ -5,7 +5,7 @@
 		"schedule": "0 8 * * *",
 		"target": "daily-newspaper",
 		"reason": "cron: daily-newspaper",
-		"instructions": "news-brief SKILL.md의 Quick Usage 섹션을 따라 Python 스크립트 파이프라인으로 뉴스 브리핑을 생성하세요. 반드시 {baseDir}/scripts/ 의 스크립트를 사용할 것 (SearXNG 직접 검색 금지). enrich 단계의 품질 기준은 SKILL.md에 명시된 대로 준수할 것. HTML은 brain/library/reports/daily-newspaper_YYYY-MM-DD.html 에 저장하세요. 완료 후: `minions thread add --author {{agentId}} --mentions mingming --tags alert --content \"...요약...\" --media <HTML 절대경로>` 로 오케스트레이터에게 전달. routine complete 처리."
+		"instructions": "news-brief SKILL.md의 Quick Usage 섹션을 따라 Python 스크립트 파이프라인으로 뉴스 브리핑을 생성하세요. 반드시 {baseDir}/scripts/ 의 스크립트를 사용할 것 (SearXNG 직접 검색 금지).\n\n## 핵심: enrich 단계 (절대 생략 금지)\ncompose 후 반드시 enrich를 수행해야 한다. 이 단계를 빠뜨리면 영어 헤드라인이 그대로 노출된다.\n1. `python3 enrich.py extract --input /tmp/composed.json > /tmp/to_enrich.json`\n2. to_enrich.json을 읽고, 모든 항목에 대해 enrichments.json을 생성:\n   - headline: 영어 제목은 반드시 자연스러운 한국어로 번역.\n   - summary: 영어 요약은 한국어로 번역. RSS 원문 붙여넣기 금지, 기사 핵심을 한국어 1-2문장으로 새로 작성.\n   - why: '왜 중요한가' 1문장 (비즈니스/기술/사회 관점). summary 복사 금지 — 반드시 다른 관점의 문장.\n   - 최종 HTML에 영어 텍스트가 하나도 남아있으면 안 됨. headline, summary, why 모두 한국어여야 한다.\n   - highlight: 전체 기사를 종합한 오늘의 핵심 2-3문장 (카테고리 나열 금지, 구체적 흐름 서술).\n   - 모든 항목 빠짐없이 처리할 것. 일부만 하면 영어가 섞인 신문이 됨.\n3. `python3 enrich.py apply --input /tmp/composed.json --enrichments /tmp/enrichments.json --output /tmp/composed.json`\n4. 렌더링 전 검증: composed.json의 모든 headline이 한국어인지 확인. 영어 headline이 남아있으면 2-3번 재수행.\n\nHTML은 brain/library/reports/daily-newspaper_YYYY-MM-DD.html 에 저장하세요. 완료 후: `minions thread add --author {{agentId}} --mentions mingming --tags alert --content \"...요약...\" --media <HTML 절대경로>` 로 오케스트레이터에게 전달. routine complete 처리."
 	},
 	{
 		"name": "breaking-alert",

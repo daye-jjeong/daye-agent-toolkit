@@ -134,9 +134,10 @@ python3 enrich.py extract --input /tmp/composed.json > /tmp/to_enrich.json
 # → 에이전트가 to_enrich.json의 모든 항목에 대해 enrichments.json 생성
 #    품질 기준:
 #    - highlight: 전체 기사를 종합한 '오늘의 핵심' 2-3문장 (카테고리 나열 금지, 구체적 흐름 서술)
-#    - headline: 영어 → 자연스러운 한국어 번역 (영어 헤드라인이 HTML에 남으면 안 됨)
-#    - summary: RSS 원문 붙여넣기 금지. 기사 핵심을 한국어 1-2문장으로 요약
+#    - headline: 영어 → 자연스러운 한국어 번역
+#    - summary: 영어 요약은 한국어로 번역. RSS 원문 붙여넣기 금지, 기사 핵심을 한국어 1-2문장으로 요약
 #    - why: 왜 중요한가 1문장 (비즈니스/기술/사회 관점)
+#    - 최종 HTML에 영어 텍스트(headline, summary, why)가 하나도 남으면 안 됨
 #    - 모든 항목 빠짐없이 처리할 것. 일부만 하고 넘어가면 영어가 섞인 신문이 됨
 python3 enrich.py apply --input /tmp/composed.json \
   --enrichments /tmp/enrichments.json --output /tmp/composed.json
