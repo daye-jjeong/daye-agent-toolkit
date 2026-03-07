@@ -107,3 +107,25 @@ CREATE TABLE IF NOT EXISTS finance_loans (
     updated_at TEXT DEFAULT (datetime('now', 'localtime')),
     UNIQUE(loan_name, institution, principal)
 );
+
+-- ── Finance (price snapshots + merchant categories) ──
+
+CREATE TABLE IF NOT EXISTS finance_price_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_name TEXT NOT NULL,
+    date TEXT NOT NULL,
+    price REAL NOT NULL,
+    currency TEXT DEFAULT 'KRW',
+    source TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(product_name, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_snap_date ON finance_price_snapshots(date);
+
+CREATE TABLE IF NOT EXISTS finance_merchant_categories (
+    merchant TEXT PRIMARY KEY,
+    category_l1 TEXT NOT NULL,
+    category_l2 TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+);

@@ -1,6 +1,0 @@
-{
-  "name": "investment-research",
-  "version": "1.0.0",
-  "description": "투자 종목 리서치 및 분석",
-  "entrypoint": "SKILL.md"
-}
