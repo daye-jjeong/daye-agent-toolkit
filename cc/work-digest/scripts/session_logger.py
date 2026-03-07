@@ -103,8 +103,8 @@ def strip_system_tags(text: str) -> str:
 # ── transcript 파싱 ───────────────────────────────
 
 IDLE_THRESHOLD_SEC = 300  # 5분 이상 gap = idle로 간주
-SUMMARY_TIMEOUT_SEC = 30
-CONVERSATION_MAX_CHARS = 8000  # haiku에 보낼 대화 최대 길이
+SUMMARY_TIMEOUT_SEC = 60
+CONVERSATION_MAX_CHARS = 8000
 
 
 def extract_conversation(transcript_path: str) -> str:
@@ -144,6 +144,40 @@ def extract_conversation(transcript_path: str) -> str:
     return combined
 
 
+def extract_user_messages(transcript_path: str) -> str:
+    """transcript에서 user 메시지만 추출 (행동 추출용)."""
+    parts = []
+    try:
+        with open(transcript_path, "r") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line.strip())
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("type") != "user":
+                    continue
+                msg = entry.get("message", {})
+                content = msg.get("content", "") if isinstance(msg, dict) else ""
+                if isinstance(content, str) and content.strip():
+                    cleaned = strip_system_tags(content.strip())
+                    if cleaned:
+                        parts.append(cleaned[:500])
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            cleaned = strip_system_tags(block.get("text", "").strip())
+                            if cleaned:
+                                parts.append(cleaned[:500])
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    combined = "\n---\n".join(parts)
+    if len(combined) > CONVERSATION_MAX_CHARS:
+        half = CONVERSATION_MAX_CHARS // 2
+        combined = combined[:half] + "\n...(중략)...\n" + combined[-half:]
+    return combined
+
+
 def summarize_session(conversation: str, repo: str) -> dict | None:
     """claude CLI로 세션 요약 + 태그 생성. 실패 시 None.
 
@@ -177,7 +211,7 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
     )
     try:
         result = subprocess.run(
-            ["claude", "-p", "--model", "haiku", "--no-session-persistence"],
+            ["claude", "-p", "--model", "sonnet", "--no-session-persistence"],
             input=prompt,
             capture_output=True,
             text=True,
