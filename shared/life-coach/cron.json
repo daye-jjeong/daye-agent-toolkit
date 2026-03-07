@@ -1,0 +1,7 @@
+[
+  {
+    "schedule": "0 21 * * *",
+    "command": "python3 {baseDir}/../life-dashboard-mcp/sync_cc.py --days 1 && python3 {baseDir}/scripts/daily_coach.py",
+    "description": "CC sync + 일일 코칭 리포트"
+  }
+]
