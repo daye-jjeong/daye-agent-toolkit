@@ -41,6 +41,9 @@ RE_TOKEN_ITEM = re.compile(r"^-\s+(\w[\w\s]*):\s*(.+)$")
 
 RE_TOPIC = re.compile(r"^\*\*주제\*\*:\s*(.+)$")
 RE_SUMMARY = re.compile(r"^\*\*요약\*\*:\s*(?:\[([^\]]+)\]\s*)?(.+)$")
+RE_DECISIONS = re.compile(r"^\*\*결정\*\*:\s*(.+)$")
+RE_MISTAKES = re.compile(r"^\*\*시행착오\*\*:\s*(.+)$")
+RE_PATTERNS = re.compile(r"^\*\*패턴\*\*:\s*(.+)$")
 RE_FILE_ITEM = re.compile(r"^-\s+`(.+?)`\s*$")
 RE_CMD_ITEM = re.compile(r"^-\s+`(.+?)`\s*$")
 RE_ERROR_ITEM = re.compile(r"^-\s+(.+)$")
@@ -111,6 +114,9 @@ def parse_session_block(lines: list[str]) -> dict | None:
     tokens: dict[str, int] = {}
     token_summary_str = ""
     has_commits_from_meta = False
+    decisions: list[str] = []
+    mistakes: list[str] = []
+    patterns: list[str] = []
 
     current_subsection: str | None = None
     # State for multi-line backtick commands
@@ -167,6 +173,20 @@ def parse_session_block(lines: list[str]) -> dict | None:
             topic = tm.group(1).strip()
             continue
 
+        # Behavioral signals
+        dm = RE_DECISIONS.match(stripped)
+        if dm:
+            decisions = [s.strip() for s in dm.group(1).split(",") if s.strip()]
+            continue
+        mm = RE_MISTAKES.match(stripped)
+        if mm:
+            mistakes = [s.strip() for s in mm.group(1).split(",") if s.strip()]
+            continue
+        pm = RE_PATTERNS.match(stripped)
+        if pm:
+            patterns = [s.strip() for s in pm.group(1).split(",") if s.strip()]
+            continue
+
         # Subsection header
         sub = _subsection_name(stripped)
         if sub is not None:
@@ -217,6 +237,9 @@ def parse_session_block(lines: list[str]) -> dict | None:
         "files": files,
         "commands": commands,
         "errors": errors,
+        "decisions": decisions,
+        "mistakes": mistakes,
+        "patterns": patterns,
         "has_commits_meta": has_commits_from_meta,
         "tokens": tokens if tokens else None,
         "token_summary": token_summary_str or None,
