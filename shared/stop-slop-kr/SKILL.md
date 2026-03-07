@@ -1,6 +1,7 @@
 ---
 name: stop-slop-kr
 description: 한국어 AI 말투 교정 — 번역체, 아첨, 상투어 제거
+version: 1.0.0
 ---
 
 # 한국어 AI Slop 교정

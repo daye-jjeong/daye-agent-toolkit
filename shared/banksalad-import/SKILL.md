@@ -1,6 +1,7 @@
 ---
 name: banksalad-import
 description: 뱅크샐러드 → life-dashboard SQLite DB 금융 데이터 import
+version: 1.0.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 

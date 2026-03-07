@@ -1,0 +1,23 @@
+[
+	{
+		"name": "daily-spending",
+		"schedule": "0 21 * * *",
+		"target": "daily-spending",
+		"reason": "cron: daily-spending",
+		"instructions": "spending-manager 스킬로 오늘 소비 현황을 정리하세요.\n\n## 0. 데이터 신선도 체크 (필수 선행)\n\n`python3 {baseDir}/scripts/spending_query.py summary --from <3일전 YYYY-MM-DD> --to <오늘 YYYY-MM-DD>` 실행.\n결과가 비어있거나 총 지출 0원이면 → 최근 데이터가 없는 것. 아래 분석을 skip하고 리마인드만 전달:\n`minions thread add --author {agentId} --mentions mingming --tags remind --content \"뱅크샐러드 데이터 내보내기가 필요합니다. 앱에서 내보내기 후 ~/Downloads에 저장해주세요.\"`\n그 후 cron run complete 처리.\n\n## 순서 (데이터가 있는 경우)\n\n1. **오늘 지출**: `python3 {baseDir}/scripts/spending_query.py summary --from <오늘 YYYY-MM-DD> --to <오늘 YYYY-MM-DD>` 실행\n2. **이번달 누적**: `python3 {baseDir}/scripts/spending_query.py summary --month <현재 YYYY-MM>` 실행 → 월 예산 대비 현재 진행률 체크\n3. **미분류 확인**: `python3 {baseDir}/scripts/spending_query.py uncategorized` 실행 → 미분류 merchant가 있으면 목록과 카테고리 매핑 제안 포함\n4. **전달**: `minions thread add --author {agentId} --mentions mingming --tags report --content \"일일 소비 현황\\n\\n<요약 내용>\"` 로 오케스트레이터에게 전달. 오늘 지출이 0원이고 미분류도 없으면 전달하지 않음.\n\n## 출력 규칙\n- 금액은 원 단위 쉼표 포맷\n- 지출은 양수로 표시\n- 간결하게 — 오늘 총액 + 카테고리별 + 월 누적 진행률 + 미분류 목록"
+	},
+	{
+		"name": "weekly-spending",
+		"schedule": "0 9 * * 1",
+		"target": "weekly-spending",
+		"reason": "cron: weekly-spending",
+		"instructions": "spending-manager 스킬로 주간 소비 현황을 분석하세요.\n\n## 0. 데이터 신선도 체크 (필수 선행)\n\n`python3 {baseDir}/scripts/spending_query.py summary --from <7일전 YYYY-MM-DD> --to <오늘 YYYY-MM-DD>` 실행.\n결과가 비어있거나 총 지출 0원이면 → 최근 데이터가 없는 것. 아래 분석을 skip하고 리마인드만 전달:\n`minions thread add --author {agentId} --mentions mingming --tags remind --content \"뱅크샐러드 데이터 내보내기가 필요합니다. 앱에서 내보내기 후 ~/Downloads에 저장해주세요.\"`\n그 후 cron run complete 처리.\n\n## 순서 (데이터가 있는 경우)\n\n1. **이번달 누적 지출**: `python3 {baseDir}/scripts/spending_query.py summary --month <현재 YYYY-MM>` 실행\n2. **예산 대비 페이스 체크**: 예산이 설정된 카테고리가 있으면 현재 진행률(날짜 기준) 대비 지출 비율 계산. 예산 초과 페이스면 경고.\n3. **Top 지출처**: `python3 {baseDir}/scripts/spending_query.py top --month <현재 YYYY-MM>` 실행 → 이번달 Top 5 merchant 정리\n4. **미분류 확인**: `python3 {baseDir}/scripts/spending_query.py uncategorized` 실행 → 미분류 merchant가 있으면 목록과 카테고리 매핑 제안 포함\n5. **전달**: `minions thread add --author {agentId} --mentions mingming --tags report --content \"주간 소비 현황\\n\\n<요약 내용>\"` 로 오케스트레이터에게 전달\n\n## 출력 규칙\n- 금액은 원 단위 쉼표 포맷\n- 비중은 소수점 1자리 %\n- 지출은 양수로 표시\n- 고정비/변동비 분리 표기"
+	},
+	{
+		"name": "monthly-spending",
+		"schedule": "0 9 1 * *",
+		"target": "monthly-spending",
+		"reason": "cron: monthly-spending",
+		"instructions": "spending-manager 스킬로 전월 소비 분석 리포트를 생성하세요.\n\n## 0. 데이터 신선도 체크 (필수 선행)\n\n`python3 {baseDir}/scripts/spending_query.py summary --month <전월 YYYY-MM>` 실행.\n결과가 비어있거나 총 지출 0원이면 → 전월 데이터가 없는 것. 아래 분석을 skip하고 리마인드만 전달:\n`minions thread add --author {agentId} --mentions mingming --tags remind --content \"전월 소비 데이터가 없습니다. 뱅크샐러드에서 내보내기 후 ~/Downloads에 저장해주세요.\"`\n그 후 cron run complete 처리.\n\n## 순서 (데이터가 있는 경우)\n\n1. **전월 요약**: `python3 {baseDir}/scripts/spending_query.py summary --month <전월 YYYY-MM>` 실행 → 총 지출, 카테고리별 금액/비중, 고정비/변동비 분리\n2. **추세 비교**: `python3 {baseDir}/scripts/spending_query.py trend --months 3` 실행 → 최근 3개월 월별 총액 비교, 증감 큰 카테고리 하이라이트\n3. **Top 지출처**: `python3 {baseDir}/scripts/spending_query.py top --month <전월 YYYY-MM>` 실행 → Top 10 merchant + 반복 지출 패턴\n4. **예산 평가**: 예산 설정된 카테고리의 달성/초과 여부 정리\n5. **전달**: `minions thread add --author {agentId} --mentions mingming --tags report --content \"월간 소비 분석 (<전월>)\\n\\n<요약 내용>\"` 로 오케스트레이터에게 전달\n\n## 출력 규칙\n- 금액은 원 단위 쉼표 포맷\n- 비중은 소수점 1자리 %\n- 지출은 양수로 표시\n- 전월 대비 증감은 화살표(+/-)로 표시"
+	}
+]

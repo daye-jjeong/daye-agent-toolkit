@@ -1,6 +1,7 @@
 ---
 name: meal-tracker
 description: GLP-1 약물 기반 식사 기록 + 영양 모니터링 + 리마인더
+version: 1.0.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 

@@ -1,6 +1,7 @@
 ---
 name: health-coach
 description: 건강 데이터 분석 + 맞춤 운동/라이프스타일 조언
+version: 1.0.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 

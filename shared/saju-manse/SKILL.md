@@ -1,6 +1,7 @@
 ---
 name: saju-manse
 description: 사주팔자 분석 — 오행, 용신, 대운/세운
+version: 1.0.0
 ---
 
 # 사주/만세력 (Saju Manse)

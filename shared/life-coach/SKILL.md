@@ -1,6 +1,8 @@
 ---
 name: life-coach
 description: 일일/주간 라이프 코칭 — 작업 패턴 분석, 자동화 제안, 건강 넛지
+version: 1.0.0
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Life Coach Skill

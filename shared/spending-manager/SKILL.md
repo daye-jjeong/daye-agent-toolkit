@@ -1,6 +1,8 @@
 ---
 name: spending-manager
 description: 소비 분석 — 카테고리 요약, 추세, 미분류 정리, 예산 관리
+version: 1.0.0
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Spending Manager

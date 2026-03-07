@@ -1,6 +1,7 @@
 ---
 name: health-tracker
 description: 운동/증상/PT 트래킹 — Obsidian vault 기록
+version: 1.0.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 

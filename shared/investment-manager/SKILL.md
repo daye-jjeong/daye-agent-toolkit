@@ -1,6 +1,8 @@
 ---
 name: investment-manager
 description: 투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신
+version: 1.0.0
+metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Investment Manager
