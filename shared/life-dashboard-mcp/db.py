@@ -274,3 +274,73 @@ def query_meals(conn: sqlite3.Connection, date_from: str, date_to: str, meal_typ
             (date_from, date_to),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Pantry ──────────────────────────────────
+
+
+def upsert_pantry_item(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT INTO pantry_items (name, category, quantity, unit, location,
+            purchase_date, expiry_date, status, notes, updated_at)
+        VALUES (:name, :category, :quantity, :unit, :location,
+            :purchase_date, :expiry_date, :status, :notes, datetime('now','localtime'))
+        ON CONFLICT(name, location) DO UPDATE SET
+            category=excluded.category, quantity=excluded.quantity, unit=excluded.unit,
+            purchase_date=excluded.purchase_date, expiry_date=excluded.expiry_date,
+            status=excluded.status, notes=excluded.notes,
+            updated_at=datetime('now','localtime')
+    """, data)
+
+
+def query_pantry_items(conn: sqlite3.Connection, category: str | None = None,
+                       location: str | None = None, status: str | None = None) -> list[dict]:
+    clauses = []
+    params = []
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+    if location:
+        clauses.append("location = ?")
+        params.append(location)
+    if status:
+        clauses.append("status = ?")
+        params.append(status)
+    where = " AND ".join(clauses)
+    sql = "SELECT * FROM pantry_items"
+    if where:
+        sql += f" WHERE {where}"
+    sql += " ORDER BY category, name"
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def update_pantry_status(conn: sqlite3.Connection, item_id: int, status: str) -> bool:
+    cursor = conn.execute(
+        "UPDATE pantry_items SET status = ?, updated_at = datetime('now','localtime') WHERE id = ?",
+        (status, item_id),
+    )
+    return cursor.rowcount > 0
+
+
+def delete_pantry_item(conn: sqlite3.Connection, item_id: int) -> bool:
+    cursor = conn.execute("DELETE FROM pantry_items WHERE id = ?", (item_id,))
+    return cursor.rowcount > 0
+
+
+def query_expiring_pantry(conn: sqlite3.Connection, days_ahead: int = 3) -> dict:
+    """유통기한 임박/만료 항목 조회."""
+    rows = conn.execute("""
+        SELECT * FROM pantry_items
+        WHERE expiry_date IS NOT NULL AND status != '만료'
+        ORDER BY expiry_date
+    """).fetchall()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    threshold = (datetime.now() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+    expiring, expired = [], []
+    for r in rows:
+        r = dict(r)
+        if r["expiry_date"] < today_str:
+            expired.append(r)
+        elif r["expiry_date"] <= threshold:
+            expiring.append(r)
+    return {"expiring": expiring, "expired": expired}
