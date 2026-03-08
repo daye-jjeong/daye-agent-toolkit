@@ -329,18 +329,17 @@ def delete_pantry_item(conn: sqlite3.Connection, item_id: int) -> bool:
 
 def query_expiring_pantry(conn: sqlite3.Connection, days_ahead: int = 3) -> dict:
     """유통기한 임박/만료 항목 조회."""
-    rows = conn.execute("""
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    threshold = (now + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+    expired = [dict(r) for r in conn.execute("""
         SELECT * FROM pantry_items
-        WHERE expiry_date IS NOT NULL AND status != '만료'
+        WHERE expiry_date IS NOT NULL AND expiry_date < ? AND status != '만료'
         ORDER BY expiry_date
-    """).fetchall()
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    threshold = (datetime.now() + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
-    expiring, expired = [], []
-    for r in rows:
-        r = dict(r)
-        if r["expiry_date"] < today_str:
-            expired.append(r)
-        elif r["expiry_date"] <= threshold:
-            expiring.append(r)
+    """, (today_str,)).fetchall()]
+    expiring = [dict(r) for r in conn.execute("""
+        SELECT * FROM pantry_items
+        WHERE expiry_date >= ? AND expiry_date <= ? AND status != '만료'
+        ORDER BY expiry_date
+    """, (today_str, threshold)).fetchall()]
     return {"expiring": expiring, "expired": expired}
