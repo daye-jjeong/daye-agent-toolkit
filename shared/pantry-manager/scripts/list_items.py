@@ -1,49 +1,45 @@
 #!/usr/bin/env python3
-"""
-식재료 목록 조회 스크립트
-"""
+"""식재료 목록 조회 스크립트"""
 
-import sys
 import argparse
+import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-import pantry_io
+_MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+sys.path.insert(0, str(_MCP_DIR))
+from db import open_conn, query_pantry_items
 
 
 def main():
     parser = argparse.ArgumentParser(description="식재료 목록 조회")
     parser.add_argument("--category", help="카테고리 필터")
-    parser.add_argument("--location",
-                       choices=["냉장", "냉동", "실온"],
-                       help="위치 필터")
-
+    parser.add_argument("--location", choices=["냉장", "냉동", "실온"])
+    parser.add_argument("--json", action="store_true", help="JSON 출력")
     args = parser.parse_args()
 
-    items = pantry_io.get_all_items_by_location(args.location)
+    with open_conn(auto_commit=False) as conn:
+        items = query_pantry_items(conn, category=args.category, location=args.location)
 
-    # 카테고리 필터링
-    if args.category:
-        items = [item for item in items if item.get("category") == args.category]
-
-    if not items:
-        print("📭 식재료가 없습니다.")
+    if args.json:
+        import json
+        print(json.dumps(items, ensure_ascii=False, indent=2, default=str))
         return
 
-    print(f"📦 **식재료 목록** (총 {len(items)}개)\n")
+    if not items:
+        print("식재료가 없습니다.")
+        return
 
-    # 카테고리별로 그룹화
-    by_category = {}
+    print(f"식재료 목록 (총 {len(items)}개)\n")
+
+    by_category: dict[str, list] = {}
     for item in items:
-        cat = item.get("category", "기타") or "기타"
-        if cat not in by_category:
-            by_category[cat] = []
-        by_category[cat].append(item)
+        by_category.setdefault(item["category"], []).append(item)
 
     for category, cat_items in sorted(by_category.items()):
-        print(f"\n**{category}:**")
+        print(f"[{category}]")
         for item in cat_items:
-            print(f"  • {item.get('name', '?')}: {item.get('quantity', 0)}{item.get('unit', '')}")
+            print(f"  {item['name']}: {item['quantity']}{item['unit']} ({item['location']})")
+        print()
 
 
 if __name__ == "__main__":
