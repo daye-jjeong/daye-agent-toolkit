@@ -203,3 +203,24 @@ CREATE TABLE IF NOT EXISTS health_meals (
 CREATE INDEX IF NOT EXISTS idx_health_exercises_date ON health_exercises(date);
 CREATE INDEX IF NOT EXISTS idx_health_symptoms_date ON health_symptoms(date);
 CREATE INDEX IF NOT EXISTS idx_health_meals_date ON health_meals(date);
+
+-- ── Pantry ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS pantry_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    unit TEXT NOT NULL,
+    location TEXT NOT NULL,
+    purchase_date TEXT,
+    expiry_date TEXT,
+    status TEXT DEFAULT '재고 있음',
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(name, location)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pantry_expiry ON pantry_items(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_pantry_status ON pantry_items(status);
