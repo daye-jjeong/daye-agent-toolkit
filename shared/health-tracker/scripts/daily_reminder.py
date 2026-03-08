@@ -15,10 +15,11 @@ def homework_reminder():
     print("PT 숙제 알림\n")
     conn = get_conn()
     try:
-        all_hw = query_pt_homework(conn)
+        pending_todo = query_pt_homework(conn, status="할 일")
+        pending_wip = query_pt_homework(conn, status="진행중")
     finally:
         conn.close()
-    pending = [h for h in all_hw if h["status"] in ("할 일", "진행중")]
+    pending = pending_todo + pending_wip
 
     if not pending:
         print("[OK] 미완료 숙제 없음")

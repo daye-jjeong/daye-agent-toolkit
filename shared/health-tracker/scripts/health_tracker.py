@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Health Tracker 메인 스크립트
-대화형 인터페이스로 간편하게 사용 (Obsidian vault 기반)
+대화형 인터페이스로 간편하게 사용 (SQLite 기반)
 """
 
 import sys
@@ -131,12 +131,12 @@ def pt_homework_menu():
         run(["python3", str(SCRIPT_DIR / "log_pt_homework.py"), "list"])
     elif choice == "3":
         run(["python3", str(SCRIPT_DIR / "log_pt_homework.py"), "list"])
-        filename = input("\n파일 이름 (완료할 숙제의 .md): ").strip()
-        if not filename:
-            print("[ERROR] 파일 이름을 입력하세요")
+        hw_id = input("\n완료할 숙제 ID: ").strip()
+        if not hw_id.isdigit():
+            print("[ERROR] 숫자 ID를 입력하세요")
             return
         run(["python3", str(SCRIPT_DIR / "log_pt_homework.py"),
-             "complete", "--file", filename])
+             "complete", "--id", hw_id])
 
 
 def main():
@@ -153,12 +153,9 @@ def main():
         elif choice == "4":
             run(["python3", str(SCRIPT_DIR / "check_pt_attendance.py")])
         elif choice == "5":
-            print("\n1. 주간 리포트")
-            print("2. 월간 리포트")
-            p = input("\n선택 (1-2): ").strip()
-            period = "week" if p == "1" else "month"
-            run(["python3", str(SCRIPT_DIR / "analyze_health.py"),
-                 "--period", period])
+            print("\n[INFO] 건강 패턴 분석은 life-coach의 health-cmds를 사용하세요:")
+            print("  python3 health_cmds.py analyze-symptoms --period 7days")
+            print("  python3 health_cmds.py health-checkup")
         elif choice == "6":
             run(["python3", str(SCRIPT_DIR / "log_pt_homework.py"), "list"])
         elif choice == "0":

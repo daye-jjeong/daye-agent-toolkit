@@ -12,8 +12,9 @@ from db import get_conn, insert_symptom
 
 
 def log_symptom(symptom_type, severity, description, trigger="", duration="", status="진행중"):
-    date = datetime.now().strftime("%Y-%m-%d")
-    timestamp = datetime.now().strftime("%H:%M")
+    now = datetime.now()
+    date = now.strftime("%Y-%m-%d")
+    timestamp = now.strftime("%H:%M")
 
     data = {
         "date": date,

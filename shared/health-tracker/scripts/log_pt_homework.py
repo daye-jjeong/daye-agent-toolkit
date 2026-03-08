@@ -32,9 +32,11 @@ def add_homework(exercise, sets_reps, notes=""):
 def list_homework():
     conn = get_conn()
     try:
-        pending = [h for h in query_pt_homework(conn) if h["status"] in ("할 일", "진행중")]
+        pending_todo = query_pt_homework(conn, status="할 일")
+        pending_wip = query_pt_homework(conn, status="진행중")
     finally:
         conn.close()
+    pending = pending_todo + pending_wip
     if not pending:
         print("[OK] 완료해야 할 숙제가 없어요!")
         return

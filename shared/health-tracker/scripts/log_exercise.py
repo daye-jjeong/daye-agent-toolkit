@@ -12,8 +12,9 @@ from db import get_conn, insert_exercise
 
 
 def log_exercise(exercise_type, duration, exercises="", notes="", feeling=""):
-    date = datetime.now().strftime("%Y-%m-%d")
-    timestamp = datetime.now().strftime("%H:%M")
+    now = datetime.now()
+    date = now.strftime("%Y-%m-%d")
+    timestamp = now.strftime("%H:%M")
 
     data = {
         "date": date,

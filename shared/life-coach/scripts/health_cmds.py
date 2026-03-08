@@ -39,8 +39,9 @@ class HealthCoach:
         category_key = focus_map.get(focus, "core_stability")
         exercises = self.exercises_db.get(category_key, [])
 
-        today = datetime.now().strftime("%Y-%m-%d")
-        since = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        since = (now - timedelta(days=3)).strftime("%Y-%m-%d")
         conn = get_conn()
         try:
             recent = query_exercises(conn, since, today)
@@ -87,9 +88,14 @@ class HealthCoach:
         print("  - Increase intensity gradually")
 
     def analyze_symptoms(self, period="7days"):
-        days = int(period.replace("days", ""))
-        today = datetime.now().strftime("%Y-%m-%d")
-        since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        try:
+            days = int(period.replace("days", ""))
+        except ValueError:
+            print(f"[ERROR] Invalid period format: {period} (expected e.g. '7days')")
+            return
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        since = (now - timedelta(days=days)).strftime("%Y-%m-%d")
 
         conn = get_conn()
         try:
@@ -197,8 +203,9 @@ class HealthCoach:
         print("=" * 60)
 
         if category == "sleep":
-            today = datetime.now().strftime("%Y-%m-%d")
-            since = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            now = datetime.now()
+            today = now.strftime("%Y-%m-%d")
+            since = (now - timedelta(days=7)).strftime("%Y-%m-%d")
             conn = get_conn()
             try:
                 checkins = query_check_ins(conn, since, today)

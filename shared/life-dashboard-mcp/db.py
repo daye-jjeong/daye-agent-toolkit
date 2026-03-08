@@ -3,6 +3,7 @@
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +25,16 @@ def get_conn() -> sqlite3.Connection:
         conn.executescript(SCHEMA_PATH.read_text())
         _schema_initialized = True
     return conn
+
+
+@contextmanager
+def open_conn():
+    """Context manager for get_conn(). Usage: with open_conn() as conn: ..."""
+    conn = get_conn()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def upsert_activity(conn: sqlite3.Connection, data: dict):
