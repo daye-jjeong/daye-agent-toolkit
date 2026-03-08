@@ -1,41 +1,40 @@
 #!/usr/bin/env python3
-"""
-증상 기록 스크립트
-허리디스크/메니에르병 증상 발생 시 Obsidian vault에 기록
-"""
+"""증상 기록 스크립트 — SQLite 저장."""
 
-import sys
 import argparse
+import sys
+from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from health_io import write_entry, sanitize, today, now
+_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+sys.path.insert(0, str(_DASHBOARD_DIR))
+from db import get_conn, insert_symptom
 
 
 def log_symptom(symptom_type, severity, description, trigger="", duration="", status="진행중"):
-    """증상을 Obsidian vault에 기록"""
-    date = today()
-    timestamp = now()
-    filename = f"{date}_{sanitize(symptom_type)}.md"
+    now = datetime.now()
+    date = now.strftime("%Y-%m-%d")
+    timestamp = now.strftime("%H:%M")
 
-    frontmatter = {
+    data = {
         "date": date,
         "timestamp": timestamp,
         "type": symptom_type,
         "severity": severity,
+        "description": description,
+        "trigger_factor": trigger or None,
+        "duration": duration or None,
         "status": status,
     }
-    if trigger:
-        frontmatter["trigger"] = trigger
-    if duration:
-        frontmatter["duration"] = duration
 
-    body = f"## {symptom_type} - {date}\n\n{description}"
+    conn = get_conn()
+    try:
+        insert_symptom(conn, data)
+        conn.commit()
+    finally:
+        conn.close()
 
-    fpath = write_entry("symptoms", filename, frontmatter, body)
     print(f"[OK] 증상 기록 완료: {symptom_type} ({severity})")
-    print(f"     파일: {fpath}")
-    return fpath
 
 
 def main():
@@ -52,17 +51,8 @@ def main():
     parser.add_argument("--status", default="진행중",
                         choices=["진행중", "완화", "완료"],
                         help="상태 (기본: 진행중)")
-
     args = parser.parse_args()
-
-    log_symptom(
-        args.type,
-        args.severity,
-        args.description,
-        args.trigger,
-        args.duration,
-        args.status,
-    )
+    log_symptom(args.type, args.severity, args.description, args.trigger, args.duration, args.status)
 
 
 if __name__ == "__main__":

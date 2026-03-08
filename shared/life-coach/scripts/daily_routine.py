@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""
-Generate daily health routine checklist.
+"""Generate daily health routine checklist.
 
-Reads today's check-in from Obsidian vault (if exists) to show progress.
+Reads today's check-in from SQLite (if exists) to show progress.
 stdlib only.
 """
 
@@ -11,8 +10,9 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-import health_io
+_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+sys.path.insert(0, str(_DASHBOARD_DIR))
+from db import get_conn, query_check_ins
 
 
 def get_daily_tip(weekday):
@@ -33,15 +33,15 @@ def generate_daily_checklist():
     """Generate daily routine checklist, enriched with today's check-in data."""
     now = datetime.now()
     day_str = now.strftime("%Y-%m-%d (%A)")
-    today_str = health_io.today()
+    today_str = now.strftime("%Y-%m-%d")
 
     # Read today's check-in if available
-    checkins = health_io.read_entries("check-ins", days=1)
-    today_data = None
-    for _, fm in checkins:
-        if str(fm.get("date", "")) == today_str:
-            today_data = fm
-            break
+    conn = get_conn()
+    try:
+        checkins = query_check_ins(conn, today_str, today_str)
+    finally:
+        conn.close()
+    today_data = checkins[0] if checkins else None
 
     # Build progress section
     progress_lines = []
@@ -57,8 +57,8 @@ def generate_daily_checklist():
             progress_lines.append(
                 f"  Workout: {'done' if today_data['workout'] else 'not yet'}"
             )
-        if today_data.get("water") is not None:
-            progress_lines.append(f"  Water: {today_data['water']}ml")
+        if today_data.get("water_ml") is not None:
+            progress_lines.append(f"  Water: {today_data['water_ml']}ml")
         if today_data.get("stress") is not None:
             progress_lines.append(f"  Stress: {today_data['stress']}/10")
     else:

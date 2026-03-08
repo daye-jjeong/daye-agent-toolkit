@@ -1,45 +1,64 @@
 #!/usr/bin/env python3
-"""PT 숙제 트래킹 -- Obsidian vault 기반"""
+"""PT 숙제 트래킹 — SQLite 기반."""
 
-import sys, argparse
+import argparse
+import sys
+from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from health_io import write_entry, read_entries, update_entry, sanitize, today, CATEGORIES
+_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+sys.path.insert(0, str(_DASHBOARD_DIR))
+from db import get_conn, insert_pt_homework, update_pt_homework, query_pt_homework
 
 
 def add_homework(exercise, sets_reps, notes=""):
-    date = today()
-    filename = f"{date}_{sanitize(exercise)}.md"
-    fm = {"date": date, "exercise": exercise, "sets_reps": sets_reps,
-          "status": "할 일", "completed": False}
-    body = f"## 주의사항\n\n{notes}" if notes else ""
-    fpath = write_entry("pt-homework", filename, fm, body)
+    date = datetime.now().strftime("%Y-%m-%d")
+    data = {
+        "exercise": exercise,
+        "sets_reps": sets_reps,
+        "notes": notes or None,
+        "status": "할 일",
+        "assigned_date": date,
+    }
+    conn = get_conn()
+    try:
+        insert_pt_homework(conn, data)
+        conn.commit()
+    finally:
+        conn.close()
     print(f"[OK] PT 숙제 추가: {exercise} ({sets_reps})")
-    print(f"     파일: {fpath}")
 
 
 def list_homework():
-    entries = read_entries("pt-homework")
-    pending = [(f, fm) for f, fm in entries if fm.get("status") in ("할 일", "진행중")]
+    conn = get_conn()
+    try:
+        pending_todo = query_pt_homework(conn, status="할 일")
+        pending_wip = query_pt_homework(conn, status="진행중")
+    finally:
+        conn.close()
+    pending = pending_todo + pending_wip
     if not pending:
         print("[OK] 완료해야 할 숙제가 없어요!")
         return
     print(f"\nPT 숙제 목록 ({len(pending)}개):\n")
-    for i, (fp, fm) in enumerate(pending, 1):
-        print(f"{i}. {fm.get('exercise','?')} - {fm.get('sets_reps','')}")
-        print(f"   받은 날짜: {fm.get('date','')} | 상태: {fm.get('status','')}")
-        print(f"   파일: {fp.name}\n")
+    for i, h in enumerate(pending, 1):
+        print(f"{i}. {h['exercise']} - {h.get('sets_reps', '')}")
+        print(f"   받은 날짜: {h['assigned_date']} | 상태: {h['status']}")
+        print(f"   ID: {h['id']}\n")
 
 
-def complete_homework(filename):
-    fpath = CATEGORIES["pt-homework"] / filename
-    if not fpath.exists():
-        print(f"[ERROR] 파일을 찾을 수 없음: {filename}")
-        return False
-    update_entry(fpath, {"status": "완료", "completed": True, "completed_date": today()})
-    print(f"[OK] 숙제 완료: {filename}")
-    return True
+def complete_homework(hw_id):
+    date = datetime.now().strftime("%Y-%m-%d")
+    conn = get_conn()
+    try:
+        found = update_pt_homework(conn, hw_id, {"status": "완료", "completed_date": date})
+        conn.commit()
+    finally:
+        conn.close()
+    if found:
+        print(f"[OK] 숙제 완료: ID {hw_id}")
+    else:
+        print(f"[ERROR] 숙제 ID {hw_id}를 찾을 수 없습니다")
 
 
 def main():
@@ -52,7 +71,7 @@ def main():
     ap.add_argument("--notes", default="", help="주의사항")
     sub.add_parser("list", help="미완료 숙제 목록")
     cp = sub.add_parser("complete", help="숙제 완료")
-    cp.add_argument("--file", required=True, help="파일 이름 (.md)")
+    cp.add_argument("--id", required=True, type=int, help="숙제 ID")
     args = parser.parse_args()
 
     if args.command == "add":
@@ -60,7 +79,7 @@ def main():
     elif args.command == "list":
         list_homework()
     elif args.command == "complete":
-        complete_homework(args.file)
+        complete_homework(args.id)
     else:
         parser.print_help()
 

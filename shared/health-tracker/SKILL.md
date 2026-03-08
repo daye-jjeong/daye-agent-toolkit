@@ -1,16 +1,16 @@
 ---
 name: health-tracker
-description: 운동/증상/PT 트래킹 — Obsidian vault 기록
+description: 운동/증상/PT 트래킹 — SQLite 기록
 version: 1.0.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Health Tracker
 
-**Version:** 0.2.0
-**Updated:** 2026-02-11
+**Version:** 0.3.0
+**Updated:** 2026-03-08
 
-건강 데이터를 Obsidian vault에 기록하는 트래킹 시스템. 분석/조언은 health-coach 담당.
+건강 데이터를 life-dashboard SQLite DB에 기록하는 트래킹 시스템. 분석/조언은 life-coach 담당.
 
 ## 건강 정보
 
@@ -19,19 +19,15 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 - **PT:** 주 2회 (필라테스)
 - **목표:** 매일 운동 + 걷기
 
-## Obsidian 저장 구조
+## SQLite 테이블
 
-```
-~/openclaw/vault/health/
-  symptoms/          # 증상 기록
-    2026-02-11_허리디스크.md
-  exercises/         # 운동 기록
-    2026-02-11_PT_60min.md
-  pt-homework/       # PT 숙제
-    2026-02-11_플랭크.md
-  check-ins/         # 일일 건강 체크인 (health-coach에서 기록)
-    checkin-2026-02-11.md
-```
+데이터는 `life-dashboard-mcp/life_dashboard.db`에 저장된다.
+
+| 테이블 | 용도 | 주요 컬럼 |
+|--------|------|-----------|
+| `health_exercises` | 운동 기록 | date, type, duration_min, exercises, feeling |
+| `health_symptoms` | 증상 기록 | date, type, severity, description, trigger, status |
+| `health_pt_homework` | PT 숙제 | date, exercise, sets_reps, status, completed |
 
 ## 사용법
 
@@ -57,7 +53,7 @@ python {baseDir}/scripts/log_pt_homework.py add \
 python {baseDir}/scripts/log_pt_homework.py list
 
 # 완료
-python {baseDir}/scripts/log_pt_homework.py complete --file "2026-02-11_플랭크.md"
+python {baseDir}/scripts/log_pt_homework.py complete --id N
 ```
 
 ### PT 출석 체크
@@ -74,51 +70,4 @@ python {baseDir}/scripts/daily_reminder.py --type exercise
 ### 인터랙티브 메뉴
 ```bash
 python {baseDir}/scripts/health_tracker.py
-```
-
-## Frontmatter Schema
-
-### Symptom
-```yaml
-date: 2026-02-11
-timestamp: "2026-02-11 14:30"
-type: 허리디스크
-severity: 중등도
-status: 진행중
-trigger: 오래 앉아있음
-```
-
-### Exercise
-```yaml
-date: 2026-02-11
-timestamp: "2026-02-11 19:00"
-type: PT
-duration_min: 60
-exercises: "플랭크 3세트, 데드버그 10회"
-feeling: 좋았음
-```
-
-### PT Homework
-```yaml
-date: 2026-02-11
-exercise: 플랭크
-sets_reps: "3세트 x 30초"
-status: 할 일
-completed: false
-```
-
-## Dataview 쿼리 예시
-
-```dataview
-TABLE date, type, severity, status
-FROM "health/symptoms"
-SORT date DESC
-LIMIT 10
-```
-
-```dataview
-TABLE date, type, duration_min, feeling
-FROM "health/exercises"
-WHERE type = "PT"
-SORT date DESC
 ```

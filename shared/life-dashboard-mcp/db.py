@@ -3,6 +3,7 @@
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +25,21 @@ def get_conn() -> sqlite3.Connection:
         conn.executescript(SCHEMA_PATH.read_text())
         _schema_initialized = True
     return conn
+
+
+@contextmanager
+def open_conn(auto_commit=True):
+    """Context manager for get_conn(). Auto-commits on success, rolls back on error."""
+    conn = get_conn()
+    try:
+        yield conn
+        if auto_commit:
+            conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def upsert_activity(conn: sqlite3.Connection, data: dict):
@@ -126,3 +142,135 @@ def get_repeated_signals(conn: sqlite3.Connection, date_str: str, days: int = 7,
         LIMIT 10
     """, (since, min_count)).fetchall()
     return [{"content": r["content"], "signal_type": r["signal_type"], "count": r["cnt"]} for r in rows]
+
+
+# ── Health ──────────────────────────────────
+
+
+def insert_exercise(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT INTO health_exercises (date, timestamp, type, duration_min, exercises, feeling, notes)
+        VALUES (:date, :timestamp, :type, :duration_min, :exercises, :feeling, :notes)
+        ON CONFLICT(date, timestamp, type) DO UPDATE SET
+            duration_min=excluded.duration_min, exercises=excluded.exercises,
+            feeling=excluded.feeling, notes=excluded.notes
+    """, data)
+
+
+def insert_symptom(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT INTO health_symptoms (date, timestamp, type, severity, description, trigger_factor, duration, status)
+        VALUES (:date, :timestamp, :type, :severity, :description, :trigger_factor, :duration, :status)
+        ON CONFLICT(date, timestamp, type) DO UPDATE SET
+            severity=excluded.severity, description=excluded.description,
+            trigger_factor=excluded.trigger_factor, duration=excluded.duration, status=excluded.status
+    """, data)
+
+
+def insert_pt_homework(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT INTO health_pt_homework (exercise, sets_reps, notes, status, assigned_date)
+        VALUES (:exercise, :sets_reps, :notes, :status, :assigned_date)
+        ON CONFLICT(exercise, assigned_date) DO UPDATE SET
+            sets_reps=excluded.sets_reps, notes=excluded.notes, status=excluded.status
+    """, data)
+
+
+_PT_HW_UPDATABLE = {"status", "sets_reps", "notes", "completed_date"}
+
+
+def update_pt_homework(conn: sqlite3.Connection, hw_id: int, updates: dict) -> bool:
+    """Update PT homework. Returns True if row was found and updated."""
+    bad_keys = set(updates) - _PT_HW_UPDATABLE
+    if bad_keys:
+        raise ValueError(f"Invalid columns for PT homework update: {bad_keys}")
+    sets = ", ".join(f"{k}=:{k}" for k in updates)
+    updates["id"] = hw_id
+    cursor = conn.execute(f"UPDATE health_pt_homework SET {sets} WHERE id = :id", updates)
+    return cursor.rowcount > 0
+
+
+def query_pt_homework(conn: sqlite3.Connection, status: str | None = None) -> list[dict]:
+    if status:
+        rows = conn.execute(
+            "SELECT * FROM health_pt_homework WHERE status = ? ORDER BY assigned_date DESC", (status,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM health_pt_homework ORDER BY assigned_date DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_check_in(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT INTO health_check_ins (date, sleep_hours, sleep_quality, steps, workout, stress, water_ml, notes)
+        VALUES (:date, :sleep_hours, :sleep_quality, :steps, :workout, :stress, :water_ml, :notes)
+        ON CONFLICT(date) DO UPDATE SET
+            sleep_hours=COALESCE(excluded.sleep_hours, sleep_hours),
+            sleep_quality=COALESCE(excluded.sleep_quality, sleep_quality),
+            steps=COALESCE(excluded.steps, steps),
+            workout=COALESCE(excluded.workout, workout),
+            stress=COALESCE(excluded.stress, stress),
+            water_ml=COALESCE(excluded.water_ml, water_ml),
+            notes=COALESCE(excluded.notes, notes)
+    """, data)
+
+
+def insert_meal(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT INTO health_meals (date, timestamp, meal_type, food_items, portion, skipped, calories, protein_g, carbs_g, fat_g, notes)
+        VALUES (:date, :timestamp, :meal_type, :food_items, :portion, :skipped, :calories, :protein_g, :carbs_g, :fat_g, :notes)
+        ON CONFLICT(date, timestamp, meal_type) DO UPDATE SET
+            food_items=excluded.food_items, portion=excluded.portion, skipped=excluded.skipped,
+            calories=excluded.calories, protein_g=excluded.protein_g, carbs_g=excluded.carbs_g,
+            fat_g=excluded.fat_g, notes=excluded.notes
+    """, data)
+
+
+def query_exercises(conn: sqlite3.Connection, date_from: str, date_to: str, ex_type: str | None = None) -> list[dict]:
+    if ex_type:
+        rows = conn.execute(
+            "SELECT * FROM health_exercises WHERE date >= ? AND date <= ? AND type = ? ORDER BY date, timestamp",
+            (date_from, date_to, ex_type),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM health_exercises WHERE date >= ? AND date <= ? ORDER BY date, timestamp",
+            (date_from, date_to),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def query_symptoms(conn: sqlite3.Connection, date_from: str, date_to: str, sym_type: str | None = None) -> list[dict]:
+    if sym_type:
+        rows = conn.execute(
+            "SELECT * FROM health_symptoms WHERE date >= ? AND date <= ? AND type = ? ORDER BY date, timestamp",
+            (date_from, date_to, sym_type),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM health_symptoms WHERE date >= ? AND date <= ? ORDER BY date, timestamp",
+            (date_from, date_to),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def query_check_ins(conn: sqlite3.Connection, date_from: str, date_to: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM health_check_ins WHERE date >= ? AND date <= ? ORDER BY date",
+        (date_from, date_to),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def query_meals(conn: sqlite3.Connection, date_from: str, date_to: str, meal_type: str | None = None) -> list[dict]:
+    if meal_type:
+        rows = conn.execute(
+            "SELECT * FROM health_meals WHERE date >= ? AND date <= ? AND meal_type = ? ORDER BY date, timestamp",
+            (date_from, date_to, meal_type),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM health_meals WHERE date >= ? AND date <= ? ORDER BY date, timestamp",
+            (date_from, date_to),
+        ).fetchall()
+    return [dict(r) for r in rows]

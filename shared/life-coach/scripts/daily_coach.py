@@ -15,7 +15,8 @@ from pathlib import Path
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals
+from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals, \
+    query_exercises, query_symptoms, query_meals, query_check_ins
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -54,6 +55,15 @@ def get_today_data(conn, date_str: str) -> dict:
     # 최근 7일 반복 패턴
     repeated = get_repeated_signals(conn, date_str, days=7, min_count=2)
 
+    # health data (graceful fallback if tables not yet migrated)
+    try:
+        exercises = query_exercises(conn, date_str, date_str)
+        symptoms = query_symptoms(conn, date_str, date_str)
+        meals = query_meals(conn, date_str, date_str)
+        checkins = query_check_ins(conn, date_str, date_str)
+    except Exception:
+        exercises, symptoms, meals, checkins = [], [], [], []
+
     return {
         "date": date_str,
         "has_data": True,
@@ -67,6 +77,10 @@ def get_today_data(conn, date_str: str) -> dict:
         "token_total": sum(s.get("token_total") or 0 for s in sessions),
         "behavioral_signals": today_signals,
         "repeated_patterns": repeated,
+        "exercises": exercises,
+        "symptoms": symptoms,
+        "meals": meals,
+        "check_in": checkins[0] if checkins else None,
     }
 
 
@@ -167,6 +181,52 @@ def _build_behavioral_section(data: dict) -> str | None:
     return "🧠 행동 신호:\n" + "\n".join(lines)
 
 
+def _build_health_section(data: dict) -> str | None:
+    lines = []
+
+    ci = data.get("check_in")
+    if ci:
+        parts = []
+        if ci.get("sleep_hours"):
+            parts.append(f"수면 {ci['sleep_hours']}h")
+        if ci.get("steps"):
+            parts.append(f"걸음 {ci['steps']}")
+        if ci.get("stress"):
+            parts.append(f"스트레스 {ci['stress']}/10")
+        if ci.get("water_ml"):
+            parts.append(f"수분 {ci['water_ml']}ml")
+        if parts:
+            lines.append("  " + " · ".join(parts))
+
+    exercises = data.get("exercises", [])
+    if exercises:
+        ex_parts = [f"{e['type']} {e['duration_min']}분" for e in exercises]
+        lines.append(f"  운동: {', '.join(ex_parts)}")
+    else:
+        lines.append("  운동 기록 없음")
+
+    meals = data.get("meals", [])
+    eaten = [m for m in meals if not m.get("skipped")]
+    skipped = [m for m in meals if m.get("skipped")]
+    if meals:
+        total_cal = sum(m.get("calories", 0) or 0 for m in eaten)
+        total_protein = sum(m.get("protein_g", 0) or 0 for m in eaten)
+        lines.append(f"  식사: {len(eaten)}끼 ({total_cal}kcal, 단백질 {total_protein:.0f}g)")
+        if skipped:
+            lines.append(f"  거른 끼니: {len(skipped)}끼")
+    else:
+        lines.append("  식사 기록 없음")
+
+    symptoms = data.get("symptoms", [])
+    if symptoms:
+        sym_parts = [f"{s['type']}({s['severity']})" for s in symptoms]
+        lines.append(f"  증상: {', '.join(sym_parts)}")
+
+    if not lines:
+        return None
+    return "💊 건강:\n" + "\n".join(lines)
+
+
 def build_template_report(data: dict, coach_state: dict) -> str:
     sections = [_build_header(data["date"])]
 
@@ -196,6 +256,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
         nudges.append(f"🔥 {overwork_days}일 연속 과작업 — 번아웃 위험")
     if nudges:
         sections.append("\n".join(nudges))
+
+    health = _build_health_section(data)
+    if health:
+        sections.append(health)
 
     feedback = _build_pattern_feedback(data)
     if feedback:

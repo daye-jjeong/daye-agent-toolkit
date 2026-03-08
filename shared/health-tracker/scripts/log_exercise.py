@@ -1,42 +1,39 @@
 #!/usr/bin/env python3
-"""
-운동 기록 스크립트
-PT/수영/걷기 등 운동 기록을 Obsidian vault에 저장
-"""
+"""운동 기록 스크립트 — SQLite 저장."""
 
-import sys
 import argparse
+import sys
+from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from health_io import write_entry, sanitize, today, now
+_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+sys.path.insert(0, str(_DASHBOARD_DIR))
+from db import get_conn, insert_exercise
 
 
 def log_exercise(exercise_type, duration, exercises="", notes="", feeling=""):
-    """운동 기록을 Obsidian vault에 저장"""
-    date = today()
-    timestamp = now()
-    filename = f"{date}_{sanitize(exercise_type)}.md"
+    now = datetime.now()
+    date = now.strftime("%Y-%m-%d")
+    timestamp = now.strftime("%H:%M")
 
-    frontmatter = {
+    data = {
         "date": date,
         "timestamp": timestamp,
         "type": exercise_type,
         "duration_min": int(duration),
+        "exercises": exercises or None,
+        "feeling": feeling or None,
+        "notes": notes or None,
     }
-    if exercises:
-        frontmatter["exercises"] = exercises
-    if feeling:
-        frontmatter["feeling"] = feeling
 
-    body = ""
-    if notes:
-        body = f"## 메모\n\n{notes}"
+    conn = get_conn()
+    try:
+        insert_exercise(conn, data)
+        conn.commit()
+    finally:
+        conn.close()
 
-    fpath = write_entry("exercises", filename, frontmatter, body)
     print(f"[OK] 운동 기록 완료: {exercise_type} ({duration}분)")
-    print(f"     파일: {fpath}")
-    return fpath
 
 
 def main():
@@ -52,16 +49,8 @@ def main():
     parser.add_argument("--feeling", default="",
                         choices=["", "좋았음", "보통", "힘들었음", "고통스러움"],
                         help="운동 후 느낌")
-
     args = parser.parse_args()
-
-    log_exercise(
-        args.type,
-        args.duration,
-        args.exercises,
-        args.notes,
-        args.feeling,
-    )
+    log_exercise(args.type, args.duration, args.exercises, args.notes, args.feeling)
 
 
 if __name__ == "__main__":

@@ -1,16 +1,16 @@
 ---
 name: life-coach
-description: 일일/주간 라이프 코칭 — 작업 패턴 분석, 자동화 제안, 건강 넛지
+description: 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석
 version: 1.0.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Life Coach Skill
 
-**Version:** 0.3.0 | **Status:** P2.5
+**Version:** 0.4.0 | **Updated:** 2026-03-08
 
-CC/OpenClaw/Calendar 활동 데이터를 기반으로 일일/주간 코칭 리포트를 생성한다.
-데이터는 life-dashboard-mcp에서 조회. work-digest의 다이제스트 기능을 흡수.
+CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통합 코칭 리포트를 생성한다.
+데이터는 life-dashboard-mcp SQLite에서 조회. health-coach 기능을 흡수.
 
 ## 온디맨드 사용 (/coach)
 
@@ -66,8 +66,11 @@ coach_state의 escalation_level에 따라 톤 변경:
 
 | Script | Purpose |
 |--------|---------|
-| `daily_coach.py` | 일일 데이터 수집 + 템플릿 리포트 → 텔레그램 |
-| `weekly_coach.py` | 주간 데이터 수집 + 템플릿 리포트 → 텔레그램 |
+| `daily_coach.py` | 일일 데이터 수집 + 템플릿 리포트 → 텔레그램 (건강 섹션 포함) |
+| `weekly_coach.py` | 주간 데이터 수집 + 템플릿 리포트 → 텔레그램 (건강 섹션 포함) |
+| `health_cmds.py` | 건강 코칭 서브커맨드 (루틴 추천, 증상 분석, 운동 가이드, 라이프스타일 조언, 건강 체크) |
+| `track_health.py` | 일일 건강 체크인 기록 (수면, 걸음수, 운동, 스트레스, 수분) |
+| `daily_routine.py` | 일일 건강 루틴 체크리스트 |
 
 ### 스크립트 플래그
 
@@ -82,3 +85,49 @@ coach_state의 escalation_level에 따라 톤 변경:
 | File | 내용 |
 |------|------|
 | `references/coaching-prompts.md` | LLM 코칭 프레임 (온디맨드에서 LLM이 직접 적용) |
+| `references/exercises.json` | 허리디스크 안전 운동 DB (코어/하체/유연성/유산소) |
+| `references/routines.json` | 운동 루틴 프리셋 |
+
+## 건강 코칭 (health-coach 통합)
+
+### 운동 루틴 추천
+```bash
+python3 {baseDir}/scripts/health_cmds.py suggest-routine --level beginner --focus core --duration 15
+```
+
+### 증상 패턴 분석
+```bash
+python3 {baseDir}/scripts/health_cmds.py analyze-symptoms --period 7days
+```
+
+### 운동 가이드
+```bash
+python3 {baseDir}/scripts/health_cmds.py guide-exercise --exercise "플랭크"
+```
+
+### 라이프스타일 조언
+```bash
+python3 {baseDir}/scripts/health_cmds.py lifestyle-advice --category sleep
+```
+
+### 종합 건강 체크
+```bash
+python3 {baseDir}/scripts/health_cmds.py health-checkup
+```
+
+### 일일 건강 체크인
+```bash
+python3 {baseDir}/scripts/track_health.py \
+  --sleep-hours 7 --sleep-quality 8 --steps 8500 \
+  --workout --stress 3 --water 2000
+```
+
+### 일일 루틴 확인
+```bash
+python3 {baseDir}/scripts/daily_routine.py
+```
+
+### 안전 원칙 (허리디스크)
+
+- **금지:** 과신전, 회전 (러시안 트위스트), 과도한 굴곡
+- **권장:** 중립척추 유지 (플랭크, 데드버그, 버드독), 호흡과 함께, 점진적 강도 증가
