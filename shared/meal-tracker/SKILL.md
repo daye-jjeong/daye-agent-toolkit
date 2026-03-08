@@ -66,7 +66,7 @@ python3 {baseDir}/scripts/daily_summary.py
 | 컬럼 | 설명 |
 |------|------|
 | date | 식사 날짜 (YYYY-MM-DD) |
-| time | 식사 시간 (YYYY-MM-DD HH:MM) |
+| timestamp | 식사 시간 (HH:MM) |
 | meal_type | 아침/점심/저녁/간식 |
 | food_items | 먹은 음식 목록 |
 | portion | 섭취량 (적음/보통/많음) |

@@ -91,11 +91,14 @@ def get_week_data(conn, dates: list[str]) -> dict:
                 "work_hours": 0,
             })
 
-    # health data
-    exercises = query_exercises(conn, mon, sun)
-    symptoms = query_symptoms(conn, mon, sun)
-    meals = query_meals(conn, mon, sun)
-    checkins = query_check_ins(conn, mon, sun)
+    # health data (graceful fallback if tables not yet migrated)
+    try:
+        exercises = query_exercises(conn, mon, sun)
+        symptoms = query_symptoms(conn, mon, sun)
+        meals = query_meals(conn, mon, sun)
+        checkins = query_check_ins(conn, mon, sun)
+    except Exception:
+        exercises, symptoms, meals, checkins = [], [], [], []
 
     return {
         "dates": dates,

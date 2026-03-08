@@ -80,7 +80,7 @@ def generate_message(summary, meals):
         message += f"- 탄수화물: {summary['total_carbs']:.1f}g\n"
         message += f"- 지방: {summary['total_fat']:.1f}g\n\n"
 
-    message += "**Health Coach 조언**\n"
+    message += "**Life Coach 조언**\n"
     if summary['skipped'] == 0:
         message += "오늘 세 끼 다 챙겨 먹었네! 훌륭해!\n"
     elif summary['skipped'] == 1:

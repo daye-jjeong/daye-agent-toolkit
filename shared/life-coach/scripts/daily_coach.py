@@ -55,11 +55,14 @@ def get_today_data(conn, date_str: str) -> dict:
     # 최근 7일 반복 패턴
     repeated = get_repeated_signals(conn, date_str, days=7, min_count=2)
 
-    # health data
-    exercises = query_exercises(conn, date_str, date_str)
-    symptoms = query_symptoms(conn, date_str, date_str)
-    meals = query_meals(conn, date_str, date_str)
-    checkins = query_check_ins(conn, date_str, date_str)
+    # health data (graceful fallback if tables not yet migrated)
+    try:
+        exercises = query_exercises(conn, date_str, date_str)
+        symptoms = query_symptoms(conn, date_str, date_str)
+        meals = query_meals(conn, date_str, date_str)
+        checkins = query_check_ins(conn, date_str, date_str)
+    except Exception:
+        exercises, symptoms, meals, checkins = [], [], [], []
 
     return {
         "date": date_str,

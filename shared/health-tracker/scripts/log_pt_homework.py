@@ -51,11 +51,14 @@ def complete_homework(hw_id):
     date = datetime.now().strftime("%Y-%m-%d")
     conn = get_conn()
     try:
-        update_pt_homework(conn, hw_id, {"status": "완료", "completed_date": date})
+        found = update_pt_homework(conn, hw_id, {"status": "완료", "completed_date": date})
         conn.commit()
     finally:
         conn.close()
-    print(f"[OK] 숙제 완료: ID {hw_id}")
+    if found:
+        print(f"[OK] 숙제 완료: ID {hw_id}")
+    else:
+        print(f"[ERROR] 숙제 ID {hw_id}를 찾을 수 없습니다")
 
 
 def main():

@@ -28,11 +28,16 @@ def get_conn() -> sqlite3.Connection:
 
 
 @contextmanager
-def open_conn():
-    """Context manager for get_conn(). Usage: with open_conn() as conn: ..."""
+def open_conn(auto_commit=True):
+    """Context manager for get_conn(). Auto-commits on success, rolls back on error."""
     conn = get_conn()
     try:
         yield conn
+        if auto_commit:
+            conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -171,10 +176,18 @@ def insert_pt_homework(conn: sqlite3.Connection, data: dict):
     """, data)
 
 
-def update_pt_homework(conn: sqlite3.Connection, hw_id: int, updates: dict):
+_PT_HW_UPDATABLE = {"status", "sets_reps", "notes", "completed_date"}
+
+
+def update_pt_homework(conn: sqlite3.Connection, hw_id: int, updates: dict) -> bool:
+    """Update PT homework. Returns True if row was found and updated."""
+    bad_keys = set(updates) - _PT_HW_UPDATABLE
+    if bad_keys:
+        raise ValueError(f"Invalid columns for PT homework update: {bad_keys}")
     sets = ", ".join(f"{k}=:{k}" for k in updates)
     updates["id"] = hw_id
-    conn.execute(f"UPDATE health_pt_homework SET {sets} WHERE id = :id", updates)
+    cursor = conn.execute(f"UPDATE health_pt_homework SET {sets} WHERE id = :id", updates)
+    return cursor.rowcount > 0
 
 
 def query_pt_homework(conn: sqlite3.Connection, status: str | None = None) -> list[dict]:
@@ -192,9 +205,13 @@ def upsert_check_in(conn: sqlite3.Connection, data: dict):
         INSERT INTO health_check_ins (date, sleep_hours, sleep_quality, steps, workout, stress, water_ml, notes)
         VALUES (:date, :sleep_hours, :sleep_quality, :steps, :workout, :stress, :water_ml, :notes)
         ON CONFLICT(date) DO UPDATE SET
-            sleep_hours=excluded.sleep_hours, sleep_quality=excluded.sleep_quality,
-            steps=excluded.steps, workout=excluded.workout, stress=excluded.stress,
-            water_ml=excluded.water_ml, notes=excluded.notes
+            sleep_hours=COALESCE(excluded.sleep_hours, sleep_hours),
+            sleep_quality=COALESCE(excluded.sleep_quality, sleep_quality),
+            steps=COALESCE(excluded.steps, steps),
+            workout=COALESCE(excluded.workout, workout),
+            stress=COALESCE(excluded.stress, stress),
+            water_ml=COALESCE(excluded.water_ml, water_ml),
+            notes=COALESCE(excluded.notes, notes)
     """, data)
 
 
