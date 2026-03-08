@@ -1,38 +1,32 @@
 #!/usr/bin/env python3
-"""
-장보기 목록 생성 스크립트
-"""
+"""장보기 목록 생성 스크립트"""
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-import pantry_io
+_MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+sys.path.insert(0, str(_MCP_DIR))
+from db import open_conn, query_pantry_items
 
 
 def main():
-    items = pantry_io.get_shopping_list()
+    with open_conn(auto_commit=False) as conn:
+        items = query_pantry_items(conn, status="부족")
 
     if not items:
-        print("✅ 부족한 식재료가 없습니다!")
+        print("부족한 식재료가 없습니다.")
         return
 
-    print("🛒 **장보기 목록**\n")
+    print(f"장보기 목록\n")
 
-    # 카테고리별로 그룹화
-    by_category = {}
+    by_category: dict[str, list] = {}
     for item in items:
-        name = item.get("name", "Unknown")
-        category = item.get("category", "기타") or "기타"
+        by_category.setdefault(item["category"], []).append(item["name"])
 
-        if category not in by_category:
-            by_category[category] = []
-        by_category[category].append(name)
-
-    for category, cat_items in sorted(by_category.items()):
-        print(f"\n**{category}:**")
-        for name in cat_items:
-            print(f"  ☐ {name}")
+    for category, names in sorted(by_category.items()):
+        print(f"[{category}]")
+        for name in names:
+            print(f"  - {name}")
 
     print(f"\n총 {len(items)}개 항목")
 

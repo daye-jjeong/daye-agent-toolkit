@@ -1,41 +1,29 @@
 #!/usr/bin/env python3
-"""
-레시피 추천 스크립트 (저속노화 기준)
-"""
+"""레시피 추천 스크립트 (저속노화 기준)"""
 
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-import pantry_io
+_MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+sys.path.insert(0, str(_MCP_DIR))
+from db import open_conn, query_pantry_items
 
 
 def main():
-    items = pantry_io.get_available_items()
+    with open_conn(auto_commit=False) as conn:
+        items = query_pantry_items(conn, status="재고 있음")
 
     if not items:
-        print("❌ 현재 사용 가능한 식재료가 없습니다.")
+        print("현재 사용 가능한 식재료가 없습니다.")
         return
 
-    # 식재료 목록 출력
-    ingredients = []
+    print("현재 보유 식재료:")
     for item in items:
-        name = item.get("name", "Unknown")
-        quantity = item.get("quantity", 0)
-        unit = item.get("unit", "")
-        ingredients.append(f"{name} ({quantity}{unit})")
+        print(f"  {item['name']} ({item['quantity']}{item['unit']})")
 
-    print("🥗 **현재 보유 식재료:**")
-    for ing in ingredients:
-        print(f"  • {ing}")
+    print("\n에이전트에게 '현재 재료로 저속노화 메뉴 추천해줘'라고 요청하세요.")
 
-    print("\n🍳 **레시피 추천 (저속노화 기준):**")
-    print("\n💡 에이전트에게 '현재 재료로 저속노화 메뉴 추천해줘'라고 요청하세요.")
-
-    # 간단한 규칙 기반 추천
-    print("\n📋 **기본 추천:**")
-
-    ingredient_names = [item.get("name", "") for item in items]
+    ingredient_names = [item["name"] for item in items]
 
     longevity_recipes = {
         "채소 볶음": ["채소", "올리브유", "마늘"],
@@ -52,10 +40,9 @@ def main():
             suggested.append(recipe)
 
     if suggested:
+        print("\n기본 추천:")
         for recipe in suggested:
-            print(f"  ✨ {recipe}")
-    else:
-        print("  (현재 재료로 추천할 메뉴가 없습니다)")
+            print(f"  {recipe}")
 
 
 if __name__ == "__main__":

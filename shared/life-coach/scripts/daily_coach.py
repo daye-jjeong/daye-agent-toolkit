@@ -16,7 +16,7 @@ from pathlib import Path
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals, \
-    query_exercises, query_symptoms, query_meals, query_check_ins
+    query_exercises, query_symptoms, query_meals, query_check_ins, query_expiring_pantry
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -64,6 +64,12 @@ def get_today_data(conn, date_str: str) -> dict:
     except Exception:
         exercises, symptoms, meals, checkins = [], [], [], []
 
+    try:
+        pantry_expiry = query_expiring_pantry(conn, days_ahead=3)
+    except Exception as e:
+        print(f"[daily_coach] pantry query failed: {e}", file=sys.stderr)
+        pantry_expiry = {"expiring": [], "expired": []}
+
     return {
         "date": date_str,
         "has_data": True,
@@ -81,6 +87,7 @@ def get_today_data(conn, date_str: str) -> dict:
         "symptoms": symptoms,
         "meals": meals,
         "check_in": checkins[0] if checkins else None,
+        "pantry_expiry": pantry_expiry,
     }
 
 
@@ -227,6 +234,20 @@ def _build_health_section(data: dict) -> str | None:
     return "💊 건강:\n" + "\n".join(lines)
 
 
+def _build_pantry_section(data: dict) -> str | None:
+    pantry = data.get("pantry_expiry", {})
+    expired = pantry.get("expired", [])
+    expiring = pantry.get("expiring", [])
+    if not expired and not expiring:
+        return None
+    lines = []
+    if expired:
+        lines.append(f"  만료: {', '.join(i['name'] for i in expired)}")
+    if expiring:
+        lines.append(f"  임박: {', '.join(i['name'] for i in expiring)}")
+    return "🧊 유통기한:\n" + "\n".join(lines)
+
+
 def build_template_report(data: dict, coach_state: dict) -> str:
     sections = [_build_header(data["date"])]
 
@@ -260,6 +281,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
     health = _build_health_section(data)
     if health:
         sections.append(health)
+
+    pantry = _build_pantry_section(data)
+    if pantry:
+        sections.append(pantry)
 
     feedback = _build_pattern_feedback(data)
     if feedback:
