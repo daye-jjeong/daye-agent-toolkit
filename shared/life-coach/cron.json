@@ -1,8 +1,16 @@
 [
-  {
-    "schedule": "0 21 * * *",
-    "command": "1. life-dashboard MCP의 get_today_summary 도구로 오늘 데이터 조회\n2. life-coach 스킬의 references/coaching-prompts.md 일일 코칭 프레임을 적용하여 500자 이내 코칭 생성\n3. 텔레그램 CHAT_ID_COACH 채널로 전송",
-    "description": "LLM 일일 코칭 리포트",
-    "name": "life-coach-daily"
-  }
+	{
+		"name": "daily-coach",
+		"schedule": "0 21 * * *",
+		"target": "daily-coach",
+		"reason": "cron: daily-coach",
+		"instructions": "life-coach 스킬로 일일 코칭 리포트를 생성하세요.\n\n## 순서\n\n1. **데이터 수집**: daily_coach.py 스크립트를 --json 플래그로 실행 → 오늘 활동 데이터 획득\n2. **코칭 프레임 적용**: 일일 코칭 구성을 참고하여 데이터 기반 코칭 생성\n3. **톤 에스컬레이션**: coach_state의 escalation_level에 따라 톤 조절 (Level 0: 부드러운 넛지, Level 1: 직접적 제안, Level 2: 직설적 지시)\n4. **전달**: `minions thread add --author {agentId} --mentions mingming --tags coach --content \"일일 코칭\\n\\n<코칭 내용>\"` 로 전달"
+	},
+	{
+		"name": "weekly-coach",
+		"schedule": "0 21 * * 0",
+		"target": "weekly-coach",
+		"reason": "cron: weekly-coach",
+		"instructions": "life-coach 스킬로 주간 코칭 리포트를 생성하세요.\n\n## 순서\n\n1. **데이터 수집**: weekly_coach.py 스크립트를 --json 플래그로 실행 → 주간 활동 데이터 획득\n2. **코칭 프레임 적용**: 주간 코칭 구성을 참고하여 주간 트렌드 + 방향성 코칭 생성\n3. **전달**: `minions thread add --author {agentId} --mentions mingming --tags coach --content \"주간 코칭\\n\\n<코칭 내용>\"` 로 전달"
+	}
 ]

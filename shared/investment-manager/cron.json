@@ -4,6 +4,6 @@
 		"schedule": "0 9 * * *",
 		"target": "daily-portfolio",
 		"reason": "cron: daily-portfolio",
-		"instructions": "investment-manager 스킬로 일일 포트폴리오 리포트를 생성하세요.\n\n## 순서\n\n1. **보유 종목 확인**: `python3 {baseDir}/scripts/portfolio_query.py summary`\n2. **시세 갱신**: 보유 종목 목록에서 주요 종목의 현재가를 WebSearch로 조회한 뒤 `python3 {baseDir}/scripts/fetch_prices.py --products \"종목1,종목2\" --prices \"가격1,가격2\"` 로 DB 저장\n3. **현황 리포트**: 다시 `python3 {baseDir}/scripts/portfolio_query.py summary --top 10` 실행 → KR/US 분리, 총 평가금액, 누적 손익, 수익률 요약\n4. **리스크 체크**: `python3 {baseDir}/scripts/portfolio_query.py risk` 실행 → 경고 항목 정리\n5. **경고 종목 심층 점검**: risk에서 경고가 뜬 종목이 있으면 WebSearch로 해당 종목 최신 뉴스/실적 확인 후 간단한 코멘트 추가\n6. **전달**: `minions thread add --author {agentId} --mentions mingming --tags report --content \"일일 포트폴리오 리포트\\n\\n<요약 내용>\"` 로 오케스트레이터에게 전달\n\n## 톤 규칙\n- \"지금 사라/팔아라\" 같은 직접 지시 금지\n- \"유지/비중조절 검토/리밸런싱 기준 재점검\" 식 표현 사용\n- 금액은 원 단위 쉼표 포맷, 수익률은 소수점 1자리 %"
+		"instructions": "investment-manager 스킬로 일일 포트폴리오 리포트를 생성하세요.\n\n## 순서\n\n1. **보유 종목 확인**: summary 모드 실행\n2. **시세 갱신**: 보유 종목 목록에서 주요 종목의 현재가를 WebSearch로 조회한 뒤, fetch_prices 스크립트로 DB 저장\n3. **현황 리포트**: summary --top 10 실행 → KR/US 분리, 총 평가금액, 누적 손익, 수익률 요약\n4. **리스크 체크**: risk 모드 실행 → 경고 항목 정리\n5. **경고 종목 심층 점검**: risk에서 경고가 뜬 종목이 있으면 WebSearch로 해당 종목 최신 뉴스/실적 확인 후 간단한 코멘트 추가\n6. **전달**: `minions thread add --author {agentId} --mentions mingming --tags report --content \"일일 포트폴리오 리포트\\n\\n<요약 내용>\"` 로 오케스트레이터에게 전달\n\n## 톤 규칙\n- \"지금 사라/팔아라\" 같은 직접 지시 금지\n- \"유지/비중조절 검토/리밸런싱 기준 재점검\" 식 표현 사용\n- 금액은 원 단위 쉼표 포맷, 수익률은 소수점 1자리 %"
 	}
 ]
