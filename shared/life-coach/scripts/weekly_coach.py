@@ -16,7 +16,7 @@ from pathlib import Path
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins
+from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins, get_repeated_signals
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -100,6 +100,20 @@ def get_week_data(conn, dates: list[str]) -> dict:
     except Exception:
         exercises, symptoms, meals, checkins = [], [], [], []
 
+    # behavioral signals (weekly aggregate)
+    try:
+        all_signals = conn.execute(
+            "SELECT signal_type, content, COUNT(*) as cnt "
+            "FROM behavioral_signals WHERE date >= ? AND date <= ? "
+            "GROUP BY signal_type, content ORDER BY cnt DESC",
+            (mon, sun),
+        ).fetchall()
+        weekly_signals = [{"signal_type": r["signal_type"], "content": r["content"], "count": r["cnt"]}
+                          for r in all_signals]
+        repeated = get_repeated_signals(conn, sun, days=7, min_count=2)
+    except Exception:
+        weekly_signals, repeated = [], []
+
     return {
         "dates": dates,
         "daily": daily,
@@ -113,6 +127,8 @@ def get_week_data(conn, dates: list[str]) -> dict:
         "symptoms": symptoms,
         "meals": meals,
         "check_ins": checkins,
+        "weekly_signals": weekly_signals,
+        "repeated_patterns": repeated,
     }
 
 
@@ -197,6 +213,38 @@ def _build_reflect_section(data: dict) -> str | None:
     return "\n".join(lines)
 
 
+def _build_behavioral_section(data: dict) -> str | None:
+    """주간 행동 신호 집계 + 반복 패턴."""
+    lines = []
+
+    signals = data.get("weekly_signals", [])
+    if signals:
+        by_type: dict[str, list[tuple[str, int]]] = {}
+        for s in signals:
+            by_type.setdefault(s["signal_type"], []).append((s["content"], s["count"]))
+        type_labels = {"decision": "결정", "mistake": "시행착오", "pattern": "패턴"}
+        for t, label in type_labels.items():
+            items = by_type.get(t, [])
+            if items:
+                top = items[:5]
+                formatted = ", ".join(
+                    f"{c}({n})" if n > 1 else c for c, n in top
+                )
+                lines.append(f"  {label}: {formatted}")
+
+    repeated = data.get("repeated_patterns", [])
+    if repeated:
+        if lines:
+            lines.append("")
+        lines.append("  ⚠️ 반복 패턴:")
+        for r in repeated[:5]:
+            lines.append(f"    - \"{r['content']}\" ({r['count']}회)")
+
+    if not lines:
+        return None
+    return "🧠 주간 행동 신호:\n" + "\n".join(lines)
+
+
 def _build_health_weekly(data: dict) -> str | None:
     lines = []
 
@@ -246,6 +294,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
     repos_section = _build_repos_section(data)
     if repos_section:
         sections.append(repos_section)
+
+    behavioral = _build_behavioral_section(data)
+    if behavioral:
+        sections.append(behavioral)
 
     health_weekly = _build_health_weekly(data)
     if health_weekly:
@@ -330,7 +382,7 @@ def main():
     if args.dry_run:
         print(message)
     else:
-        ok = send_telegram(message, chat_id_key="CHAT_ID_COACH", silent=True)
+        ok = send_telegram(message, chat_id_key="CHAT_ID_WEEKLY", silent=True)
         if ok:
             print("[weekly_coach] telegram sent", file=sys.stderr)
         else:
