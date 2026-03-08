@@ -31,7 +31,20 @@ from kst_utils import KST, format_pub_kst, parse_pub_date
 # Low-signal patterns filtered from general news
 NOISE_PATTERNS = re.compile(
     r"\[부고\]|\[인사\]|부고|부음|별세|발인|빈소|조문|부친상|모친상|"
-    r"\[알림\]|\[공고\]|\[광고\]|\[스포츠\]|포토\]|사진\]",
+    r"\[알림\]|\[공고\]|\[광고\]|\[스포츠\]|포토\]|사진\]|"
+    # 스포츠 — WBC, 올림픽 경기 결과, 선수 인터뷰 등
+    r"WBC|월드베이스볼|패럴림픽|올림픽|야구.*대표|축구.*대표|"
+    r"홈런|안타|역전패|역전승|대승|대패|승리.*경기|"
+    r"감독.*이끄는|선수단|체육회|체육인|"
+    r"메달.*사냥|메달.*도전|공일증|응원.*열기|"
+    # 날씨 — 일반 날씨 예보 (경제/재해 영향 제외)
+    r"\[.*날씨\]|흐려지겠|맑겠|비가 오겠|눈이 오겠|구름이? 많",
+    re.IGNORECASE,
+)
+
+# URL path patterns that indicate low-signal content
+_NOISE_URL_PATTERNS = re.compile(
+    r"/Sports/|/sports/|/weather/|/photo/|/gallery/",
     re.IGNORECASE,
 )
 
@@ -506,8 +519,9 @@ def main():
         since = args.since if args.since > 0 else 24
         web_items = fetch_web_items(args.web_sources, since)
         items.extend(web_items)
-    # Filter noise (부고, 인사, 광고 등)
+    # Filter noise (부고, 인사, 광고, 스포츠, 날씨 등)
     items = [it for it in items if not NOISE_PATTERNS.search(it.title)]
+    items = [it for it in items if not _NOISE_URL_PATTERNS.search(it.link)]
     if args.since > 0:
         items = filter_by_time(items, args.since)
     items = filter_by_keywords(items, keywords)
