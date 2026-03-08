@@ -278,15 +278,18 @@ def query_meals(conn: sqlite3.Connection, date_from: str, date_to: str, meal_typ
 
 # ── Pantry ──────────────────────────────────
 
+PANTRY_STATUSES = {"재고 있음", "부족", "만료"}
+
 
 def upsert_pantry_item(conn: sqlite3.Connection, data: dict):
+    """식재료 upsert. 동일 name+location이 있으면 수량을 누적한다."""
     conn.execute("""
         INSERT INTO pantry_items (name, category, quantity, unit, location,
             purchase_date, expiry_date, status, notes, updated_at)
         VALUES (:name, :category, :quantity, :unit, :location,
             :purchase_date, :expiry_date, :status, :notes, datetime('now','localtime'))
         ON CONFLICT(name, location) DO UPDATE SET
-            category=excluded.category, quantity=excluded.quantity, unit=excluded.unit,
+            category=excluded.category, quantity=quantity + excluded.quantity, unit=excluded.unit,
             purchase_date=excluded.purchase_date, expiry_date=excluded.expiry_date,
             status=excluded.status, notes=excluded.notes,
             updated_at=datetime('now','localtime')
@@ -315,6 +318,8 @@ def query_pantry_items(conn: sqlite3.Connection, category: str | None = None,
 
 
 def update_pantry_status(conn: sqlite3.Connection, item_id: int, status: str) -> bool:
+    if status not in PANTRY_STATUSES:
+        raise ValueError(f"Invalid pantry status: {status!r}. Must be one of {PANTRY_STATUSES}")
     cursor = conn.execute(
         "UPDATE pantry_items SET status = ?, updated_at = datetime('now','localtime') WHERE id = ?",
         (status, item_id),
@@ -334,12 +339,12 @@ def query_expiring_pantry(conn: sqlite3.Connection, days_ahead: int = 3) -> dict
     threshold = (now + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
     expired = [dict(r) for r in conn.execute("""
         SELECT * FROM pantry_items
-        WHERE expiry_date IS NOT NULL AND expiry_date < ? AND status != '만료'
+        WHERE expiry_date IS NOT NULL AND expiry_date < ? AND status = '재고 있음'
         ORDER BY expiry_date
     """, (today_str,)).fetchall()]
     expiring = [dict(r) for r in conn.execute("""
         SELECT * FROM pantry_items
-        WHERE expiry_date >= ? AND expiry_date <= ? AND status != '만료'
+        WHERE expiry_date >= ? AND expiry_date <= ? AND status = '재고 있음'
         ORDER BY expiry_date
     """, (today_str, threshold)).fetchall()]
     return {"expiring": expiring, "expired": expired}

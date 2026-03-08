@@ -66,7 +66,8 @@ def get_today_data(conn, date_str: str) -> dict:
 
     try:
         pantry_expiry = query_expiring_pantry(conn, days_ahead=3)
-    except Exception:
+    except Exception as e:
+        print(f"[daily_coach] pantry query failed: {e}", file=sys.stderr)
         pantry_expiry = {"expiring": [], "expired": []}
 
     return {
