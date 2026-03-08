@@ -41,10 +41,10 @@ _infra/       — 빌드/설치/동기화 스크립트
 |------|------|
 | banksalad-import | 뱅크샐러드 → life-dashboard SQLite DB import |
 | gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
-| health-coach | 맞춤 건강 조언 + 운동 추천 |
-| health-tracker | 운동/증상/PT 트래킹 |
+| health-tracker | 운동/증상/PT 트래킹 — SQLite 기록 |
 | investment-manager | 투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신 |
-| meal-tracker | 식사 기록 + 영양 모니터링 |
+| life-coach | 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석 |
+| meal-tracker | 식사 기록 + 영양 모니터링 — SQLite 기록 |
 | news-brief | 키워드 뉴스 브리핑 |
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |
