@@ -1,6 +1,3 @@
-# Notion DB ID (보안)
-config/notion_db_id.txt
-
 # Python
 __pycache__/
 *.py[cod]
