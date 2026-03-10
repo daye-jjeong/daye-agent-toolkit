@@ -38,7 +38,7 @@ def get_today_data(conn, date_str: str) -> dict:
 
     next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     activities = conn.execute("""
-        SELECT repo, tag, summary, start_at, end_at, duration_min,
+        SELECT repo, branch, tag, summary, start_at, end_at, duration_min,
                token_total, error_count, has_tests, has_commits
         FROM activities WHERE start_at >= ? AND start_at < ?
         ORDER BY start_at
@@ -109,7 +109,7 @@ def _build_stats_line(data: dict) -> str:
 
 
 def _build_repos_detail(data: dict) -> str | None:
-    """레포별 세션 상세."""
+    """레포별 (> 브랜치별) 세션 상세."""
     sessions = data.get("sessions", [])
     if not sessions:
         return None
@@ -129,11 +129,28 @@ def _build_repos_detail(data: dict) -> str | None:
         if total_tok > 0:
             parts.append(f"{format_tokens(total_tok)} tokens")
         lines.append(f"  ▸ {repo} ({', '.join(parts)})")
-        for s in sess[:3]:
-            start = (s.get("start_at") or "")[11:16] or "?"
-            tag = s.get("tag", "")
-            summary = (s.get("summary") or "")[:80]
-            lines.append(f"    - {start} [{tag}] {summary}")
+
+        # branch별 그룹핑 (branch가 있는 세션이 하나라도 있으면)
+        branch_groups: dict[str | None, list[dict]] = {}
+        for s in sess:
+            branch_groups.setdefault(s.get("branch"), []).append(s)
+
+        if len(branch_groups) > 1 or (None not in branch_groups):
+            for branch, bsess in branch_groups.items():
+                if branch:
+                    lines.append(f"    📌 {branch}")
+                for s in bsess[:3]:
+                    start = (s.get("start_at") or "")[11:16] or "?"
+                    tag = s.get("tag", "")
+                    summary = (s.get("summary") or "")[:80]
+                    indent = "      " if branch else "    "
+                    lines.append(f"{indent}- {start} [{tag}] {summary}")
+        else:
+            for s in sess[:3]:
+                start = (s.get("start_at") or "")[11:16] or "?"
+                tag = s.get("tag", "")
+                summary = (s.get("summary") or "")[:80]
+                lines.append(f"    - {start} [{tag}] {summary}")
     return "\n".join(lines)
 
 
