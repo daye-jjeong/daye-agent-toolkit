@@ -14,20 +14,8 @@ import argparse, json, sys
 from datetime import datetime
 from pathlib import Path
 
-WEEKDAY = "월화수목금토일"
-
-def to_h(t: str) -> float:
-    if "T" in t: t = t[11:16]
-    h, m = map(int, t.split(":"))
-    return h + m / 60
-
-def dedup(sessions):
-    seen, out = set(), []
-    for s in sessions:
-        k = (s.get("start_at"), s.get("repo"), s.get("tag"))
-        if k not in seen:
-            seen.add(k); out.append(s)
-    return out
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _helpers import WEEKDAY, dedup_sessions as dedup, to_h
 
 def prep(sessions):
     return [

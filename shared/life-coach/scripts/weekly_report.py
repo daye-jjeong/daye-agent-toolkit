@@ -6,55 +6,13 @@ Usage:
     python3 weekly_report.py --input data.json --coaching coaching.md
     python3 weekly_report.py --output /tmp/weekly_report.html
 """
-import argparse, json, re, sys
-from datetime import datetime, timezone, timedelta
+import argparse, json, sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline_html import build, timeline_section_html
-
-KST = timezone(timedelta(hours=9))
-WEEKDAY = "월화수목금토일"
-TAG_COLORS = {
-    "리팩토링": "#4A90D9", "디버깅": "#E07B5A", "코딩": "#7ABD7E",
-    "설계": "#9B7BC8", "ops": "#F0C040", "문서": "#5AC8D9",
-    "리뷰": "#D9A85A", "기타": "#707070",
-}
-
-# ── Helper ────────────────────────────────────────────────────────────────────
-
-def _esc(s: str) -> str:
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-def _fmt_tokens(n: int) -> str:
-    if n >= 1_000_000: return f"{n / 1_000_000:.1f}M"
-    if n >= 1_000: return f"{n / 1_000:.1f}K"
-    return str(n)
-
-def _md_to_html(md: str) -> str:
-    lines = md.strip().split("\n")
-    out = []
-    in_ul = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("## "):
-            if in_ul: out.append("</ul>"); in_ul = False
-            out.append(f'<h4 class="coaching-h">{_esc(stripped[3:])}</h4>')
-        elif stripped.startswith("### "):
-            if in_ul: out.append("</ul>"); in_ul = False
-            out.append(f'<h5 class="coaching-h sub">{_esc(stripped[4:])}</h5>')
-        elif stripped.startswith("- ") or stripped.startswith("* "):
-            if not in_ul: out.append('<ul class="coaching-list">'); in_ul = True
-            content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped[2:])
-            out.append(f"<li>{content}</li>")
-        elif stripped == "":
-            if in_ul: out.append("</ul>"); in_ul = False
-        else:
-            if in_ul: out.append("</ul>"); in_ul = False
-            content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped)
-            out.append(f"<p>{content}</p>")
-    if in_ul: out.append("</ul>")
-    return "\n".join(out)
+from _helpers import WEEKDAY, TAG_COLORS, esc_html as _esc, fmt_tokens as _fmt_tokens, md_to_html
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
@@ -136,7 +94,7 @@ def _build_coaching_section(coaching_md: str | None) -> str:
 <h3>코칭</h3>
 <div class="coaching-empty">--coaching 파일을 전달하면 LLM 주간 코칭이 여기에 표시됩니다.</div>
 </div>"""
-    return f'<div class="section coaching">{_md_to_html(coaching_md)}</div>'
+    return f'<div class="section coaching">{md_to_html(coaching_md)}</div>'
 
 
 def _build_health_section(data: dict) -> str:

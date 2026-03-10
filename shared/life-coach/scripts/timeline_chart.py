@@ -18,28 +18,14 @@ import argparse
 import json
 import sys
 from datetime import datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _helpers import TAG_COLORS, dedup_sessions as dedup, to_h as to_hours
 
 COLORS = ["#4A90D9", "#E07B5A", "#7ABD7E", "#9B7BC8", "#F0C040", "#5AC8D9", "#D95A90", "#D9A85A"]
-TAG_COLORS = {
-    "리팩토링": "#4A90D9",
-    "디버깅": "#E07B5A",
-    "코딩": "#7ABD7E",
-    "설계": "#9B7BC8",
-    "ops": "#F0C040",
-    "문서": "#5AC8D9",
-    "리뷰": "#D9A85A",
-    "기타": "#808080",
-}
 BG = "#1C1C1E"
 FONT = "Apple SD Gothic Neo"
-
-
-def to_hours(t: str) -> float:
-    """ISO datetime or HH:MM → float hours."""
-    if "T" in t:
-        t = t[11:16]
-    h, m = map(int, t.split(":"))
-    return h + m / 60
 
 
 def bar_color(session: dict, idx: int) -> str:
@@ -53,15 +39,6 @@ def session_label(session: dict) -> str:
     return f"{repo} [{tag}]" if tag else repo
 
 
-def dedup(sessions: list[dict]) -> list[dict]:
-    seen: set = set()
-    out = []
-    for s in sessions:
-        key = (s.get("start_at"), s.get("repo"), s.get("tag"))
-        if key not in seen:
-            seen.add(key)
-            out.append(s)
-    return out
 
 
 def daily_chart(data: dict, output_path: str):
