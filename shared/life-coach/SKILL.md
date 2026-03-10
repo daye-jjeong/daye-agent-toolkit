@@ -7,7 +7,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 # Life Coach Skill
 
-**Version:** 0.4.0 | **Updated:** 2026-03-08
+**Version:** 0.5.0 | **Updated:** 2026-03-10
 
 CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통합 코칭 리포트를 생성한다.
 데이터는 life-dashboard-mcp SQLite에서 조회. health-coach 기능을 흡수.
@@ -21,16 +21,16 @@ CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통
 
 **일일:**
 ```bash
-python3 {baseDir}/scripts/daily_coach.py --json
-python3 {baseDir}/scripts/daily_coach.py --json | python3 {baseDir}/scripts/timeline_html.py
-open /tmp/work_timeline.html
+python3 {baseDir}/scripts/daily_coach.py --json > /tmp/_coach_data.json
+python3 {baseDir}/scripts/daily_report.py --input /tmp/_coach_data.json
+open /tmp/daily_report.html
 ```
 
 **주간:**
 ```bash
-python3 {baseDir}/scripts/weekly_coach.py --json
-python3 {baseDir}/scripts/weekly_coach.py --json | python3 {baseDir}/scripts/timeline_html.py --weekly
-open /tmp/work_timeline.html
+python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data.json
+python3 {baseDir}/scripts/weekly_report.py --input /tmp/_coach_data.json
+open /tmp/weekly_report.html
 ```
 
 ### 코칭 시작 — 의도 확인
@@ -44,6 +44,14 @@ open /tmp/work_timeline.html
 
 `references/coaching-prompts.md` 프레임으로 데이터를 해석하고 코칭한다.
 escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
+
+코칭 내용을 HTML 리포트에 포함하려면:
+1. 코칭 텍스트를 마크다운 파일로 저장 (`## 오늘의 정리`, `## 코칭`, `## 내일 이어할 것` 등 섹션 헤더 사용)
+2. `--coaching` 플래그로 전달:
+```bash
+python3 {baseDir}/scripts/daily_report.py --input /tmp/_coach_data.json --coaching /tmp/coaching.md
+open /tmp/daily_report.html
+```
 
 ### 대안: MCP 도구 사용
 life-dashboard MCP의 `get_today_summary` 도구로도 데이터 조회 가능.
@@ -92,7 +100,9 @@ coach_state의 escalation_level에 따라 톤 변경:
 |--------|---------|
 | `daily_coach.py` | 일일 데이터 수집 + 템플릿 리포트 → 텔레그램 (건강 섹션 포함) |
 | `weekly_coach.py` | 주간 데이터 수집 + 템플릿 리포트 → 텔레그램 (건강 섹션 포함) |
-| `timeline_html.py` | 인터랙티브 타임라인 HTML 생성 → /tmp/work_timeline.html |
+| `daily_report.py` | 일일 HTML 리포트 생성 → /tmp/daily_report.html (`--coaching` 지원) |
+| `weekly_report.py` | 주간 HTML 리포트 생성 → /tmp/weekly_report.html (`--coaching` 지원) |
+| `timeline_html.py` | 인터랙티브 타임라인 HTML (standalone / 리포트에 임베드) |
 | `timeline_chart.py` | PNG 타임라인 차트 생성 → /tmp/work_timeline.png |
 | `health_cmds.py` | 건강 코칭 서브커맨드 (루틴 추천, 증상 분석, 운동 가이드, 라이프스타일 조언, 건강 체크) |
 | `track_health.py` | 일일 건강 체크인 기록 (수면, 걸음수, 운동, 스트레스, 수분) |
