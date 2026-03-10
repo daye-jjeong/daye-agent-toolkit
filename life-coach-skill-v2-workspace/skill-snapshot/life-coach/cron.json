@@ -1,0 +1,16 @@
+[
+	{
+		"name": "daily-coach",
+		"schedule": "0 21 * * *",
+		"target": "daily-coach",
+		"reason": "cron: daily-coach",
+		"instructions": "life-coach 스킬의 '일일 코칭' 절차를 따르세요. 톤 에스컬레이션 레벨에 맞춰 코칭을 생성하세요."
+	},
+	{
+		"name": "weekly-coach",
+		"schedule": "0 21 * * 0",
+		"target": "weekly-coach",
+		"reason": "cron: weekly-coach",
+		"instructions": "life-coach 스킬의 '주간 코칭' 절차를 따르세요."
+	}
+]

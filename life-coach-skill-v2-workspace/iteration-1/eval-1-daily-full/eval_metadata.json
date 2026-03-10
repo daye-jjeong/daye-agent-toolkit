@@ -1,0 +1,11 @@
+{
+  "eval_id": 1,
+  "eval_name": "daily-full-coaching",
+  "prompt": "오늘 코칭해줘",
+  "assertions": [
+    {"id": "coach-role", "description": "의도 확인 단계가 있는가 (스크립트 실행 나열로 시작하지 않는가)"},
+    {"id": "new-sections", "description": "레포별 상세, 집중도 지표, 건강 섹션 중 최소 1개 포함"},
+    {"id": "coaching-quality", "description": "데이터 단순 나열이 아닌 해석+제안+질문이 있는가"},
+    {"id": "reflection-question", "description": "마무리 질문 1개로 끝나는가"}
+  ]
+}

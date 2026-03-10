@@ -1,0 +1,10 @@
+{
+  "eval_id": 2,
+  "eval_name": "daily-focused-health-overwork",
+  "prompt": "오늘 건강이랑 과작업 부분만 봐줘",
+  "assertions": [
+    {"id": "coach-role", "description": "의도 파악 후 해당 섹션에만 집중하는가"},
+    {"id": "focused-sections", "description": "건강 + 과작업 섹션에 집중하고 불필요 섹션 생략"},
+    {"id": "coaching-quality", "description": "데이터 단순 나열이 아닌 해석+제안이 있는가"}
+  ]
+}

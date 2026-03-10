@@ -1,0 +1,113 @@
+{
+  "daily_routine": {
+    "morning": [
+      "수면 기록 (시간, 질)",
+      "물 500ml 마시기",
+      "스트레칭 5분 (허리 중립, 호흡)",
+      "아침 식사 (단백질 20g+)"
+    ],
+    "afternoon": [
+      "13:30 걷기 (식후 10분+)",
+      "점심 식사 (채소 비중 높게)",
+      "햇빛 쬐기 15분+",
+      "물 500ml 추가"
+    ],
+    "evening": [
+      "19:30 걷기 (식후 10분+)",
+      "저녁 식사 (가볍게, 단백질 위주)",
+      "PT 숙제/코어 운동",
+      "스트레스 해소 (명상/호흡 10분)"
+    ],
+    "bedtime": [
+      "스크린 타임 종료",
+      "수면 준비 루틴",
+      "00:00 이전 취침"
+    ]
+  },
+  "nutrition": {
+    "antioxidants": [
+      "블루베리",
+      "토마토",
+      "녹차",
+      "다크초콜릿",
+      "브로콜리",
+      "시금치"
+    ],
+    "protein_sources": [
+      "닭가슴살",
+      "계란",
+      "그릭 요거트",
+      "두부",
+      "콩류"
+    ],
+    "supplements": [
+      {
+        "name": "비타민D",
+        "dosage": "2000 IU",
+        "frequency": "daily"
+      },
+      {
+        "name": "오메가3",
+        "dosage": "1000 mg",
+        "frequency": "daily"
+      },
+      {
+        "name": "마그네슘",
+        "dosage": "400 mg",
+        "frequency": "daily"
+      },
+      {
+        "name": "프로바이오틱스",
+        "dosage": "as directed",
+        "frequency": "daily"
+      }
+    ]
+  },
+  "exercise": {
+    "core_exercises": [
+      {
+        "name": "플랭크",
+        "sets": 3,
+        "duration": "30초",
+        "note": "중립척추 유지"
+      },
+      {
+        "name": "데드버그",
+        "sets": 3,
+        "reps": 10,
+        "note": "허리 바닥에 밀착"
+      },
+      {
+        "name": "버드독",
+        "sets": 3,
+        "reps": 10,
+        "note": "과신전 금지"
+      }
+    ],
+    "walking_goal": {
+      "daily_steps": 8000,
+      "post_meal_duration": "10분+"
+    }
+  },
+  "sleep": {
+    "bedtime": "00:00",
+    "wake_time": "07:00",
+    "target_hours": 7,
+    "reminder_time": "23:15",
+    "environment": {
+      "temperature": "18~20도",
+      "light": "어두움",
+      "noise": "조용함"
+    }
+  },
+  "stress_management": {
+    "daily_practices": [
+      "명상/호흡 10분",
+      "감사 일기 3줄"
+    ],
+    "tracking": {
+      "scale": "1~10",
+      "target": "5 이하"
+    }
+  }
+}

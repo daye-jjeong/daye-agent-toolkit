@@ -1,0 +1,39 @@
+{
+  "skill_name": "life-coach",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "오늘 코칭해줘",
+      "expected_output": "의도 확인 → 전체 일일 코칭. 레포별 상세, 집중도 지표, 건강 섹션, 마무리 질문 포함.",
+      "files": [],
+      "assertions": [
+        {"id": "coach-role", "description": "의도 확인 단계가 있는가 (스크립트 실행 나열로 시작하지 않는가)"},
+        {"id": "new-sections", "description": "레포별 상세, 집중도 지표, 건강 섹션 중 최소 1개 포함"},
+        {"id": "coaching-quality", "description": "데이터 단순 나열이 아닌 해석+제안+질문이 있는가"},
+        {"id": "reflection-question", "description": "마무리 질문 1개로 끝나는가"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "오늘 건강이랑 과작업 부분만 봐줘",
+      "expected_output": "건강 데이터 + 과작업 패턴 집중 분석. 불필요한 섹션 생략.",
+      "files": [],
+      "assertions": [
+        {"id": "coach-role", "description": "의도 확인 없이 바로 해당 섹션 집중 분석"},
+        {"id": "focused-sections", "description": "건강 + 과작업 섹션에 집중하고 불필요 섹션 생략"},
+        {"id": "coaching-quality", "description": "데이터 단순 나열이 아닌 해석+제안이 있는가"}
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "이번 주 리뷰해줘",
+      "expected_output": "주간 전체 코칭. 태그/레포 분포, 요일별 생산성, 휴식 패턴, 주간 건강 포함.",
+      "files": [],
+      "assertions": [
+        {"id": "coach-role", "description": "의도 확인 단계가 있는가"},
+        {"id": "new-weekly-sections", "description": "태그/레포 분포, 요일별 생산성, 휴식 패턴 중 최소 1개 포함"},
+        {"id": "coaching-quality", "description": "주간 패턴 해석 + 다음 주 방향 제안이 있는가"}
+      ]
+    }
+  ]
+}

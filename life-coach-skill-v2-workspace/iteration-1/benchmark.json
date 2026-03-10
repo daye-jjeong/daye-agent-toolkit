@@ -1,0 +1,273 @@
+{
+  "metadata": {
+    "skill_name": "life-coach",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-03-10T14:11:33Z",
+    "evals_run": [
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.25,
+        "passed": 1,
+        "failed": 3,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "\uc758\ub3c4 \ud655\uc778 \ub2e8\uacc4\uac00 \uc788\ub294\uac00 (\uc2a4\ud06c\ub9bd\ud2b8 \uc2e4\ud589 \ub098\uc5f4\ub85c \uc2dc\uc791\ud558\uc9c0 \uc54a\ub294\uac00)",
+          "passed": false,
+          "evidence": "\uc758\ub3c4 \ud655\uc778 \uba54\ucee4\ub2c8\uc998 \uc5c6\uc74c. \uace0\uc815 4\uc139\uc158 \ud15c\ud50c\ub9bf \uc801\uc6a9. \uc2a4\ud06c\ub9bd\ud2b8 \uc2e4\ud589 \ub098\uc5f4\uc740 \uc5c6\uc9c0\ub9cc \uc758\ub3c4 \ud30c\uc545\ub3c4 \uc5c6\uc74c."
+        },
+        {
+          "text": "\ub808\ud3ec\ubcc4 \uc0c1\uc138, \uc9d1\uc911\ub3c4 \uc9c0\ud45c, \uac74\uac15 \uc139\uc158 \uc911 \ucd5c\uc18c 1\uac1c \ud3ec\ud568",
+          "passed": false,
+          "evidence": "\ub808\ud3ec\ubcc4 \uc0c1\uc138, \uc9d1\uc911\ub3c4 \uc9c0\ud45c, \uac74\uac15 \uc804\uc6a9 \uc139\uc158 \ubaa8\ub450 \uc5c6\uc74c. \uac74\uac15 \ub0b4\uc6a9\uc774 \ucf54\uce6d \uc139\uc158 \uc548\uc5d0 1-2\uc904\ub85c \ubb3b\ud798. \uc720\ud1b5\uae30\ud55c(\ud1a0\ub9c8\ud1a0 \ub9cc\ub8cc) \uc644\uc804 \ub204\ub77d."
+        },
+        {
+          "text": "\ub370\uc774\ud130 \ub2e8\uc21c \ub098\uc5f4\uc774 \uc544\ub2cc \ud574\uc11d+\uc81c\uc548+\uc9c8\ubb38\uc774 \uc788\ub294\uac00",
+          "passed": true,
+          "evidence": "\uc218\uba74 \ubd80\uc871 + \uc6b4\ub3d9 \uc5c6\uc74c \uc5f0\uacb0 \ud574\uc11d, \uc800\ub141 \uc2a4\ud2b8\ub808\uce6d \uc9c8\ubb38\ud615 \uc81c\uc548 \ud3ec\ud568. \uae30\ubcf8\uc801 \ud574\uc11d\uc740 \uc788\uc74c."
+        },
+        {
+          "text": "\ub9c8\ubb34\ub9ac \uc9c8\ubb38 1\uac1c\ub85c \ub05d\ub098\ub294\uac00",
+          "passed": false,
+          "evidence": "\ud83d\udcac \ub9c8\ubb34\ub9ac \uc9c8\ubb38 \uc139\uc158 \uc5c6\uc74c. \u23ed\ufe0f \ub0b4\uc77c \uc774\uc5b4\ud560 \uac83\uc73c\ub85c \ub9c8\ubb34\ub9ac."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.33,
+        "passed": 1,
+        "failed": 2,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "\uc758\ub3c4 \ud30c\uc545 \ud6c4 \ud574\ub2f9 \uc139\uc158\uc5d0\ub9cc \uc9d1\uc911\ud558\ub294\uac00",
+          "passed": false,
+          "evidence": "focused \uc694\uccad \ucc98\ub9ac \uba54\ucee4\ub2c8\uc998 \uc5c6\uc74c. \uace0\uc815 4\uc139\uc158 \ud15c\ud50c\ub9bf \uadf8\ub300\ub85c \uc801\uc6a9. \uac74\uac15/\uacfc\uc791\uc5c5 \uc694\uccad\uc744 \ubc18\uc601\ud558\uc9c0 \ubabb\ud568."
+        },
+        {
+          "text": "\uac74\uac15 + \uacfc\uc791\uc5c5 \uc139\uc158\uc5d0 \uc9d1\uc911\ud558\uace0 \ubd88\ud544\uc694 \uc139\uc158 \uc0dd\ub7b5",
+          "passed": false,
+          "evidence": "\uace0\uc815 \uc139\uc158 \uad6c\uc870(\uc624\ub298\uc758 \uc815\ub9ac\u2192\ucf54\uce6d\u2192\uc790\ub3d9\ud654\u2192\ub0b4\uc77c)\ub97c \uadf8\ub300\ub85c \ucd9c\ub825. \uac74\uac15 \uc804\uc6a9 \uc139\uc158 \uc5c6\uace0, \ub0b4\uc6a9\uc774 \ucf54\uce6d \uc548\uc5d0 \ubb3b\ud798."
+        },
+        {
+          "text": "\ub370\uc774\ud130 \ub2e8\uc21c \ub098\uc5f4\uc774 \uc544\ub2cc \ud574\uc11d+\uc81c\uc548\uc774 \uc788\ub294\uac00",
+          "passed": true,
+          "evidence": "\uae30\ubcf8\uc801\uc778 \ud574\uc11d(\uacfc\uc791\uc5c5 \uc8fc\uc758, \uc6b4\ub3d9 \uad8c\uc7a5)\uc740 \uc788\uc73c\ub098 \uae4a\uc774\uac00 \uc595\uace0 \ubcf5\ud569 \uc0c1\ud0dc \uc5f0\uacb0 \uc5c6\uc74c."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "old_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.33,
+        "passed": 1,
+        "failed": 2,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "\uc758\ub3c4 \ud655\uc778 \ub2e8\uacc4\uac00 \uc788\ub294\uac00",
+          "passed": false,
+          "evidence": "\uc758\ub3c4 \ud655\uc778 \uc5c6\uc774 3\uc139\uc158 \ud15c\ud50c\ub9bf \uc801\uc6a9."
+        },
+        {
+          "text": "\ud0dc\uadf8/\ub808\ud3ec \ubd84\ud3ec, \uc694\uc77c\ubcc4 \uc0dd\uc0b0\uc131, \ud734\uc2dd \ud328\ud134 \uc911 \ucd5c\uc18c 1\uac1c \ud3ec\ud568",
+          "passed": false,
+          "evidence": "\uc8fc\uac04 \uc815\ub9ac/\ubc29\ud5a5\uc131 \ucf54\uce6d/\ub2e4\uc74c \uc8fc \uc0dd\uac01\ud574\ubcfc \uac83 3\uc139\uc158\ub9cc. \ud0dc\uadf8 \ubd84\ud3ec, \uc694\uc77c\ubcc4 \uc0dd\uc0b0\uc131, \ud734\uc2dd \ud328\ud134, \uc8fc\uac04 \uac74\uac15 \ubaa8\ub450 \uc5c6\uc74c."
+        },
+        {
+          "text": "\uc8fc\uac04 \ud328\ud134 \ud574\uc11d + \ub2e4\uc74c \uc8fc \ubc29\ud5a5 \uc81c\uc548\uc774 \uc788\ub294\uac00",
+          "passed": true,
+          "evidence": "\uae30\ubcf8\uc801\uc778 \ubc29\ud5a5 \uc81c\uc548(\uc9d1\uc911\ub3c4 \uc720\uc9c0, \uc0c8\ubcbd \uc791\uc5c5 \uc8fc\uc758)\uc740 \uc788\uc74c. repeated_patterns \ucc98\ub9ac \uc9c0\uc2dc\uac00 \uc5c6\uc5b4 \uc218\ub3d9 \uc5f0\uacb0\ub9cc."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "\uc758\ub3c4 \ud655\uc778 \ub2e8\uacc4\uac00 \uc788\ub294\uac00 (\uc2a4\ud06c\ub9bd\ud2b8 \uc2e4\ud589 \ub098\uc5f4\ub85c \uc2dc\uc791\ud558\uc9c0 \uc54a\ub294\uac00)",
+          "passed": true,
+          "evidence": "\ucf54\uce6d \ucd9c\ub825\uc774 \uc2a4\ud06c\ub9bd\ud2b8 \uc2e4\ud589 \ub098\uc5f4 \uc5c6\uc774 \ubc14\ub85c \ucf54\uce6d \ub0b4\uc6a9\uc73c\ub85c \uc2dc\uc791. approach.md\uc5d0\uc11c \uc804\uccb4 \ucf54\uce6d \uc758\ub3c4 \ud30c\uc545 \ud6c4 \uc9c4\ud589\ud588\uc74c\uc744 \ud655\uc778."
+        },
+        {
+          "text": "\ub808\ud3ec\ubcc4 \uc0c1\uc138, \uc9d1\uc911\ub3c4 \uc9c0\ud45c, \uac74\uac15 \uc139\uc158 \uc911 \ucd5c\uc18c 1\uac1c \ud3ec\ud568",
+          "passed": true,
+          "evidence": "\ud83d\udcc2 \ub808\ud3ec\ubcc4 \uc0c1\uc138, \ud83d\udcca \uc9d1\uc911\ub3c4 \uc9c0\ud45c, \ud83d\udc8a \uac74\uac15, \ud83e\uddca \uc720\ud1b5\uae30\ud55c 4\uac1c \uc2e0\uaddc \uc139\uc158 \ubaa8\ub450 \ud3ec\ud568."
+        },
+        {
+          "text": "\ub370\uc774\ud130 \ub2e8\uc21c \ub098\uc5f4\uc774 \uc544\ub2cc \ud574\uc11d+\uc81c\uc548+\uc9c8\ubb38\uc774 \uc788\ub294\uac00",
+          "passed": true,
+          "evidence": "\uc218\uba74 \ubd80\uc871\uacfc \uc6b4\ub3d9 \uc5c6\uc74c\uc744 \uc5f0\uacb0\ud574 \uc778\uacfc \ud574\uc11d, \ub9ac\uc11c\uce58 \uae30\ub85d \ubd80\uc7ac \uc704\ud5d8 \uc9c0\uc801, \uac74\uac15 \uc139\uc158\uc5d0 \uad6c\uccb4\uc801 \uc81c\uc548(15\ubd84 \ucf54\uc5b4 \ub8e8\ud2f4) \ud3ec\ud568."
+        },
+        {
+          "text": "\ub9c8\ubb34\ub9ac \uc9c8\ubb38 1\uac1c\ub85c \ub05d\ub098\ub294\uac00",
+          "passed": true,
+          "evidence": "\ud83d\udcac \ub9c8\ubb34\ub9ac \uc9c8\ubb38 \uc139\uc158\uc5d0 \ub9ac\uc11c\uce58 \uae30\ub85d \uad00\ub828 \uc9c8\ubb38 1\uac1c\ub85c \ub9c8\ubb34\ub9ac."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "\uc758\ub3c4 \ud30c\uc545 \ud6c4 \ud574\ub2f9 \uc139\uc158\uc5d0\ub9cc \uc9d1\uc911\ud558\ub294\uac00",
+          "passed": true,
+          "evidence": "\uac74\uac15 + \uacfc\uc791\uc5c5 \uba85\uc2dc \uc694\uccad\uc744 \uc778\uc2dd\ud574 \ud83d\udd0d \ucf54\uce6d(\uacfc\uc791\uc5c5)\uacfc \ud83d\udc8a \uac74\uac15 2\uc139\uc158\ub9cc \uae4a\uac8c \ubd84\uc11d. \ub9c8\ubb34\ub9ac \uc9c8\ubb38\uc740 \ud544\uc218\ub85c \uc720\uc9c0."
+        },
+        {
+          "text": "\uac74\uac15 + \uacfc\uc791\uc5c5 \uc139\uc158\uc5d0 \uc9d1\uc911\ud558\uace0 \ubd88\ud544\uc694 \uc139\uc158 \uc0dd\ub7b5",
+          "passed": true,
+          "evidence": "\ub808\ud3ec\ubcc4 \uc0c1\uc138, \uc9d1\uc911\ub3c4 \uc9c0\ud45c, \uc790\ub3d9\ud654 \uc81c\uc548, \ub0b4\uc77c \uc774\uc5b4\ud560 \uac83, \uc720\ud1b5\uae30\ud55c \ub4f1 \uad00\ub828 \uc5c6\ub294 \uc139\uc158 \ubaa8\ub450 \uc0dd\ub7b5."
+        },
+        {
+          "text": "\ub370\uc774\ud130 \ub2e8\uc21c \ub098\uc5f4\uc774 \uc544\ub2cc \ud574\uc11d+\uc81c\uc548\uc774 \uc788\ub294\uac00",
+          "passed": true,
+          "evidence": "9.5h \uacfc\uc791\uc5c5 + \uc218\uba74 5.5h + \uc2a4\ud2b8\ub808\uc2a4 7 + \uc544\uce68 \uac70\ub984\uc744 \ubcf5\ud569 \uc0c1\ud0dc\ub85c \ud574\uc11d. \uc989\uc2dc \uc2e4\ud589 \uac00\ub2a5\ud55c \uad6c\uccb4\uc801 \uc81c\uc548 \ud3ec\ud568."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 3,
+        "failed": 0,
+        "total": 3,
+        "time_seconds": 0.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "\uc758\ub3c4 \ud655\uc778 \ub2e8\uacc4\uac00 \uc788\ub294\uac00",
+          "passed": true,
+          "evidence": "\uc8fc\uac04 \ub9ac\ubdf0 \uc804\uccb4 \ucf54\uce6d \uc758\ub3c4\ub85c \ucc98\ub9ac. \ucf54\uce6d \uc2dc\uc791 \uc804 \uc758\ub3c4 \ud30c\uc545 \ub2e8\uacc4 \uc801\uc6a9."
+        },
+        {
+          "text": "\ud0dc\uadf8/\ub808\ud3ec \ubd84\ud3ec, \uc694\uc77c\ubcc4 \uc0dd\uc0b0\uc131, \ud734\uc2dd \ud328\ud134 \uc911 \ucd5c\uc18c 1\uac1c \ud3ec\ud568",
+          "passed": true,
+          "evidence": "\ud83c\udff7 \ud0dc\uadf8\u00b7\ub808\ud3ec \ubd84\ud3ec, \ud83d\udcc5 \uc694\uc77c\ubcc4 \uc0dd\uc0b0\uc131, \ud83d\udecc \ud734\uc2dd \ud328\ud134, \ud83d\udc8a \uc8fc\uac04 \uac74\uac15 \uc694\uc57d 4\uac1c \uc2e0\uaddc \uc139\uc158 \ubaa8\ub450 \ud3ec\ud568."
+        },
+        {
+          "text": "\uc8fc\uac04 \ud328\ud134 \ud574\uc11d + \ub2e4\uc74c \uc8fc \ubc29\ud5a5 \uc81c\uc548\uc774 \uc788\ub294\uac00",
+          "passed": true,
+          "evidence": "\ub514\ubc84\uae45 30% \u2192 \ud14c\uc2a4\ud2b8 \ucee4\ubc84\ub9ac\uc9c0 \uc5b8\uae09, \uc0c8\ubcbd \uc791\uc5c5 repeated_patterns \ucd94\uc801\ud574 \uc774\uc804 \ud328\ud134 \uc5f0\uc18d\uc131 \uba85\uc2dc, avg_sleep\uacfc \uc0c8\ubcbd \uc791\uc5c5 \uc778\uacfc \uc5f0\uacb0."
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "old_skill": {
+      "pass_rate": {
+        "mean": 0.3033,
+        "stddev": 0.0462,
+        "min": 0.25,
+        "max": 0.33
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "-0.70",
+      "time_seconds": "+0.0",
+      "tokens": "+0"
+    }
+  },
+  "notes": []
+}

@@ -1,0 +1,22 @@
+{
+  "eval_id": 3,
+  "config": "with_skill",
+  "expectations": [
+    {
+      "text": "의도 확인 단계가 있는가",
+      "passed": true,
+      "evidence": "주간 리뷰 전체 코칭 의도로 처리. 코칭 시작 전 의도 파악 단계 적용."
+    },
+    {
+      "text": "태그/레포 분포, 요일별 생산성, 휴식 패턴 중 최소 1개 포함",
+      "passed": true,
+      "evidence": "🏷 태그·레포 분포, 📅 요일별 생산성, 🛌 휴식 패턴, 💊 주간 건강 요약 4개 신규 섹션 모두 포함."
+    },
+    {
+      "text": "주간 패턴 해석 + 다음 주 방향 제안이 있는가",
+      "passed": true,
+      "evidence": "디버깅 30% → 테스트 커버리지 언급, 새벽 작업 repeated_patterns 추적해 이전 패턴 연속성 명시, avg_sleep과 새벽 작업 인과 연결."
+    }
+  ],
+  "pass_rate": 1.0
+}

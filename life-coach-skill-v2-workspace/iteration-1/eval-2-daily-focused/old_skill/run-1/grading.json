@@ -1,0 +1,28 @@
+{
+  "eval_id": 2,
+  "config": "old_skill",
+  "expectations": [
+    {
+      "text": "의도 파악 후 해당 섹션에만 집중하는가",
+      "passed": false,
+      "evidence": "focused 요청 처리 메커니즘 없음. 고정 4섹션 템플릿 그대로 적용. 건강/과작업 요청을 반영하지 못함."
+    },
+    {
+      "text": "건강 + 과작업 섹션에 집중하고 불필요 섹션 생략",
+      "passed": false,
+      "evidence": "고정 섹션 구조(오늘의 정리→코칭→자동화→내일)를 그대로 출력. 건강 전용 섹션 없고, 내용이 코칭 안에 묻힘."
+    },
+    {
+      "text": "데이터 단순 나열이 아닌 해석+제안이 있는가",
+      "passed": true,
+      "evidence": "기본적인 해석(과작업 주의, 운동 권장)은 있으나 깊이가 얕고 복합 상태 연결 없음."
+    }
+  ],
+  "pass_rate": 0.33,
+  "summary": {
+    "passed": 1,
+    "failed": 2,
+    "total": 3,
+    "pass_rate": 0.33
+  }
+}

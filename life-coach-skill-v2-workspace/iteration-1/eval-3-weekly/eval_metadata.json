@@ -1,0 +1,10 @@
+{
+  "eval_id": 3,
+  "eval_name": "weekly-full-review",
+  "prompt": "이번 주 리뷰해줘",
+  "assertions": [
+    {"id": "coach-role", "description": "의도 확인 단계가 있는가"},
+    {"id": "new-weekly-sections", "description": "태그/레포 분포, 요일별 생산성, 휴식 패턴 중 최소 1개 포함"},
+    {"id": "coaching-quality", "description": "주간 패턴 해석 + 다음 주 방향 제안이 있는가"}
+  ]
+}
