@@ -69,6 +69,7 @@ def sync_date(conn, date_str: str) -> int:
                 "source": "cc",
                 "session_id": session_id,
                 "repo": s.get("repo", "unknown"),
+                "branch": s.get("branch"),
                 "tag": s.get("tag", ""),
                 "summary": s.get("summary", "") or s.get("topic", ""),
                 "start_at": start_at,

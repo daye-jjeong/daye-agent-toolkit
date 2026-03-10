@@ -23,8 +23,17 @@ def get_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     if not _schema_initialized:
         conn.executescript(SCHEMA_PATH.read_text())
+        _migrate(conn)
         _schema_initialized = True
     return conn
+
+
+def _migrate(conn: sqlite3.Connection):
+    """Additive schema migrations for existing databases."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()}
+    if "branch" not in cols:
+        conn.execute("ALTER TABLE activities ADD COLUMN branch TEXT")
+        conn.commit()
 
 
 @contextmanager
@@ -44,14 +53,15 @@ def open_conn(auto_commit=True):
 
 def upsert_activity(conn: sqlite3.Connection, data: dict):
     conn.execute("""
-        INSERT INTO activities (source, session_id, repo, tag, summary,
+        INSERT INTO activities (source, session_id, repo, branch, tag, summary,
             start_at, end_at, duration_min, file_count, error_count,
             has_tests, has_commits, token_total, raw_json)
-        VALUES (:source, :session_id, :repo, :tag, :summary,
+        VALUES (:source, :session_id, :repo, :branch, :tag, :summary,
             :start_at, :end_at, :duration_min, :file_count, :error_count,
             :has_tests, :has_commits, :token_total, :raw_json)
         ON CONFLICT(source, session_id) DO UPDATE SET
-            repo=excluded.repo, tag=excluded.tag, summary=excluded.summary,
+            repo=excluded.repo, branch=excluded.branch,
+            tag=excluded.tag, summary=excluded.summary,
             end_at=excluded.end_at, duration_min=excluded.duration_min,
             file_count=excluded.file_count, token_total=excluded.token_total,
             raw_json=excluded.raw_json
