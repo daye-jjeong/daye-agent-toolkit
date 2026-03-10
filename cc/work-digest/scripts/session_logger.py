@@ -66,14 +66,19 @@ def already_recorded(session_id: str, event: str) -> bool:
 # ── repo 식별 ─────────────────────────────────────
 
 def detect_repo(cwd: str) -> str:
-    """cwd에서 git repo 이름 추출. git 없으면 디렉토리명."""
+    """cwd에서 git repo 이름 추출. worktree면 원본 레포 이름 반환."""
     try:
+        # --git-common-dir: worktree에서는 원본 레포의 .git 경로 반환
         result = subprocess.run(
-            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            ["git", "-C", cwd, "rev-parse", "--git-common-dir"],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode == 0:
-            return Path(result.stdout.strip()).name
+            git_common = Path(result.stdout.strip())
+            if not git_common.is_absolute():
+                git_common = (Path(cwd) / git_common).resolve()
+            # .git → parent = repo root
+            return git_common.parent.name
     except Exception:
         pass
     return Path(cwd).name
