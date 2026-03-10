@@ -12,19 +12,38 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통합 코칭 리포트를 생성한다.
 데이터는 life-dashboard-mcp SQLite에서 조회. health-coach 기능을 흡수.
 
-## 온디맨드 사용 (/coach)
+## 온디맨드 코칭 (/coach)
 
-스크립트가 데이터를 수집하고, LLM이 직접 코칭을 수행한다.
+**당신은 코치다.** 스크립트는 데이터를 수집하는 도구일 뿐이다.
+데이터를 단순히 나열하지 마라 — 패턴을 읽고, 해석하고, 제안하고, 질문해라.
 
-### 일일 코칭
-1. `python3 scripts/daily_coach.py --json` 실행 → JSON 데이터 획득
-2. `references/coaching-prompts.md`의 일일 코칭 프레임 적용
-3. 데이터 기반으로 코칭 대화
+### 준비 — 데이터 수집
 
-### 주간 코칭
-1. `python3 scripts/weekly_coach.py --json` 실행 → JSON 데이터 획득
-2. `references/coaching-prompts.md`의 주간 코칭 프레임 적용
-3. 주간 트렌드 + 방향성 코칭 대화
+**일일:**
+```bash
+python3 {baseDir}/scripts/daily_coach.py --json
+python3 {baseDir}/scripts/daily_coach.py --json | python3 {baseDir}/scripts/timeline_html.py
+open /tmp/work_timeline.html
+```
+
+**주간:**
+```bash
+python3 {baseDir}/scripts/weekly_coach.py --json
+python3 {baseDir}/scripts/weekly_coach.py --json | python3 {baseDir}/scripts/timeline_html.py --weekly
+open /tmp/work_timeline.html
+```
+
+### 코칭 시작 — 의도 확인
+
+데이터 수집 후, 바로 리포트를 쏟아내지 마라. 먼저 의도를 확인해라:
+
+- 사용자가 "빠른 요약" 또는 아무 말 없으면 → `references/coaching-prompts.md` 전체 프레임 적용
+- "X 부분만 봐줘" 식이면 → 해당 섹션만 깊게 분석
+
+### 코칭 실행
+
+`references/coaching-prompts.md` 프레임으로 데이터를 해석하고 코칭한다.
+escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
 
 ### 대안: MCP 도구 사용
 life-dashboard MCP의 `get_today_summary` 도구로도 데이터 조회 가능.
@@ -41,20 +60,24 @@ coach_state의 escalation_level에 따라 톤 변경:
 ### 일일 코칭 구성
 
 1. **오늘의 정리** — 작업 시간, 세션 상세, 토큰 사용량
-2. **레포별 상세** — 세션 수, 작업시간, 토큰, 요약 (daily_digest에서 이관)
-3. **코칭** — 과작업, 수면 패턴, 집중도 기반 제안
-4. **패턴 피드백** — 컨텍스트 스위칭, 에러, 테스트/커밋 현황
-5. **자동화 제안** — 반복 명령/작업 감지
-6. **건강 넛지** — 운동, 휴식
-7. **유통기한** — 만료/임박 식재료 알림 (pantry-manager 데이터)
+2. **레포별 상세** — 세션 수, 작업시간, 핵심 요약, 커밋 여부
+3. **집중도 지표** — 세션 평균 길이, 짧은 세션(<15분) 비율, 작업 완료율(has_commits)
+4. **코칭** — 행동 신호/반복 패턴/과작업/수면 패턴 기반 제안
+5. **자동화 제안** — 반복 명령/패턴 감지
+6. **내일 이어할 것** — 진행중 작업
+7. **건강** — check_in, exercises, meals, symptoms
+8. **유통기한** — pantry_expiry (만료/임박)
+9. **마무리 질문** — 데이터 기반 reflection 질문 1개
 
 ### 주간 코칭 구성
 
 1. **주간 정리** — 총 세션, 시간, 토큰
-2. **일별 활동** — 바 차트 (daily_stats 기반)
-3. **태그/레포 분포** — 작업 유형 편중 분석
-4. **방향성 코칭** — 주간 트렌드 기반 다음 주 방향 제안
-5. **다음 주 생각해볼 것** — 패턴 기반 reflect 질문
+2. **태그·레포 분포** — 태그별/레포별 비율, 편중 분석
+3. **요일별 생산성** — daily[].work_hours 기반 생산적인 요일 패턴
+4. **휴식 패턴** — 무작업일 수 및 시점
+5. **방향성 코칭** — weekly_signals + 이전 코칭 연속성 추적
+6. **주간 건강 요약** — exercises, meals, check_ins
+7. **다음 주 생각해볼 것** — 패턴 기반 reflect 질문
 
 ## 자동화
 
@@ -69,6 +92,8 @@ coach_state의 escalation_level에 따라 톤 변경:
 |--------|---------|
 | `daily_coach.py` | 일일 데이터 수집 + 템플릿 리포트 → 텔레그램 (건강 섹션 포함) |
 | `weekly_coach.py` | 주간 데이터 수집 + 템플릿 리포트 → 텔레그램 (건강 섹션 포함) |
+| `timeline_html.py` | 인터랙티브 타임라인 HTML 생성 → /tmp/work_timeline.html |
+| `timeline_chart.py` | PNG 타임라인 차트 생성 → /tmp/work_timeline.png |
 | `health_cmds.py` | 건강 코칭 서브커맨드 (루틴 추천, 증상 분석, 운동 가이드, 라이프스타일 조언, 건강 체크) |
 | `track_health.py` | 일일 건강 체크인 기록 (수면, 걸음수, 운동, 스트레스, 수분) |
 | `daily_routine.py` | 일일 건강 루틴 체크리스트 |
