@@ -140,7 +140,8 @@ def _build_repos_detail(data: dict) -> str | None:
                 for s in bsess[:3]:
                     lines.append(_fmt_session_line(s, indent))
         else:
-            for s in list(branch_groups.values())[0][:3]:
+            all_sess = list(branch_groups.values())[0] if branch_groups else []
+            for s in all_sess[:3]:
                 lines.append(_fmt_session_line(s))
     return "\n".join(lines)
 

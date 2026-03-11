@@ -83,8 +83,10 @@ def detect_repo_and_branch(cwd: str) -> tuple[str, str | None]:
             if not git_common.is_absolute():
                 git_common = (Path(cwd) / git_common).resolve()
             repo = git_common.parent.name
+    except Exception:
+        pass
 
-        # branch 감지
+    try:
         br_result = subprocess.run(
             ["git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True, text=True, timeout=5,
