@@ -40,6 +40,7 @@ RE_BLOCKQUOTE = re.compile(
 RE_TOKEN_ITEM = re.compile(r"^-\s+(\w[\w\s]*):\s*(.+)$")
 
 RE_TOPIC = re.compile(r"^\*\*주제\*\*:\s*(.+)$")
+RE_BRANCH = re.compile(r"^\*\*브랜치\*\*:\s*(.+)$")
 RE_SUMMARY = re.compile(r"^\*\*요약\*\*:\s*(?:\[([^\]]+)\]\s*)?(.+)$")
 RE_DECISIONS = re.compile(r"^\*\*결정\*\*:\s*(.+)$")
 RE_MISTAKES = re.compile(r"^\*\*시행착오\*\*:\s*(.+)$")
@@ -106,6 +107,7 @@ def parse_session_block(lines: list[str]) -> dict | None:
     file_count = 0
     duration_min = None
     topic = ""
+    branch = None
     summary = ""
     tag = ""
     files: list[str] = []
@@ -165,6 +167,12 @@ def parse_session_block(lines: list[str]) -> dict | None:
                 summary_lines.append(next_line)
                 i += 1
             summary = "\n".join(summary_lines)
+            continue
+
+        # Branch
+        brm = RE_BRANCH.match(stripped)
+        if brm:
+            branch = brm.group(1).strip()
             continue
 
         # Topic (fallback — 요약이 없는 세션)
@@ -229,6 +237,7 @@ def parse_session_block(lines: list[str]) -> dict | None:
         "end_time": end_time,
         "session_id": session_id,
         "repo": repo,
+        "branch": branch,
         "file_count": file_count,
         "duration_min": duration_min,
         "topic": topic,

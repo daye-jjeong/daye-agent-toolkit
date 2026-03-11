@@ -65,8 +65,13 @@ def already_recorded(session_id: str, event: str) -> bool:
 
 # ── repo 식별 ─────────────────────────────────────
 
-def detect_repo(cwd: str) -> str:
-    """cwd에서 git repo 이름 추출. worktree면 원본 레포 이름 반환."""
+def detect_repo_and_branch(cwd: str) -> tuple[str, str | None]:
+    """cwd에서 (repo 이름, branch) 추출. worktree면 원본 레포 이름 반환.
+
+    branch가 main/master이면 None 반환 (태스크 식별 의미 없음).
+    """
+    repo = Path(cwd).name
+    branch = None
     try:
         # --git-common-dir: worktree에서는 원본 레포의 .git 경로 반환
         result = subprocess.run(
@@ -77,11 +82,22 @@ def detect_repo(cwd: str) -> str:
             git_common = Path(result.stdout.strip())
             if not git_common.is_absolute():
                 git_common = (Path(cwd) / git_common).resolve()
-            # .git → parent = repo root
-            return git_common.parent.name
+            repo = git_common.parent.name
     except Exception:
         pass
-    return Path(cwd).name
+
+    try:
+        br_result = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if br_result.returncode == 0:
+            br = br_result.stdout.strip()
+            if br and br not in ("main", "master", "HEAD"):
+                branch = br
+    except Exception:
+        pass
+    return repo, branch
 
 
 # ── 시스템 태그 제거 ──────────────────────────────
@@ -206,7 +222,8 @@ def summarize_session(conversation: str, repo: str) -> dict | None:
         "- 기타: 위 9개 중 어느 것도 맞지 않을 때만. "
         "복합 작업이면 가장 비중이 큰 것을 골라라. 기타를 쓰지 마라.\n\n"
         "2줄째부터: 이 세션에서 한 작업을 한국어 2-3줄로 요약해라. "
-        "구체적으로 뭘 만들었는지, 뭘 고쳤는지, 뭘 조사했는지 중심으로. "
+        "결과물/변경사항 중심으로 쓰라 (예: 'cron-runs JSON→SQLite 마이그레이션 완료, 296개 레코드 이전'). "
+        "프로세스 설명(브레인스토밍, 설계, PR 리뷰, 머지, 테스트 작성 등)은 생략하라. "
         "파일 경로나 명령어는 생략하고 작업의 의미만 쓰라.\n\n"
         "형식:\n[태그]\n요약 내용"
     )
@@ -533,6 +550,10 @@ def build_session_section(session_id, data, now, repo):
     lines.append(f"> 파일 {file_count}개 | {duration} | {token_str}{commit_flag}")
     lines.append("")
 
+    if data.get("branch"):
+        lines.append(f"**브랜치**: {data['branch']}")
+        lines.append("")
+
     if data.get("summary"):
         s = data["summary"]
         tag = s.get("tag", "") if isinstance(s, dict) else ""
@@ -607,15 +628,17 @@ def write_session_marker(session_id, data, now, repo):
 
 def send_session_telegram(data: dict, repo: str, duration_min: int | None):
     """세션 종료 시 요약을 텔레그램으로 전송."""
+    branch = data.get("branch")
+    repo_label = f"{repo}/{branch}" if branch else repo
     summary = data.get("summary")
     if isinstance(summary, dict):
         tag = summary.get("tag", "")
         text = summary.get("text", "")
         tag_str = f"[{tag}] " if tag else ""
-        msg = f"✅ {repo} — {tag_str}{text}"
+        msg = f"✅ {repo_label} — {tag_str}{text}"
     else:
         topic = data.get("topic", "작업 완료")
-        msg = f"✅ {repo} — {topic[:100]}"
+        msg = f"✅ {repo_label} — {topic[:100]}"
 
     dur = f" ({duration_min}분)" if duration_min else ""
     msg = f"{msg}{dur}"
@@ -641,8 +664,9 @@ def main():
         sys.exit(0)
 
     now = datetime.now(KST)
-    repo = detect_repo(cwd) if cwd else "unknown"
+    repo, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
     data = parse_transcript(transcript_path)
+    data["branch"] = branch
 
     # 무의미한 세션은 스킵
     if not data["files"] and not data["commands"] and not data["topic"]:

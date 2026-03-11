@@ -74,6 +74,39 @@ def md_to_html(md: str) -> str:
     return "\n".join(out)
 
 
+def group_sessions_by_repo_branch(
+    sessions: list[dict],
+    short_repo: bool = False,
+) -> list[tuple[str, int, int, dict[str | None, list[dict]]]]:
+    """세션을 레포 > 브랜치로 그룹핑.
+
+    Returns: [(repo, total_dur, total_tok, {branch: [sessions]}), ...]
+             세션 수 내림차순 정렬.
+    short_repo: True이면 repo 경로의 마지막 부분만 사용.
+    """
+    repo_groups: dict[str, list[dict]] = {}
+    for s in sessions:
+        repo = (s.get("repo") or "unknown")
+        if short_repo:
+            repo = repo.split("/")[-1]
+        repo_groups.setdefault(repo, []).append(s)
+
+    result = []
+    for repo, sess in sorted(repo_groups.items(), key=lambda x: len(x[1]), reverse=True):
+        total_dur = sum(s.get("duration_min", 0) for s in sess)
+        total_tok = sum(s.get("token_total", 0) or 0 for s in sess)
+        branch_groups: dict[str | None, list[dict]] = {}
+        for s in sess:
+            branch_groups.setdefault(s.get("branch"), []).append(s)
+        result.append((repo, total_dur, total_tok, branch_groups))
+    return result
+
+
+def has_meaningful_branches(branch_groups: dict[str | None, list[dict]]) -> bool:
+    """branch가 있는 세션이 하나라도 있으면 True."""
+    return len(branch_groups) > 1 or (None not in branch_groups)
+
+
 def find_project_memory(repo_name: str) -> Path | None:
     """레포 이름에 매칭되는 프로젝트 memory 디렉토리 탐색."""
     try:

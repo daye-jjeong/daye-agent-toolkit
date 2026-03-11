@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS activities (
     source TEXT NOT NULL,
     session_id TEXT,
     repo TEXT,
+    branch TEXT,
     tag TEXT,
     summary TEXT,
     start_at TEXT NOT NULL,

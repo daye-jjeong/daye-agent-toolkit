@@ -25,7 +25,7 @@ from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGR
 KST = timezone(timedelta(hours=9))
 OVERWORK_THRESHOLD_HOURS = 8
 
-from _helpers import find_project_memory
+from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches
 
 
 def get_today_data(conn, date_str: str) -> dict:
@@ -38,7 +38,7 @@ def get_today_data(conn, date_str: str) -> dict:
 
     next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     activities = conn.execute("""
-        SELECT repo, tag, summary, start_at, end_at, duration_min,
+        SELECT repo, branch, tag, summary, start_at, end_at, duration_min,
                token_total, error_count, has_tests, has_commits
         FROM activities WHERE start_at >= ? AND start_at < ?
         ORDER BY start_at
@@ -108,32 +108,41 @@ def _build_stats_line(data: dict) -> str:
     return line
 
 
+def _fmt_session_line(s: dict, indent: str = "    ") -> str:
+    start = (s.get("start_at") or "")[11:16] or "?"
+    tag = s.get("tag", "")
+    summary = (s.get("summary") or "")[:80]
+    return f"{indent}- {start} [{tag}] {summary}"
+
+
 def _build_repos_detail(data: dict) -> str | None:
-    """레포별 세션 상세."""
+    """레포별 (> 브랜치별) 세션 상세."""
     sessions = data.get("sessions", [])
     if not sessions:
         return None
-    repo_groups: dict[str, list[dict]] = {}
-    for s in sessions:
-        repo = s.get("repo") or "unknown"
-        repo_groups.setdefault(repo, []).append(s)
 
     lines = ["📂 레포별:"]
-    for repo, sess in sorted(repo_groups.items(), key=lambda x: len(x[1]), reverse=True):
-        total_dur = sum(s.get("duration_min", 0) for s in sess)
-        total_tok = sum(s.get("token_total", 0) for s in sess)
-        parts = [f"{len(sess)}세션"]
+    for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(sessions):
+        sess_count = sum(len(bs) for bs in branch_groups.values())
+        parts = [f"{sess_count}세션"]
         if total_dur > 0:
             h, m = divmod(total_dur, 60)
             parts.append(f"{h}시간 {m}분" if h else f"{m}분")
         if total_tok > 0:
             parts.append(f"{format_tokens(total_tok)} tokens")
         lines.append(f"  ▸ {repo} ({', '.join(parts)})")
-        for s in sess[:3]:
-            start = (s.get("start_at") or "")[11:16] or "?"
-            tag = s.get("tag", "")
-            summary = (s.get("summary") or "")[:80]
-            lines.append(f"    - {start} [{tag}] {summary}")
+
+        if has_meaningful_branches(branch_groups):
+            for branch, bsess in branch_groups.items():
+                if branch:
+                    lines.append(f"    📌 {branch}")
+                indent = "      " if branch else "    "
+                for s in bsess[:3]:
+                    lines.append(_fmt_session_line(s, indent))
+        else:
+            all_sess = list(branch_groups.values())[0] if branch_groups else []
+            for s in all_sess[:3]:
+                lines.append(_fmt_session_line(s))
     return "\n".join(lines)
 
 

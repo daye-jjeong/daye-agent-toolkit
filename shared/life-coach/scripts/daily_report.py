@@ -20,7 +20,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline_html import build, timeline_section_html
-from _helpers import WEEKDAY, TAG_COLORS, esc_html as _esc, fmt_tokens as _fmt_tokens, md_to_html
+from _helpers import (
+    WEEKDAY, TAG_COLORS, esc_html as _esc, fmt_tokens as _fmt_tokens, md_to_html,
+    group_sessions_by_repo_branch, has_meaningful_branches,
+)
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
@@ -74,43 +77,54 @@ def _build_nudges(data: dict) -> str:
     return f'<div class="nudge-row">{"".join(nudges)}</div>'
 
 
+def _build_session_row(s: dict) -> str:
+    start = (s.get("start_at") or "")[11:16] or "?"
+    tag = s.get("tag") or "기타"
+    summary = _esc(s.get("summary") or "")
+    tag_color = TAG_COLORS.get(tag, "#707070")
+    return (
+        f'<div class="sess-row">'
+        f'<span class="sess-time">{start}</span>'
+        f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span>'
+        f'<span class="sess-summary">{summary}</span>'
+        f'</div>'
+    )
+
+
 def _build_repos_detail(data: dict) -> str:
     sessions = data.get("sessions", [])
     if not sessions:
         return ""
-    repo_groups: dict[str, list[dict]] = {}
-    for s in sessions:
-        repo = (s.get("repo") or "unknown").split("/")[-1]
-        repo_groups.setdefault(repo, []).append(s)
 
     rows = []
-    for repo, sess in sorted(repo_groups.items(), key=lambda x: len(x[1]), reverse=True):
-        total_dur = sum(s.get("duration_min", 0) for s in sess)
-        total_tok = sum(s.get("token_total", 0) or 0 for s in sess)
+    for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(sessions, short_repo=True):
+        sess_count = sum(len(bs) for bs in branch_groups.values())
         h, m = divmod(total_dur, 60)
         dur_str = f"{h}h {m}m" if h else f"{m}m"
-        meta = f'{len(sess)}세션 · {dur_str}'
+        meta = f'{sess_count}세션 · {dur_str}'
         if total_tok > 0:
             meta += f' · {_fmt_tokens(total_tok)} tokens'
 
-        session_rows = []
-        for s in sess:
-            start = (s.get("start_at") or "")[11:16] or "?"
-            tag = s.get("tag") or "기타"
-            summary = _esc(s.get("summary") or "")
-            tag_color = TAG_COLORS.get(tag, "#707070")
-            session_rows.append(
-                f'<div class="sess-row">'
-                f'<span class="sess-time">{start}</span>'
-                f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span>'
-                f'<span class="sess-summary">{summary}</span>'
-                f'</div>'
-            )
+        inner_html = ""
+        if has_meaningful_branches(branch_groups):
+            for branch, bsess in branch_groups.items():
+                if branch:
+                    inner_html += (
+                        f'<div class="branch-group">'
+                        f'<div class="branch-name">{_esc(branch)}</div>'
+                    )
+                    inner_html += "".join(_build_session_row(s) for s in bsess)
+                    inner_html += '</div>'
+                else:
+                    inner_html += "".join(_build_session_row(s) for s in bsess)
+        else:
+            all_sess = list(branch_groups.values())[0] if branch_groups else []
+            inner_html = "".join(_build_session_row(s) for s in all_sess)
 
         rows.append(
             f'<div class="repo-group">'
             f'<div class="repo-name">{_esc(repo)} <span class="repo-meta">{meta}</span></div>'
-            f'{"".join(session_rows)}'
+            f'{inner_html}'
             f'</div>'
         )
     return f'<div class="section"><h3>레포별 세션</h3>{"".join(rows)}</div>'
@@ -250,6 +264,8 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 .sess-time{color:var(--mu);flex-shrink:0;width:40px}
 .sess-tag{flex-shrink:0;font-weight:600;font-size:11px}
 .sess-summary{line-height:1.5}
+.branch-group{margin:6px 0 8px 12px;padding-left:10px;border-left:2px solid #444}
+.branch-name{font-size:11px;color:#9B7BC8;font-weight:600;margin-bottom:2px}
 .coaching{border-left:4px solid #7ABD7E}
 .coaching-h{font-size:14px;font-weight:700;color:#E0E0E0;margin:14px 0 6px}
 .coaching-h:first-child{margin-top:0}
