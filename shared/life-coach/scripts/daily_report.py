@@ -20,7 +20,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline_html import build, timeline_section_html
-from _helpers import WEEKDAY, TAG_COLORS, esc_html as _esc, fmt_tokens as _fmt_tokens, md_to_html
+from _helpers import (
+    WEEKDAY, TAG_COLORS, esc_html as _esc, fmt_tokens as _fmt_tokens, md_to_html,
+    group_sessions_by_repo_branch, has_meaningful_branches,
+)
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
@@ -92,30 +95,18 @@ def _build_repos_detail(data: dict) -> str:
     sessions = data.get("sessions", [])
     if not sessions:
         return ""
-    repo_groups: dict[str, list[dict]] = {}
-    for s in sessions:
-        repo = (s.get("repo") or "unknown").split("/")[-1]
-        repo_groups.setdefault(repo, []).append(s)
 
     rows = []
-    for repo, sess in sorted(repo_groups.items(), key=lambda x: len(x[1]), reverse=True):
-        total_dur = sum(s.get("duration_min", 0) for s in sess)
-        total_tok = sum(s.get("token_total", 0) or 0 for s in sess)
+    for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(sessions, short_repo=True):
+        sess_count = sum(len(bs) for bs in branch_groups.values())
         h, m = divmod(total_dur, 60)
         dur_str = f"{h}h {m}m" if h else f"{m}m"
-        meta = f'{len(sess)}세션 · {dur_str}'
+        meta = f'{sess_count}세션 · {dur_str}'
         if total_tok > 0:
             meta += f' · {_fmt_tokens(total_tok)} tokens'
 
-        # branch별 그룹핑
-        branch_groups: dict[str | None, list[dict]] = {}
-        for s in sess:
-            branch_groups.setdefault(s.get("branch"), []).append(s)
-
-        has_branches = len(branch_groups) > 1 or (None not in branch_groups)
-
         inner_html = ""
-        if has_branches:
+        if has_meaningful_branches(branch_groups):
             for branch, bsess in branch_groups.items():
                 if branch:
                     inner_html += (
@@ -127,7 +118,8 @@ def _build_repos_detail(data: dict) -> str:
                 else:
                     inner_html += "".join(_build_session_row(s) for s in bsess)
         else:
-            inner_html = "".join(_build_session_row(s) for s in sess)
+            all_sess = list(branch_groups.values())[0] if branch_groups else []
+            inner_html = "".join(_build_session_row(s) for s in all_sess)
 
         rows.append(
             f'<div class="repo-group">'
