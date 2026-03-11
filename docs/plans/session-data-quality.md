@@ -17,7 +17,7 @@ work-log 마크다운에 `**브랜치**: wt/feature-x` 줄 추가 (기존 `**주
 
 ## Tasks
 
-- [x] T1: session_logger.py — detect_repo() → detect_repo_and_branch() + 마크다운에 branch 기록
+- [x] T1 ✅: session_logger.py — detect_repo() → detect_repo_and_branch() + 마크다운에 branch 기록
 - [x] T2: session_logger.py — LLM 요약 프롬프트 개선 (프로세스 생략, 결과물만)
 - [x] T3: parse_work_log.py — **브랜치**: 줄 파싱 + session dict에 branch 필드
 - [x] T4: schema.sql + db.py + sync_cc.py — activities 테이블 branch 컬럼 추가
