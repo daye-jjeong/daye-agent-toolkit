@@ -1,0 +1,1 @@
+{"type":"approval-requested","thread-id":"019cd9aa-1111-7222-8333-abcdef123456","turn-id":"019cd9aa-1112-7444-8555-abcdef123456","cwd":"/Users/dayejeong/git_workplace/daye-agent-toolkit","input-messages":["Run `git status`."],"last-assistant-message":"Do you want me to run `git status`?"}

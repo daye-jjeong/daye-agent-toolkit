@@ -1,0 +1,6 @@
+work-log/*.md
+state/*.json
+tests/tmp/
+telegram.conf
+**/__pycache__/
+*.pyc
