@@ -38,13 +38,28 @@ def get_today_data(conn, date_str: str) -> dict:
 
     next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     activities = conn.execute("""
-        SELECT repo, branch, tag, summary, start_at, end_at, duration_min,
-               token_total, error_count, has_tests, has_commits
+        SELECT source, repo, branch, tag, summary, start_at, end_at, duration_min,
+               token_total, error_count, has_tests, has_commits, raw_json
         FROM activities WHERE start_at >= ? AND start_at < ?
         ORDER BY start_at
     """, (date_str, next_date)).fetchall()
 
-    sessions = [dict(a) for a in activities]
+    sessions = []
+    for a in activities:
+        s = dict(a)
+        # raw_json에서 LLM 요약에 필요한 context 추출
+        raw = json.loads(s.pop("raw_json", "null") or "{}")
+        if raw.get("commands"):
+            s["commands"] = raw["commands"][:5]
+        if raw.get("user_messages"):
+            s["user_messages"] = [m[:200] for m in raw["user_messages"][:3]]
+        if raw.get("agent_messages"):
+            s["agent_messages"] = [m[:200] for m in raw["agent_messages"][:2]]
+        if raw.get("files_changed"):
+            s["files_changed"] = raw["files_changed"][:10]
+        if raw.get("topic"):
+            s["topic"] = raw["topic"][:200]
+        sessions.append(s)
 
     # 오늘의 행동 신호
     signals = conn.execute("""

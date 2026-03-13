@@ -496,6 +496,14 @@ def parse_transcript(transcript_path: str) -> dict:
         end_kst = last_ts.astimezone(KST)
         end_time_str = end_kst.strftime("%H:%M")
 
+    # 시작 시간: 가장 이른 타임스탬프를 KST로 변환
+    start_kst = None
+    if timestamps:
+        first_ts = min(timestamps)
+        if first_ts.tzinfo is None:
+            first_ts = first_ts.replace(tzinfo=timezone.utc)
+        start_kst = first_ts.astimezone(KST)
+
     return {
         "files": sorted(files_modified),
         "commands": commands_run[:10],
@@ -503,6 +511,7 @@ def parse_transcript(transcript_path: str) -> dict:
         "topic": first_user_msg,
         "duration_min": duration_min,
         "end_time": end_time_str,
+        "start_kst": start_kst,
         "has_commits": has_commits,
         "tokens": {
             "input": token_input,
@@ -530,7 +539,9 @@ def build_frontmatter(now):
 
 
 def build_session_section(session_id, data, now, repo):
-    time_str = now.strftime("%H:%M")
+    # 시작 시각: JSONL 첫 타임스탬프 (실제 대화 시점) 또는 fallback으로 now
+    start_kst = data.get("start_kst") or now
+    time_str = start_kst.strftime("%H:%M")
     sid_short = session_id[:8] if session_id else "unknown"
     end_time = data.get("end_time")
     if end_time and end_time != time_str:
@@ -609,16 +620,21 @@ def build_session_section(session_id, data, now, repo):
 
 
 def write_session_marker(session_id, data, now, repo):
-    """세션 마커를 daily log에 append."""
+    """세션 마커를 daily log에 append.
+
+    파일 날짜는 JSONL 첫 타임스탬프(실제 대화 시점) 기준.
+    세션을 며칠 후에 닫아도 실제 작업 날짜에 기록된다.
+    """
     WORK_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    daily_file = WORK_LOG_DIR / f"{now.strftime('%Y-%m-%d')}.md"
+    start_kst = data.get("start_kst") or now
+    daily_file = WORK_LOG_DIR / f"{start_kst.strftime('%Y-%m-%d')}.md"
     section = build_session_section(session_id, data, now, repo)
 
     with open(daily_file, "a") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
             if os.fstat(f.fileno()).st_size == 0:
-                f.write(build_frontmatter(now))
+                f.write(build_frontmatter(start_kst))
             f.write(section)
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)

@@ -7,7 +7,7 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 # Life Coach Skill
 
-**Version:** 0.5.0 | **Updated:** 2026-03-10
+**Version:** 0.6.0 | **Updated:** 2026-03-14
 
 CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통합 코칭 리포트를 생성한다.
 데이터는 life-dashboard-mcp SQLite에서 조회. health-coach 기능을 흡수.
@@ -17,43 +17,106 @@ CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통
 **당신은 코치다.** 스크립트는 데이터를 수집하는 도구일 뿐이다.
 데이터를 단순히 나열하지 마라 — 패턴을 읽고, 해석하고, 제안하고, 질문해라.
 
-### 준비 — 데이터 수집
+### 절차 (반드시 순서대로)
 
-**일일:**
+#### Step 1. DB 동기화
+
+데이터가 빠짐없이 모여야 정확한 코칭이 된다. **먼저 sync를 돌려라.**
+
 ```bash
-python3 {baseDir}/scripts/daily_coach.py --json > /tmp/_coach_data.json
-python3 {baseDir}/scripts/daily_report.py --input /tmp/_coach_data.json
-open /tmp/daily_report.html
+# life-dashboard-mcp 디렉토리 기준
+python3 {baseDir}/../life-dashboard-mcp/sync_cc.py --date <DATE>
+python3 {baseDir}/../life-dashboard-mcp/sync_codex.py --date <DATE>
 ```
 
-**주간:**
+출력에서 synced 세션 수를 확인. 0이면 해당 날짜에 로그가 없는 것.
+
+#### Step 2. JSON 데이터 추출
+
 ```bash
+# 일일
+python3 {baseDir}/scripts/daily_coach.py --json --date <DATE> > /tmp/_coach_data.json
+# 주간
 python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data.json
-python3 {baseDir}/scripts/weekly_report.py --input /tmp/_coach_data.json
+```
+
+`has_data: false`이면 sync가 안 된 것이니 Step 1을 다시 확인.
+
+#### Step 3. LLM 코칭 + 레포별 요약 생성
+
+`references/coaching-prompts.md` 프레임으로 데이터를 해석하고 **두 가지 파일**을 생성한다.
+escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
+
+**3a. 레포별 요약 JSON** → `/tmp/repo_summaries.json`
+
+세션의 `summary` 필드는 사용자 프롬프트라 의미 없는 경우가 많다.
+`commands`, `user_messages`, `agent_messages`, `files_changed`, `branch` 등을 종합해서
+**실제로 뭘 했는지** 구체적으로 요약한다.
+
+**요약 품질 기준:**
+- 단순히 "디버깅" "리뷰" 같은 한 단어 X → 어떤 기능/파일을 어떤 목적으로 작업했는지
+- 브랜치명이 있으면 포함
+- commands에서 실제 작업 맥락 추론 (git diff, pytest, 특정 파일 경로 등)
+- "이 요약만 읽고 어떤 기능을 작업했는지 알 수 있는가?" 기준으로 판단
+
+```json
+{
+  "dy-minions-squad": [
+    "[CC] [문서] fix/cron-retry-and-reply-routing — 워치독 스캔 머지 + state-sot-unification worktree 변경사항 리뷰. 머지 보류",
+    "[CC] [디버깅] OpenClaw 텔레그램 봇 응답 경로 추적 — openclaw logs에서 lane/session 로그 분석"
+  ],
+  "cube-backend": [
+    "[Codex] [설계] conveyor-belt-monitoring-v2 목업 검증 — RDS/MCP 접근 확인, 유닛 수 수정",
+    "[CC] [리뷰] order-queue-str worktree에서 queue.service.ts 변경사항 diff 리뷰"
+  ]
+}
+```
+
+키는 레포 이름(short name), 값은 기능별 작업 요약 리스트. 단일 문자열도 허용.
+
+**각 항목 앞에 반드시:**
+- `[CC]` 또는 `[Codex]` — 세션 source (sessions[].source 참조)
+- `[태그]` — 작업 유형. summary가 부정확하면 commands/messages에서 재판단
+
+**3b. 코칭 마크다운** → `/tmp/coaching.md`
+
+**3a의 레포별 요약을 먼저 완성한 뒤** 코칭을 작성한다. "오늘의 정리"는 레포별 요약의 상위 집약이어야 하기 때문.
+
+코칭 결과를 마크다운으로 저장:
+- 섹션 헤더 사용: `## 오늘의 정리`, `## 코칭`, `## 내일 이어할 것` 등
+- **레포별 상세는 여기에 넣지 않는다** (3a의 JSON이 HTML "레포별 작업" 섹션에 직접 들어감)
+
+**"오늘의 정리" 필수 항목:**
+- CC 세션 수/시간/토큰, Codex 세션 수/시간/토큰 (source별 분리)
+- 각 세션이 어떤 레포에서 무슨 작업이었는지 한줄 요약 (3a 기반)
+- 태그 분포
+
+**이 단계를 건너뛰면 HTML에 코칭이 빠지고 세션 원문이 그대로 노출된다.**
+
+#### Step 4. HTML 리포트 생성
+
+```bash
+# 일일 — --coaching + --repo-summaries 둘 다 전달
+python3 {baseDir}/scripts/daily_report.py \
+  --input /tmp/_coach_data.json \
+  --coaching /tmp/coaching.md \
+  --repo-summaries /tmp/repo_summaries.json
+open /tmp/daily_report.html
+
+# 주간
+python3 {baseDir}/scripts/weekly_report.py \
+  --input /tmp/_coach_data.json \
+  --coaching /tmp/coaching.md \
+  --repo-summaries /tmp/repo_summaries.json
 open /tmp/weekly_report.html
 ```
 
-### 코칭 시작 — 의도 확인
+#### 의도 확인
 
-데이터 수집 후, 바로 리포트를 쏟아내지 마라. 먼저 의도를 확인해라:
+사용자가 특정 부분만 요청하면 해당 섹션만 깊게 분석.
+아무 말 없으면 `references/coaching-prompts.md` 전체 프레임 적용.
 
-- 사용자가 "빠른 요약" 또는 아무 말 없으면 → `references/coaching-prompts.md` 전체 프레임 적용
-- "X 부분만 봐줘" 식이면 → 해당 섹션만 깊게 분석
-
-### 코칭 실행
-
-`references/coaching-prompts.md` 프레임으로 데이터를 해석하고 코칭한다.
-escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
-
-코칭 내용을 HTML 리포트에 포함하려면:
-1. 코칭 텍스트를 마크다운 파일로 저장 (`## 오늘의 정리`, `## 코칭`, `## 내일 이어할 것` 등 섹션 헤더 사용)
-2. `--coaching` 플래그로 전달:
-```bash
-python3 {baseDir}/scripts/daily_report.py --input /tmp/_coach_data.json --coaching /tmp/coaching.md
-open /tmp/daily_report.html
-```
-
-### 대안: MCP 도구 사용
+#### 대안: MCP 도구 사용
 life-dashboard MCP의 `get_today_summary` 도구로도 데이터 조회 가능.
 
 ## 코칭 프레임

@@ -14,7 +14,7 @@ Usage:
 --coaching: LLM이 생성한 마크다운 파일. 섹션 헤더(## 오늘의 정리, ## 코칭 등)로 구분.
 없으면 placeholder 표시.
 """
-import argparse, json, sys
+import argparse, json, re, sys
 from datetime import datetime
 from pathlib import Path
 
@@ -77,21 +77,90 @@ def _build_nudges(data: dict) -> str:
     return f'<div class="nudge-row">{"".join(nudges)}</div>'
 
 
-def _build_session_row(s: dict) -> str:
-    start = (s.get("start_at") or "")[11:16] or "?"
-    tag = s.get("tag") or "기타"
-    summary = _esc(s.get("summary") or "")
-    tag_color = TAG_COLORS.get(tag, "#707070")
-    return (
-        f'<div class="sess-row">'
-        f'<span class="sess-time">{start}</span>'
-        f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span>'
-        f'<span class="sess-summary">{summary}</span>'
-        f'</div>'
-    )
+def _build_work_items(sessions: list[dict]) -> str:
+    """세션을 태그별로 그룹핑, 대표 요약 + 메타 표시."""
+    tag_groups: dict[str, list[dict]] = {}
+    for s in sessions:
+        tag = s.get("tag") or "기타"
+        tag_groups.setdefault(tag, []).append(s)
+
+    items = []
+    for tag, group in sorted(
+        tag_groups.items(),
+        key=lambda x: sum(s.get("duration_min", 0) for s in x[1]),
+        reverse=True,
+    ):
+        best = max(group, key=lambda s: (s.get("duration_min") or 0))
+        summary = _esc(best.get("summary") or "(요약 없음)")
+        tag_color = TAG_COLORS.get(tag, "#707070")
+
+        total_dur = sum(s.get("duration_min", 0) for s in group)
+        has_commit = any(s.get("has_commits") for s in group)
+
+        meta_parts = []
+        if total_dur:
+            meta_parts.append(f"{total_dur}m")
+        if len(group) > 1:
+            meta_parts.append(f"{len(group)}세션")
+        if has_commit:
+            meta_parts.append("커밋")
+        meta_str = (
+            f' <span class="work-meta">({", ".join(meta_parts)})</span>'
+            if meta_parts else ""
+        )
+
+        items.append(
+            f'<div class="work-item">'
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'<span class="work-summary">{summary}{meta_str}</span>'
+            f'</div>'
+        )
+    return "".join(items)
 
 
-def _build_repos_detail(data: dict) -> str:
+_RE_TAGS = re.compile(r"^(\[(?:CC|Codex)\])\s*(\[[^\]]+\])\s*")
+
+SOURCE_COLORS = {"CC": "#4A90D9", "Codex": "#E07B5A"}
+
+
+def _render_summary_item(text: str) -> str:
+    """Parse [CC] [태그] prefix into colored tags, render the rest as text."""
+    m = _RE_TAGS.match(text)
+    if m:
+        source = m.group(1)[1:-1]  # "CC" or "Codex"
+        tag = m.group(2)[1:-1]     # e.g. "코딩"
+        rest = text[m.end():]
+        src_color = SOURCE_COLORS.get(source, "#888")
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        return (
+            f'<div class="repo-summary-item">'
+            f'<span class="src-tag" style="color:{src_color}">[{source}]</span> '
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'{_esc(rest)}'
+            f'</div>'
+        )
+    return f'<div class="repo-summary-item">{_esc(text)}</div>'
+
+
+def _match_repo_summary(repo: str, summaries: dict[str, str | list[str]]) -> str | list[str] | None:
+    """repo 이름으로 summaries dict에서 매칭.
+
+    정확한 매칭 우선, 이후 하이픈 구분 단어 기준으로 한쪽이 다른 쪽의 접두사/접미사인 경우만 허용.
+    """
+    if repo in summaries:
+        return summaries[repo]
+    repo_parts = set(repo.split("-"))
+    for key, val in summaries.items():
+        key_parts = set(key.split("-"))
+        # 짧은 쪽의 모든 단어가 긴 쪽에 포함되면 매칭
+        shorter, longer = (key_parts, repo_parts) if len(key_parts) <= len(repo_parts) else (repo_parts, key_parts)
+        if len(shorter) >= 2 and shorter <= longer:
+            return val
+    return None
+
+
+def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] | None = None) -> str:
+    """레포별 작업. repo_summaries가 있으면 LLM 요약을 표시, 없으면 세션 원문."""
     sessions = data.get("sessions", [])
     if not sessions:
         return ""
@@ -105,21 +174,29 @@ def _build_repos_detail(data: dict) -> str:
         if total_tok > 0:
             meta += f' · {_fmt_tokens(total_tok)} tokens'
 
-        inner_html = ""
-        if has_meaningful_branches(branch_groups):
+        # LLM 요약이 있으면 사용, 없으면 세션 원문 fallback
+        summary = _match_repo_summary(repo, repo_summaries) if repo_summaries else None
+        if summary is not None:
+            if isinstance(summary, list):
+                items = "".join(_render_summary_item(s) for s in summary)
+                inner_html = f'<div class="repo-summary-list">{items}</div>'
+            else:
+                inner_html = f'<div class="repo-summary">{_esc(summary)}</div>'
+        elif has_meaningful_branches(branch_groups):
+            inner_html = ""
             for branch, bsess in branch_groups.items():
                 if branch:
                     inner_html += (
                         f'<div class="branch-group">'
                         f'<div class="branch-name">{_esc(branch)}</div>'
+                        f'{_build_work_items(bsess)}'
+                        f'</div>'
                     )
-                    inner_html += "".join(_build_session_row(s) for s in bsess)
-                    inner_html += '</div>'
                 else:
-                    inner_html += "".join(_build_session_row(s) for s in bsess)
+                    inner_html += _build_work_items(bsess)
         else:
-            all_sess = list(branch_groups.values())[0] if branch_groups else []
-            inner_html = "".join(_build_session_row(s) for s in all_sess)
+            all_sess = [s for bs in branch_groups.values() for s in bs]
+            inner_html = _build_work_items(all_sess)
 
         rows.append(
             f'<div class="repo-group">'
@@ -127,7 +204,8 @@ def _build_repos_detail(data: dict) -> str:
             f'{inner_html}'
             f'</div>'
         )
-    return f'<div class="section"><h3>레포별 세션</h3>{"".join(rows)}</div>'
+    return f'<div class="section"><h3>레포별 작업</h3>{"".join(rows)}</div>'
+
 
 
 def _build_coaching_section(coaching_md: str | None) -> str:
@@ -260,11 +338,16 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 .repo-group:last-child{margin-bottom:0}
 .repo-name{font-size:13px;font-weight:600;color:#D0D0D0;margin-bottom:4px}
 .repo-meta{font-size:11px;font-weight:400;color:var(--mu)}
-.sess-row{display:flex;gap:8px;font-size:12px;padding:2px 0;color:#B0B0B0}
-.sess-time{color:var(--mu);flex-shrink:0;width:40px}
+.work-item{display:flex;gap:6px;font-size:12px;padding:3px 0;color:#B0B0B0;line-height:1.5}
+.work-summary{flex:1}
+.work-meta{font-size:10px;color:var(--mu);font-weight:400}
+.src-tag{flex-shrink:0;font-weight:600;font-size:10px;opacity:0.8}
 .sess-tag{flex-shrink:0;font-weight:600;font-size:11px}
-.sess-summary{line-height:1.5}
 .branch-group{margin:6px 0 8px 12px;padding-left:10px;border-left:2px solid #444}
+.repo-summary{font-size:12px;color:#C0C0C0;line-height:1.6;padding:2px 0}
+.repo-summary-list{padding:2px 0}
+.repo-summary-item{font-size:12px;color:#C0C0C0;line-height:1.6;padding:2px 0 2px 14px;position:relative}
+.repo-summary-item::before{content:"•";position:absolute;left:0;color:var(--mu)}
 .branch-name{font-size:11px;color:#9B7BC8;font-weight:600;margin-bottom:2px}
 .coaching{border-left:4px solid #7ABD7E}
 .coaching-h{font-size:14px;font-weight:700;color:#E0E0E0;margin:14px 0 6px}
@@ -299,7 +382,8 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 """
 
 
-def build_daily_report(data: dict, coaching_md: str | None = None) -> str:
+def build_daily_report(data: dict, coaching_md: str | None = None,
+                       repo_summaries: dict[str, str | list[str]] | None = None) -> str:
     if not data.get("has_data"):
         return _build_empty_page(data.get("date", ""))
 
@@ -312,13 +396,12 @@ def build_daily_report(data: dict, coaching_md: str | None = None) -> str:
     _, days = build(data, weekly=False)
     timeline = timeline_section_html(days, f"{dt.month}/{dt.day}({weekday}) 타임라인")
 
-    # Assemble sections
     sections = [
         _build_stats_card(data),
         _build_tag_breakdown(data),
         _build_nudges(data),
         timeline,
-        _build_repos_detail(data),
+        _build_repos_detail(data, repo_summaries=repo_summaries),
         _build_coaching_section(coaching_md),
         _build_health_section(data),
         _build_pantry_section(data),
@@ -358,6 +441,7 @@ def main():
     parser = argparse.ArgumentParser(description="Daily HTML report")
     parser.add_argument("--input", help="JSON file (default: stdin)")
     parser.add_argument("--coaching", help="LLM coaching markdown file")
+    parser.add_argument("--repo-summaries", help="LLM repo summaries JSON file")
     parser.add_argument("--output", default="/tmp/daily_report.html")
     args = parser.parse_args()
 
@@ -367,7 +451,11 @@ def main():
     if args.coaching:
         coaching_md = Path(args.coaching).read_text(encoding="utf-8")
 
-    html = build_daily_report(raw, coaching_md)
+    repo_summaries = None
+    if args.repo_summaries:
+        repo_summaries = json.load(open(args.repo_summaries))
+
+    html = build_daily_report(raw, coaching_md, repo_summaries=repo_summaries)
 
     Path(args.output).write_text(html, encoding="utf-8")
     print(f"[daily_report] saved: {args.output}", file=sys.stderr)

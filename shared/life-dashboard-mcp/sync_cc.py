@@ -19,9 +19,28 @@ from parse_work_log import parse_work_log, TEST_KEYWORDS, TEST_PATTERNS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import get_conn, upsert_activity, update_daily_stats, insert_behavioral_signal
+from _sync_common import auto_tag
 
 KST = timezone(timedelta(hours=9))
 _SIGNAL_TYPE_MAP = {"decisions": "decision", "mistakes": "mistake", "patterns": "pattern"}
+_NON_WORK_PATTERNS = {"<command-name>/clear</command-name>", "/clear", "/compact"}
+
+
+def _is_non_work_session(session: dict) -> bool:
+    """실제 작업이 아닌 세션 판별 (/clear, /compact 등).
+
+    topic이 /clear여도 파일 변경이나 충분한 duration이 있으면 실제 작업.
+    """
+    summary = session.get("summary", "").strip()
+    topic = session.get("topic", "").strip()
+    if summary not in _NON_WORK_PATTERNS and topic not in _NON_WORK_PATTERNS:
+        return False
+    # Topic/summary matches non-work pattern, but check for actual work signals
+    if session.get("file_count", 0) > 0:
+        return False
+    if (session.get("duration_min") or 0) >= 5:
+        return False
+    return True
 
 
 def sync_date(conn, date_str: str) -> int:
@@ -32,6 +51,10 @@ def sync_date(conn, date_str: str) -> int:
     for s in sessions:
         session_id = s.get("session_id", "")
         if not session_id:
+            continue
+
+        # /clear 등 실제 작업이 아닌 세션 필터링
+        if _is_non_work_session(s):
             continue
 
         try:
@@ -70,8 +93,13 @@ def sync_date(conn, date_str: str) -> int:
                 "session_id": session_id,
                 "repo": s.get("repo", "unknown"),
                 "branch": s.get("branch"),
-                "tag": s.get("tag", ""),
-                "summary": s.get("summary", "") or s.get("topic", ""),
+                "tag": s.get("tag", "") or auto_tag(
+                    s.get("summary", ""), s.get("topic", ""),
+                    " ".join(s.get("commands", [])[:5]),
+                ),
+                "summary": s.get("summary", "") or (
+                    s.get("topic", "") if s.get("topic", "").strip() not in _NON_WORK_PATTERNS else ""
+                ),
                 "start_at": start_at,
                 "end_at": end_at,
                 "duration_min": s.get("duration_min"),
