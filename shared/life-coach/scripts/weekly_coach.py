@@ -125,7 +125,8 @@ def get_week_data(conn, dates: list[str]) -> dict:
             (mon, next_sun),
         ).fetchone()
         review_items["untagged_sessions"] = untagged["cnt"]
-    except Exception:
+    except Exception as e:
+        print(f"[weekly_coach] untagged sessions query failed: {e}", file=sys.stderr)
         review_items["untagged_sessions"] = 0
 
     # 2) 미분류 mistake 수
@@ -133,7 +134,8 @@ def get_week_data(conn, dates: list[str]) -> dict:
         mt = get_mistake_trends(conn, sun, days=7)
         review_items["uncategorized_mistakes"] = len(mt.get("uncategorized", []))
         review_items["mistake_trends"] = mt
-    except Exception:
+    except Exception as e:
+        print(f"[weekly_coach] mistake trends query failed: {e}", file=sys.stderr)
         review_items["uncategorized_mistakes"] = 0
         review_items["mistake_trends"] = {"by_category": [], "uncategorized": [], "total": 0}
 
@@ -145,13 +147,15 @@ def get_week_data(conn, dates: list[str]) -> dict:
             (mon, next_sun),
         ).fetchone()
         review_items["empty_summaries"] = empty_sum["cnt"]
-    except Exception:
+    except Exception as e:
+        print(f"[weekly_coach] empty summaries query failed: {e}", file=sys.stderr)
         review_items["empty_summaries"] = 0
 
     # 4) stale worktrees
     try:
         review_items["stale_worktrees"] = get_pending_work()
-    except Exception:
+    except Exception as e:
+        print(f"[weekly_coach] stale worktrees scan failed: {e}", file=sys.stderr)
         review_items["stale_worktrees"] = []
 
     return {

@@ -1,7 +1,7 @@
 ---
 name: life-coach
 description: 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석
-version: 1.0.0
+version: 0.7.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 

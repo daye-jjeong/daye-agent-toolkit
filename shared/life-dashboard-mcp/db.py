@@ -167,11 +167,11 @@ def get_mistake_trends(conn: sqlite3.Connection, date_str: str, days: int = 14) 
     rows = conn.execute("""
         SELECT content, COUNT(*) as cnt
         FROM behavioral_signals
-        WHERE date >= ? AND signal_type = 'mistake'
+        WHERE date >= ? AND date <= ? AND signal_type = 'mistake'
         GROUP BY content ORDER BY cnt DESC
-    """, (since,)).fetchall()
+    """, (since, date_str)).fetchall()
 
-    # Load categories
+    # Load category definitions from life-coach skill (cross-module dependency)
     cat_path = Path(__file__).resolve().parent.parent / "life-coach" / "references" / "mistake-categories.json"
     categories: dict = {}
     if cat_path.exists():

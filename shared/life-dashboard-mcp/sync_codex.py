@@ -2,11 +2,11 @@
 """Codex CLI session JSONL -> SQLite sync.
 
 Two data sources are merged per session:
-1. Codex work-log markdown (LLM summary + tag from session_logger.py)
-2. Raw JSONL session files (timestamps, tokens, files, agent messages)
+1. Codex work-log markdown (LLM summary + tag + behavioral signals from session_logger.py)
+2. Raw JSONL session files (timestamps, tokens, files, commands, errors, branch, agent messages)
 
-Work-log provides better summaries (LLM-generated) and tags.
-JSONL provides accurate timestamps, token counts, and file changes.
+Work-log provides better summaries (LLM-generated), tags, and behavioral signals.
+JSONL provides accurate timestamps, token counts, file changes, commands, and branch.
 
 Usage:
     python3 sync_codex.py                    # today

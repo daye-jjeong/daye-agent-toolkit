@@ -86,16 +86,16 @@ def get_today_data(conn, date_str: str) -> dict:
         print(f"[daily_coach] pantry query failed: {e}", file=sys.stderr)
         pantry_expiry = {"expiring": [], "expired": []}
 
-    # pending work (worktrees)
     try:
         pending = get_pending_work()
-    except Exception:
+    except Exception as e:
+        print(f"[daily_coach] pending work scan failed: {e}", file=sys.stderr)
         pending = []
 
-    # mistake trends (최근 14일)
     try:
         mistake_trends = get_mistake_trends(conn, date_str, days=14)
-    except Exception:
+    except Exception as e:
+        print(f"[daily_coach] mistake trends query failed: {e}", file=sys.stderr)
         mistake_trends = {"by_category": [], "uncategorized": [], "total": 0}
 
     return {

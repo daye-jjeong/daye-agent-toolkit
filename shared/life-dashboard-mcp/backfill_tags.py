@@ -31,20 +31,23 @@ def main():
 
         updated = 0
         for r in rows:
-            raw = json.loads(r["raw_json"] or "{}")
-            summary = r["summary"] or ""
-            topic = raw.get("topic", "")
-            commands = " ".join(raw.get("commands", [])[:5])
-            new_tag = auto_tag(summary, topic, commands)
-            if new_tag != "기타":
-                print(f"  [{r['source']}] {r['session_id'][:8]}.. "
-                      f"{r['repo']}: {r['tag']!r} → {new_tag!r}  ({summary[:60]})")
-                if args.apply:
-                    conn.execute(
-                        "UPDATE activities SET tag = ? WHERE id = ?",
-                        (new_tag, r["id"]),
-                    )
-                updated += 1
+            try:
+                raw = json.loads(r["raw_json"] or "{}")
+                summary = r["summary"] or ""
+                topic = raw.get("topic", "")
+                commands = " ".join(raw.get("commands", [])[:5])
+                new_tag = auto_tag(summary, topic, commands)
+                if new_tag != "기타":
+                    print(f"  [{r['source']}] {r['session_id'][:8]}.. "
+                          f"{r['repo']}: {r['tag']!r} → {new_tag!r}  ({summary[:60]})")
+                    if args.apply:
+                        conn.execute(
+                            "UPDATE activities SET tag = ? WHERE id = ?",
+                            (new_tag, r["id"]),
+                        )
+                    updated += 1
+            except Exception as e:
+                print(f"  [SKIP] {r['session_id'][:8]}: {e}", file=sys.stderr)
 
         if args.apply and updated > 0:
             conn.commit()

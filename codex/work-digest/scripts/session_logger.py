@@ -387,7 +387,10 @@ def extract_behavioral_signals(user_messages: str, repo: str, cwd: str) -> dict 
         print(f"[session_logger] extract_behavioral_signals failed: {exc}", file=sys.stderr)
         return None
 
-    if result.returncode != 0 or not result.stdout.strip():
+    if result.returncode != 0:
+        print(f"[session_logger] codex exec returned {result.returncode}: {result.stderr[:200]}", file=sys.stderr)
+        return None
+    if not result.stdout.strip():
         return None
     return _parse_signals_response(result.stdout.strip())
 

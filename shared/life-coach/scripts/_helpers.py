@@ -2,6 +2,7 @@
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -120,7 +121,7 @@ def find_project_memory(repo_name: str) -> Path | None:
 
 
 def get_pending_work() -> list[dict]:
-    """활성 git worktree에서 미완료 작업 감지."""
+    """main/master가 아닌 활성 worktree 목록 반환."""
     pending = []
     home = Path.home()
     git_dirs = [home / "git_workplace"]
@@ -152,6 +153,7 @@ def get_pending_work() -> list[dict]:
                 if current and current.get("branch"):
                     worktrees.append(current)
                 pending.extend(worktrees)
-            except Exception:
+            except Exception as e:
+                print(f"[get_pending_work] {repo_dir.name}: {e}", file=sys.stderr)
                 continue
     return pending
