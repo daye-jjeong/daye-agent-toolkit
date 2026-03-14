@@ -22,7 +22,9 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from db import get_conn, upsert_activity, update_daily_stats
+import subprocess
+
+from db import get_conn, upsert_activity, update_daily_stats, insert_behavioral_signal
 from _sync_common import auto_tag
 
 KST = timezone(timedelta(hours=9))
@@ -32,6 +34,9 @@ CODEX_WORK_LOG_DIR = (
 )
 
 FILE_WRITE_NAMES = frozenset({"write_file", "apply_diff", "create_file"})
+COMMAND_NAMES = frozenset({"shell", "execute", "run_command", "exec_command"})
+TEST_KEYWORDS = frozenset({"pytest", "jest", "test", "vitest"})
+TEST_PATTERNS = ("npm run test", "npx test", "npm test", "bun test")
 
 _HAS_KOREAN = re.compile(r"[\uac00-\ud7a3]")
 
@@ -158,6 +163,8 @@ def _parse_session(path: Path) -> dict | None:
     user_msgs: list[str] = []
     agent_msgs: list[str] = []
     files_changed: set[str] = set()
+    commands: list[str] = []
+    errors: list[str] = []
     total_tokens = 0
     ts_first = ""
     ts_last = ""
@@ -219,6 +226,25 @@ def _parse_session(path: Path) -> dict | None:
                             files_changed.add(fpath)
                     except (json.JSONDecodeError, ValueError):
                         pass
+                elif name in COMMAND_NAMES:
+                    try:
+                        args = json.loads(payload.get("arguments", "{}"))
+                        # exec_command uses "cmd", others use "command"
+                        cmd = args.get("cmd") or args.get("command", [])
+                        if isinstance(cmd, list) and len(cmd) >= 3 and cmd[1] == "-lc":
+                            commands.append(str(cmd[2]))
+                        elif isinstance(cmd, list):
+                            commands.append(" ".join(str(c) for c in cmd))
+                        elif isinstance(cmd, str) and cmd.strip():
+                            commands.append(cmd.strip())
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+            elif payload.get("type") == "function_call_output":
+                output = str(payload.get("output", ""))
+                if "exit_code" in output:
+                    exit_match = re.search(r"exit_code[\":\s]+(\d+)", output)
+                    if exit_match and int(exit_match.group(1)) != 0:
+                        errors.append(output[:200])
 
     if not session_id:
         return None
@@ -228,6 +254,36 @@ def _parse_session(path: Path) -> dict | None:
     # auto_tag: user_msgs + agent first sentences only (avoid code in messages)
     agent_first = [_first_sentence(m) for m in agent_msgs[:3]]
     tag = auto_tag(*user_msgs[:3], *agent_first)
+
+    # branch detection from cwd
+    branch = None
+    if cwd:
+        try:
+            result = subprocess.run(
+                ["git", "-C", cwd, "branch", "--show-current"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                branch = result.stdout.strip()
+        except Exception:
+            pass
+
+    # has_tests / has_commits from commands
+    # Skip read-only prefixes (sed, cat, rg, grep, head, tail, nl) to avoid
+    # false positives like "sed ... test-driven-development/SKILL.md"
+    _READ_PREFIXES = ("sed ", "cat ", "rg ", "grep ", "head ", "tail ", "nl ")
+    has_tests = 0
+    has_commits = 0
+    for cmd in commands:
+        cmd_lower = cmd.lower()
+        if cmd_lower.startswith(_READ_PREFIXES):
+            continue
+        if not has_tests:
+            if any(kw in cmd_lower for kw in TEST_KEYWORDS) or \
+               any(pat in cmd_lower for pat in TEST_PATTERNS):
+                has_tests = 1
+        if not has_commits and "git commit" in cmd_lower:
+            has_commits = 1
 
     start_at = None
     end_at = None
@@ -256,16 +312,16 @@ def _parse_session(path: Path) -> dict | None:
         "source": "codex",
         "session_id": session_id,
         "repo": repo,
-        "branch": None,
+        "branch": branch,
         "tag": tag,
         "summary": summary,
         "start_at": start_at,
         "end_at": end_at,
         "duration_min": duration_min,
         "file_count": len(files_changed),
-        "error_count": 0,
-        "has_tests": 0,
-        "has_commits": 0,
+        "error_count": len(errors),
+        "has_tests": has_tests,
+        "has_commits": has_commits,
         "token_total": total_tokens,
         "raw_json": json.dumps({
             "session_id": session_id,
@@ -274,6 +330,7 @@ def _parse_session(path: Path) -> dict | None:
             "user_messages": user_msgs[:10],
             "agent_messages": agent_msgs[:5],
             "files_changed": sorted(files_changed),
+            "commands": commands[:10],
             "total_tokens": total_tokens,
         }, ensure_ascii=False),
     }
