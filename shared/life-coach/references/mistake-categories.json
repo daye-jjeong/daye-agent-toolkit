@@ -1,0 +1,36 @@
+{
+  "_meta": {
+    "description": "mistake 키워드→카테고리 매핑. 주간 코칭에서 LLM이 교정.",
+    "last_reviewed": "2026-03-14"
+  },
+  "categories": {
+    "scope-creep": {
+      "label": "범위 초과",
+      "keywords": ["scope", "범위", "추가 작업", "예상보다", "더 많이"]
+    },
+    "wrong-assumption": {
+      "label": "잘못된 가정",
+      "keywords": ["가정", "assumption", "알고 보니", "착각", "오해"]
+    },
+    "tool-misuse": {
+      "label": "도구 오용",
+      "keywords": ["tool", "도구", "명령어", "CLI", "잘못된 사용"]
+    },
+    "missing-test": {
+      "label": "테스트 누락",
+      "keywords": ["test", "테스트", "검증", "확인 안"]
+    },
+    "config-error": {
+      "label": "설정 오류",
+      "keywords": ["config", "설정", "환경", "경로", "path"]
+    },
+    "communication": {
+      "label": "소통 미스",
+      "keywords": ["소통", "전달", "이해", "요구사항"]
+    },
+    "repeat-work": {
+      "label": "반복 작업",
+      "keywords": ["다시", "반복", "중복", "또"]
+    }
+  }
+}
