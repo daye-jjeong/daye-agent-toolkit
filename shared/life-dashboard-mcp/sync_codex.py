@@ -37,6 +37,7 @@ FILE_WRITE_NAMES = frozenset({"write_file", "apply_diff", "create_file"})
 COMMAND_NAMES = frozenset({"shell", "execute", "run_command", "exec_command"})
 TEST_KEYWORDS = frozenset({"pytest", "jest", "test", "vitest"})
 TEST_PATTERNS = ("npm run test", "npx test", "npm test", "bun test")
+_READ_PREFIXES = ("sed ", "cat ", "rg ", "grep ", "head ", "tail ", "nl ")
 
 _HAS_KOREAN = re.compile(r"[\uac00-\ud7a3]")
 
@@ -294,9 +295,7 @@ def _parse_session(path: Path) -> dict | None:
             pass
 
     # has_tests / has_commits from commands
-    # Skip read-only prefixes (sed, cat, rg, grep, head, tail, nl) to avoid
-    # false positives like "sed ... test-driven-development/SKILL.md"
-    _READ_PREFIXES = ("sed ", "cat ", "rg ", "grep ", "head ", "tail ", "nl ")
+    # Skip read-only prefixes to avoid false positives
     has_tests = 0
     has_commits = 0
     for cmd in commands:
