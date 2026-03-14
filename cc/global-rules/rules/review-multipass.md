@@ -1,7 +1,8 @@
-# 코드 리뷰 멀티패스
+# Review Multipass
 
-코드 리뷰 시 최소 2패스:
-1. **1패스**: 각 파일별 이슈 발견 (로직 오류, 누락, 스타일)
-2. **2패스**: 크로스파일 일관성 확인 — 참조 번호, 스케줄 시각, 플래그명, 분산된 문서
+Always do at least 2 passes on code review. Why: single-pass reviews catch per-file issues but miss cross-file inconsistencies (mismatched references, schedule times, flag names) — these are the bugs that ship silently.
 
-PR 머지는 사용자의 명시적 승인 없이 절대 하지 마라.
+1. **Pass 1**: Per-file issues (logic errors, omissions, style)
+2. **Pass 2**: Cross-file consistency — references, schedule times, flag names, distributed docs
+
+NEVER merge a PR without explicit user approval.

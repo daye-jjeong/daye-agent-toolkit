@@ -1,0 +1,1 @@
+- NEVER call Edit/Write without a worktree when transitioning from investigation to code changes. Why: without isolation, edits land on main and conflict with concurrent worktree work — "just one line" and "quick fix" are not exceptions, they are how main gets polluted.

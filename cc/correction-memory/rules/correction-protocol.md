@@ -21,7 +21,9 @@ You are corrected when the user:
 - Slug: lowercase, hyphens, 2-4 words describing the rule
 - Timestamp prevents filename collision between concurrent sessions
 - Example filename: `correction-20260227-1430-use-bun.md`
-- Example content: `- ALWAYS use bun, NEVER use npm for package management`
+- **Every rule MUST include a "why".** Rules without reasons lose to conflicting system prompt directives. Rules with reasons give the model context to weigh them properly (intent engineering).
+- Format: `{rule}. Why: {reason this rule exists}`
+- Example content: `- NEVER Edit/Write without a worktree. Why: risks conflicts with other worktree work and pollutes main.`
 - IMPORTANT: Each rule is a SEPARATE file to prevent concurrent session conflicts
 - Before creating, check existing `correction-*.md` files for duplicates
 - If 50+ correction files exist, suggest running `/correction-memory review`

@@ -1,21 +1,21 @@
 # TDD on New Functions
 
-새 함수/헬퍼를 추가할 때 반드시 테스트를 먼저 작성하라.
+Write tests before implementation for new functions. Why: writing tests first is NOT over-engineering — it defines the contract before the code exists, catches edge cases the implementation would silently miss, and prevents "simplest approach" from meaning "untested approach."
 
-## 적용 범위
+## Scope
 
-- 새로운 export 함수 (헬퍼, 유틸리티, 비즈니스 로직)
-- 기존 함수의 새 분기/동작 추가
-- 리팩토링으로 추출한 함수
+- New exported functions (helpers, utilities, business logic)
+- New branches/behaviors on existing functions
+- Functions extracted via refactoring
 
-## 절차
+## Process
 
-1. 테스트 파일에 실패하는 테스트 작성 (RED)
-2. 최소한의 구현으로 테스트 통과 (GREEN)
-3. 필요 시 리팩토링 (REFACTOR)
+1. Write a failing test (RED)
+2. Minimal implementation to pass (GREEN)
+3. Refactor if needed (REFACTOR)
 
-## 면제
+## Exempt
 
-- 단순 re-export, 타입 정의, 상수 선언
-- 기존 테스트가 이미 해당 동작을 커버하는 경우
-- S 규모 작업에서 1줄짜리 trivial 함수
+- Simple re-exports, type definitions, constant declarations
+- Existing tests already cover the behavior
+- Trivial one-liner functions in S-size tasks

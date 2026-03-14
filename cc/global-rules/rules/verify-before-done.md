@@ -1,9 +1,9 @@
-# 완료 선언 전 필수 검증
+# Verify Before Done
 
-작업 완료를 선언하기 전에 반드시:
-1. 관련 테스트 실행 + 통과 확인
-2. `tsc --noEmit` (TypeScript 프로젝트)
-3. 변경 파일 간 일관성 확인 (참조, 스케줄, 플래그명 등)
+Never claim "done" until all three pass. Why: without verification, confident-sounding completions hide broken tests, type errors, and cross-file inconsistencies — the model's brevity bias makes it skip checks that feel redundant but catch real bugs.
 
-세 개 다 통과할 때까지 "완료"라고 하지 마라.
-"다 했다"는 판단 후에도 한 번 더 검증을 돌려라.
+1. Run related tests + confirm passing
+2. `tsc --noEmit` (TypeScript projects)
+3. Cross-file consistency check (references, schedules, flag names)
+
+Run verification once more even after you believe you're done.
