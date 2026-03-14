@@ -154,6 +154,59 @@ def get_repeated_signals(conn: sqlite3.Connection, date_str: str, days: int = 7,
     return [{"content": r["content"], "signal_type": r["signal_type"], "count": r["cnt"]} for r in rows]
 
 
+def get_mistake_trends(conn: sqlite3.Connection, date_str: str, days: int = 14) -> dict:
+    """최근 N일간 mistake 신호를 카테고리별로 집계.
+
+    Returns: {
+        "by_category": [{"category": str, "label": str, "count": int, "examples": [str]}],
+        "uncategorized": [{"content": str, "count": int}],
+        "total": int,
+    }
+    """
+    since = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
+    rows = conn.execute("""
+        SELECT content, COUNT(*) as cnt
+        FROM behavioral_signals
+        WHERE date >= ? AND signal_type = 'mistake'
+        GROUP BY content ORDER BY cnt DESC
+    """, (since,)).fetchall()
+
+    # Load categories
+    cat_path = Path(__file__).resolve().parent.parent / "life-coach" / "references" / "mistake-categories.json"
+    categories: dict = {}
+    if cat_path.exists():
+        categories = json.loads(cat_path.read_text()).get("categories", {})
+
+    by_cat: dict[str, list[tuple[str, int]]] = {}
+    uncategorized = []
+    total = 0
+
+    for r in rows:
+        content, cnt = r["content"], r["cnt"]
+        total += cnt
+        content_lower = content.lower()
+        matched = False
+        for cat_key, cat_def in categories.items():
+            if any(kw.lower() in content_lower for kw in cat_def.get("keywords", [])):
+                by_cat.setdefault(cat_key, []).append((content, cnt))
+                matched = True
+                break
+        if not matched:
+            uncategorized.append({"content": content, "count": cnt})
+
+    result_cats = []
+    for cat_key, items in sorted(by_cat.items(), key=lambda x: sum(c for _, c in x[1]), reverse=True):
+        cat_def = categories[cat_key]
+        result_cats.append({
+            "category": cat_key,
+            "label": cat_def.get("label", cat_key),
+            "count": sum(c for _, c in items),
+            "examples": [c for c, _ in items[:3]],
+        })
+
+    return {"by_category": result_cats, "uncategorized": uncategorized, "total": total}
+
+
 # ── Health ──────────────────────────────────
 
 
