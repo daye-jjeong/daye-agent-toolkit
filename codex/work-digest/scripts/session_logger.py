@@ -20,6 +20,7 @@ from _common import BASE_DIR, WEEKDAYS_KO, WORK_TAGS, WORK_TAGS_SET, format_toke
 KST = timezone(timedelta(hours=9))
 IDLE_THRESHOLD_SEC = 300
 SUMMARY_TIMEOUT_SEC = 60
+BEHAVIOR_TIMEOUT_SEC = 60
 CONVERSATION_MAX_CHARS = 8000
 CODEX_BIN_CANDIDATES = ("/opt/homebrew/bin/codex", "/usr/local/bin/codex")
 WORK_LOG_DIR = BASE_DIR / "work-log"
@@ -303,6 +304,97 @@ def extract_compaction_text(transcript_path: str) -> str:
     return _truncate_text("\n".join(parts), max_chars=3000)
 
 
+def extract_user_messages(transcript_path: str) -> str:
+    """transcript에서 user 메시지만 추출 (행동 추출용)."""
+    parts: list[str] = []
+    for entry in _iter_entries(transcript_path):
+        entry_type = entry.get("type")
+        payload = _get_payload(entry)
+
+        if entry_type == "event_msg" and payload.get("type") == "user_message":
+            message = _normalize_user_text(str(payload.get("message", "")))
+            if message:
+                parts.append(message)
+
+        if entry_type == "response_item" and payload.get("type") == "message" and payload.get("role") == "user":
+            text = _normalize_user_text(_extract_content_text(payload.get("content")))
+            if text:
+                parts.append(text)
+
+    return _truncate_text("\n".join(parts), max_chars=3000)
+
+
+def _parse_signals_response(raw: str) -> dict | None:
+    """Parse JSON behavioral signals from LLM response."""
+    cleaned = raw.strip()
+    if "```" in cleaned:
+        match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", cleaned)
+        if match:
+            cleaned = match.group(1)
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1:
+        return None
+    try:
+        data = json.loads(cleaned[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+    result = {}
+    for key in ("decisions", "mistakes", "patterns"):
+        items = data.get(key, [])
+        if isinstance(items, list):
+            result[key] = [str(item)[:60] for item in items if item]
+        else:
+            result[key] = []
+    if not any(result.values()):
+        return None
+    return result
+
+
+def extract_behavioral_signals(user_messages: str, repo: str, cwd: str) -> dict | None:
+    """codex exec로 사용자 행동 신호 추출. 실패 시 None."""
+    if not user_messages.strip():
+        return None
+    codex_bin = resolve_codex_bin()
+    if not codex_bin:
+        return None
+
+    prompt = (
+        f"레포: {repo}\n\n"
+        "다음은 Codex CLI 세션에서 사용자가 보낸 메시지들이다.\n\n"
+        f"{user_messages}\n\n"
+        "이 사용자의 행동 신호를 추출해라. 각 항목은 1줄, 30자 이내.\n"
+        "- decisions: 사용자가 명시적 선택을 한 것 (A 대신 B 선택 등)\n"
+        "- mistakes: 되돌린 것, 교정한 것, 시행착오\n"
+        "- patterns: 관찰되는 작업 습관 (좋든 나쁘든)\n"
+        "없으면 빈 배열.\n\n"
+        'JSON으로만 출력. 다른 텍스트 없이:\n'
+        '{"decisions": [...], "mistakes": [...], "patterns": [...]}'
+    )
+
+    try:
+        result = subprocess.run(
+            [codex_bin, "exec", "--ephemeral", "-C", cwd],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=BEHAVIOR_TIMEOUT_SEC,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"[session_logger] extract_behavioral_signals timed out ({BEHAVIOR_TIMEOUT_SEC}s)", file=sys.stderr)
+        return None
+    except Exception as exc:
+        print(f"[session_logger] extract_behavioral_signals failed: {exc}", file=sys.stderr)
+        return None
+
+    if result.returncode != 0:
+        print(f"[session_logger] codex exec returned {result.returncode}: {result.stderr[:200]}", file=sys.stderr)
+        return None
+    if not result.stdout.strip():
+        return None
+    return _parse_signals_response(result.stdout.strip())
+
+
 def _parse_summary_response(raw: str) -> dict[str, str]:
     lines = [line.strip() for line in raw.strip().splitlines() if line.strip()]
     tag = "기타"
@@ -538,6 +630,15 @@ def build_session_section(session_id: str, data: dict, now: datetime, repo: str,
     elif data.get("topic"):
         lines.extend([f"**주제**: {data['topic']}", ""])
 
+    signals = data.get("behavioral_signals")
+    if signals:
+        if signals.get("decisions"):
+            lines.extend([f"**결정**: {' ; '.join(signals['decisions'])}", ""])
+        if signals.get("mistakes"):
+            lines.extend([f"**시행착오**: {' ; '.join(signals['mistakes'])}", ""])
+        if signals.get("patterns"):
+            lines.extend([f"**패턴**: {' ; '.join(signals['patterns'])}", ""])
+
     if data.get("commands"):
         lines.append("### 실행 명령")
         for command in data["commands"][:5]:
@@ -639,9 +740,32 @@ def main() -> None:
 
     now = datetime.now(KST)
     if args.event == "session_end":
-        summary = summarize_session(extract_conversation(str(transcript)), repo, effective_cwd or str(transcript.parent))
-        if summary:
-            data["summary"] = summary
+        from concurrent.futures import ThreadPoolExecutor
+
+        conversation = extract_conversation(str(transcript))
+        user_msgs = extract_user_messages(str(transcript))
+        work_cwd = effective_cwd or str(transcript.parent)
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                summary_future = pool.submit(summarize_session, conversation, repo, work_cwd)
+                signals_future = pool.submit(extract_behavioral_signals, user_msgs, repo, work_cwd)
+
+                try:
+                    summary = summary_future.result(timeout=SUMMARY_TIMEOUT_SEC + 10)
+                    if summary:
+                        data["summary"] = summary
+                except Exception as e:
+                    print(f"[session_logger] summary future failed: {e}", file=sys.stderr)
+
+                try:
+                    signals = signals_future.result(timeout=BEHAVIOR_TIMEOUT_SEC + 10)
+                    if signals:
+                        data["behavioral_signals"] = signals
+                except Exception as e:
+                    print(f"[session_logger] signals future failed: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[session_logger] ThreadPool failed: {e}", file=sys.stderr)
     elif args.event == "compaction":
         summary = _build_compaction_summary(data, str(transcript))
         if summary:

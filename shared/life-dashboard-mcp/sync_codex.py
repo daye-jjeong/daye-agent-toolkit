@@ -2,11 +2,11 @@
 """Codex CLI session JSONL -> SQLite sync.
 
 Two data sources are merged per session:
-1. Codex work-log markdown (LLM summary + tag from session_logger.py)
-2. Raw JSONL session files (timestamps, tokens, files, agent messages)
+1. Codex work-log markdown (LLM summary + tag + behavioral signals from session_logger.py)
+2. Raw JSONL session files (timestamps, tokens, files, commands, errors, branch, agent messages)
 
-Work-log provides better summaries (LLM-generated) and tags.
-JSONL provides accurate timestamps, token counts, and file changes.
+Work-log provides better summaries (LLM-generated), tags, and behavioral signals.
+JSONL provides accurate timestamps, token counts, file changes, commands, and branch.
 
 Usage:
     python3 sync_codex.py                    # today
@@ -22,7 +22,9 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from db import get_conn, upsert_activity, update_daily_stats
+import subprocess
+
+from db import get_conn, upsert_activity, update_daily_stats, insert_behavioral_signal
 from _sync_common import auto_tag
 
 KST = timezone(timedelta(hours=9))
@@ -32,6 +34,10 @@ CODEX_WORK_LOG_DIR = (
 )
 
 FILE_WRITE_NAMES = frozenset({"write_file", "apply_diff", "create_file"})
+COMMAND_NAMES = frozenset({"shell", "execute", "run_command", "exec_command"})
+TEST_KEYWORDS = frozenset({"pytest", "jest", "test", "vitest"})
+TEST_PATTERNS = ("npm run test", "npx test", "npm test", "bun test")
+_READ_PREFIXES = ("sed ", "cat ", "rg ", "grep ", "head ", "tail ", "nl ")
 
 _HAS_KOREAN = re.compile(r"[\uac00-\ud7a3]")
 
@@ -43,6 +49,11 @@ _RE_SESSION_HEADER = re.compile(
 _RE_SUMMARY = re.compile(r"^\*\*요약\*\*:\s*(?:\[([^\]]+)\]\s*)?(.+)$")
 _RE_RESULT = re.compile(r"^\*\*결과\*\*:\s*(.+)$")
 _RE_TOPIC = re.compile(r"^\*\*주제\*\*:\s*(.+)$")
+_RE_DECISIONS = re.compile(r"^\*\*결정\*\*:\s*(.+)$")
+_RE_MISTAKES = re.compile(r"^\*\*시행착오\*\*:\s*(.+)$")
+_RE_PATTERNS = re.compile(r"^\*\*패턴\*\*:\s*(.+)$")
+
+_SIGNAL_TYPE_MAP = {"decisions": "decision", "mistakes": "mistake", "patterns": "pattern"}
 
 
 def _parse_work_log_summaries(date_str: str) -> dict[str, dict]:
@@ -83,6 +94,26 @@ def _parse_work_log_summaries(date_str: str) -> dict[str, dict]:
         tm = _RE_TOPIC.match(stripped)
         if tm and "summary" not in current_data:
             current_data["summary"] = tm.group(1).strip()
+            continue
+
+        # Behavioral signals (decisions/mistakes/patterns separated by " ; ")
+        dm = _RE_DECISIONS.match(stripped)
+        if dm:
+            current_data.setdefault("decisions", []).extend(
+                s.strip() for s in dm.group(1).split(" ; ") if s.strip()
+            )
+            continue
+        mm = _RE_MISTAKES.match(stripped)
+        if mm:
+            current_data.setdefault("mistakes", []).extend(
+                s.strip() for s in mm.group(1).split(" ; ") if s.strip()
+            )
+            continue
+        pm = _RE_PATTERNS.match(stripped)
+        if pm:
+            current_data.setdefault("patterns", []).extend(
+                s.strip() for s in pm.group(1).split(" ; ") if s.strip()
+            )
             continue
 
     if current_sid and current_data:
@@ -158,6 +189,8 @@ def _parse_session(path: Path) -> dict | None:
     user_msgs: list[str] = []
     agent_msgs: list[str] = []
     files_changed: set[str] = set()
+    commands: list[str] = []
+    errors: list[str] = []
     total_tokens = 0
     ts_first = ""
     ts_last = ""
@@ -219,6 +252,25 @@ def _parse_session(path: Path) -> dict | None:
                             files_changed.add(fpath)
                     except (json.JSONDecodeError, ValueError):
                         pass
+                elif name in COMMAND_NAMES:
+                    try:
+                        args = json.loads(payload.get("arguments", "{}"))
+                        # exec_command uses "cmd", others use "command"
+                        cmd = args.get("cmd") or args.get("command", [])
+                        if isinstance(cmd, list) and len(cmd) >= 3 and cmd[1] == "-lc":
+                            commands.append(str(cmd[2]))
+                        elif isinstance(cmd, list):
+                            commands.append(" ".join(str(c) for c in cmd))
+                        elif isinstance(cmd, str) and cmd.strip():
+                            commands.append(cmd.strip())
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+            elif payload.get("type") == "function_call_output":
+                output = str(payload.get("output", ""))
+                if "exit_code" in output:
+                    exit_match = re.search(r"exit_code[\":\s]+(\d+)", output)
+                    if exit_match and int(exit_match.group(1)) != 0:
+                        errors.append(output[:200])
 
     if not session_id:
         return None
@@ -228,6 +280,34 @@ def _parse_session(path: Path) -> dict | None:
     # auto_tag: user_msgs + agent first sentences only (avoid code in messages)
     agent_first = [_first_sentence(m) for m in agent_msgs[:3]]
     tag = auto_tag(*user_msgs[:3], *agent_first)
+
+    # branch detection from cwd
+    branch = None
+    if cwd:
+        try:
+            result = subprocess.run(
+                ["git", "-C", cwd, "branch", "--show-current"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                branch = result.stdout.strip()
+        except Exception:
+            pass
+
+    # has_tests / has_commits from commands
+    # Skip read-only prefixes to avoid false positives
+    has_tests = 0
+    has_commits = 0
+    for cmd in commands:
+        cmd_lower = cmd.lower()
+        if cmd_lower.startswith(_READ_PREFIXES):
+            continue
+        if not has_tests:
+            if any(kw in cmd_lower for kw in TEST_KEYWORDS) or \
+               any(pat in cmd_lower for pat in TEST_PATTERNS):
+                has_tests = 1
+        if not has_commits and "git commit" in cmd_lower:
+            has_commits = 1
 
     start_at = None
     end_at = None
@@ -256,16 +336,16 @@ def _parse_session(path: Path) -> dict | None:
         "source": "codex",
         "session_id": session_id,
         "repo": repo,
-        "branch": None,
+        "branch": branch,
         "tag": tag,
         "summary": summary,
         "start_at": start_at,
         "end_at": end_at,
         "duration_min": duration_min,
         "file_count": len(files_changed),
-        "error_count": 0,
-        "has_tests": 0,
-        "has_commits": 0,
+        "error_count": len(errors),
+        "has_tests": has_tests,
+        "has_commits": has_commits,
         "token_total": total_tokens,
         "raw_json": json.dumps({
             "session_id": session_id,
@@ -274,6 +354,7 @@ def _parse_session(path: Path) -> dict | None:
             "user_messages": user_msgs[:10],
             "agent_messages": agent_msgs[:5],
             "files_changed": sorted(files_changed),
+            "commands": commands[:10],
             "total_tokens": total_tokens,
         }, ensure_ascii=False),
     }
@@ -315,6 +396,21 @@ def sync_date(conn, date_str: str) -> int:
 
             upsert_activity(conn, activity)
             count += 1
+
+            # Insert behavioral signals from work-log (if available)
+            if wl:
+                try:
+                    for plural, singular in _SIGNAL_TYPE_MAP.items():
+                        for content in wl.get(plural, []):
+                            insert_behavioral_signal(conn, {
+                                "session_id": sid,
+                                "date": date_str,
+                                "signal_type": singular,
+                                "content": content,
+                                "repo": activity.get("repo", ""),
+                            })
+                except Exception as e:
+                    print(f"[sync_codex] failed to sync behavioral signals for {sid}: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[sync_codex] failed to parse {jsonl_path.name}: {e}", file=sys.stderr)
 

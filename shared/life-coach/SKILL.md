@@ -1,13 +1,13 @@
 ---
 name: life-coach
 description: 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석
-version: 1.0.0
+version: 0.7.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Life Coach Skill
 
-**Version:** 0.6.0 | **Updated:** 2026-03-14
+**Version:** 0.7.0 | **Updated:** 2026-03-14
 
 CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통합 코칭 리포트를 생성한다.
 데이터는 life-dashboard-mcp SQLite에서 조회. health-coach 기능을 흡수.
@@ -149,6 +149,16 @@ coach_state의 escalation_level에 따라 톤 변경:
 5. **방향성 코칭** — weekly_signals + 이전 코칭 연속성 추적
 6. **주간 건강 요약** — exercises, meals, check_ins
 7. **다음 주 생각해볼 것** — 패턴 기반 reflect 질문
+8. **주간 점검** — review_items 데이터 기반 4종 점검 + 교정
+
+### 주간 점검 절차
+
+주간 코칭에서 `review_items` 데이터를 확인하고 다음을 교정한다:
+
+1. **미분류 태그 (untagged_sessions)**: "기타"로 분류된 세션의 raw_json을 보고 올바른 태그로 수정. 반복되는 패턴이면 `_sync_common.py`의 TAG_KEYWORDS에 키워드 추가.
+2. **미분류 mistake (uncategorized_mistakes)**: 분류되지 않은 mistake 신호를 확인하고 `references/mistake-categories.json`에 새 키워드 추가.
+3. **빈 summary (empty_summaries)**: summary가 비어있는 세션을 확인. sync 로직 개선이 필요한지 판단.
+4. **stale worktree (stale_worktrees)**: 오래된 worktree가 있으면 머지 또는 정리 여부를 사용자에게 제안.
 
 ## 자동화
 
