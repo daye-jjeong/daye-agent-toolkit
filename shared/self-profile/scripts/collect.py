@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+SIGNAL_TYPES = ("decision", "mistake", "pattern")
 _TOP_SIGNALS_LIMIT = 20
 _CORRECTION_RE = re.compile(r"correction-(\d{8})-(\d{4})-(.+)\.md$")
 
@@ -21,16 +22,25 @@ def _add_dual(bucket: dict, key: str, duration: int):
     bucket[key]["total_min"] += duration
 
 
-def _collect_sessions(conn, start: str, end: str) -> dict:
-    """Query activities and build session breakdown."""
-    next_end = (datetime.strptime(end, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-    rows = conn.execute("""
+def _normalize_tag(tag: str | None) -> str:
+    """NULL/빈 tag → '기타'."""
+    if not tag or not tag.strip():
+        return "기타"
+    return tag
+
+
+def _query_activities(conn, start: str, next_end: str) -> list:
+    """activities 테이블 1회 쿼리. sessions + daily_trend 양쪽에서 사용."""
+    return conn.execute("""
         SELECT source, repo, tag, start_at, duration_min
         FROM activities
         WHERE start_at >= ? AND start_at < ?
         ORDER BY start_at
     """, (start, next_end)).fetchall()
 
+
+def _build_sessions(rows) -> dict:
+    """Build session breakdown from pre-fetched activity rows."""
     total = len(rows)
     total_min = sum(r["duration_min"] or 0 for r in rows)
     by_weekday: dict = {}
@@ -41,19 +51,15 @@ def _collect_sessions(conn, start: str, end: str) -> dict:
 
     for r in rows:
         dur = r["duration_min"] or 0
-        tag = r["tag"] or ""
-        if not tag.strip():
-            tag = "기타"
+        tag = _normalize_tag(r["tag"])
         source = r["source"] or "unknown"
         repo = r["repo"] or "unknown"
 
-        # weekday
         start_dt = r["start_at"][:10] if r["start_at"] else None
         if start_dt:
             wd = datetime.strptime(start_dt, "%Y-%m-%d").weekday()
             _add_dual(by_weekday, WEEKDAY_NAMES[wd], dur)
 
-        # hour
         hour_str = r["start_at"][11:13] if r["start_at"] and len(r["start_at"]) > 12 else None
         if hour_str:
             _add_dual(by_hour, hour_str, dur)
@@ -73,6 +79,41 @@ def _collect_sessions(conn, start: str, end: str) -> dict:
     }
 
 
+def _build_daily_trend(rows, start_dt: datetime, end_dt: datetime) -> list[dict]:
+    """Build daily trend with 0-fill from pre-fetched activity rows."""
+    by_date: dict[str, dict] = {}
+    for r in rows:
+        date = r["start_at"][:10] if r["start_at"] else None
+        if not date:
+            continue
+        if date not in by_date:
+            by_date[date] = {"date": date, "sessions": 0, "total_min": 0, "tags": {}}
+        entry = by_date[date]
+        entry["sessions"] += 1
+        entry["total_min"] += r["duration_min"] or 0
+        tag = _normalize_tag(r["tag"])
+        entry["tags"][tag] = entry["tags"].get(tag, 0) + 1
+
+    # 0-fill + finalize hours
+    trend = []
+    current = start_dt
+    while current <= end_dt:
+        ds = current.strftime("%Y-%m-%d")
+        if ds in by_date:
+            e = by_date[ds]
+            trend.append({
+                "date": ds,
+                "sessions": e["sessions"],
+                "hours": round(e["total_min"] / 60, 1),
+                "tags": e["tags"],
+            })
+        else:
+            trend.append({"date": ds, "sessions": 0, "hours": 0.0, "tags": {}})
+        current += timedelta(days=1)
+
+    return trend
+
+
 def _collect_behavioral_signals(conn, start: str, end: str) -> dict:
     """Query behavioral_signals and build summary."""
     rows = conn.execute("""
@@ -82,31 +123,27 @@ def _collect_behavioral_signals(conn, start: str, end: str) -> dict:
         ORDER BY date DESC
     """, (start, end)).fetchall()
 
-    by_type: dict[str, list[dict]] = {"decision": [], "mistake": [], "pattern": []}
+    by_type: dict[str, list[dict]] = {st: [] for st in SIGNAL_TYPES}
+    content_counts: dict[str, dict] = {}
+
     for r in rows:
         entry = {"content": r["content"], "date": r["date"], "repo": r["repo"] or ""}
         st = r["signal_type"]
         if st in by_type:
             by_type[st].append(entry)
 
-    # Repeat signals (content that appears 2+ times)
-    content_counts: dict[str, dict] = {}
-    for r in rows:
         key = r["content"]
         if key not in content_counts:
-            content_counts[key] = {"content": key, "count": 0, "type": r["signal_type"]}
+            content_counts[key] = {"content": key, "count": 0, "type": st}
         content_counts[key]["count"] += 1
+
     repeat_signals = sorted(
         [v for v in content_counts.values() if v["count"] >= 2],
         key=lambda x: x["count"], reverse=True
     )
 
     return {
-        "summary": {
-            "decisions_count": len(by_type["decision"]),
-            "mistakes_count": len(by_type["mistake"]),
-            "patterns_count": len(by_type["pattern"]),
-        },
+        "summary": {f"{st}s_count": len(by_type[st]) for st in SIGNAL_TYPES},
         "top_decisions": by_type["decision"][:_TOP_SIGNALS_LIMIT],
         "top_mistakes": by_type["mistake"][:_TOP_SIGNALS_LIMIT],
         "top_patterns": by_type["pattern"][:_TOP_SIGNALS_LIMIT],
@@ -141,62 +178,22 @@ def _collect_corrections(project_roots: list[str]) -> list[dict]:
     return corrections
 
 
-def _collect_daily_trend(conn, start: str, end: str) -> list[dict]:
-    """Build daily trend with 0-fill for inactive days."""
-    start_dt = datetime.strptime(start, "%Y-%m-%d")
-    end_dt = datetime.strptime(end, "%Y-%m-%d")
-
-    # Query actual data
-    next_end = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d")
-    rows = conn.execute("""
-        SELECT DATE(start_at) as date, COUNT(*) as sessions,
-               COALESCE(SUM(duration_min), 0) as total_min,
-               GROUP_CONCAT(COALESCE(tag, '기타')) as tags_raw
-        FROM activities
-        WHERE start_at >= ? AND start_at < ?
-        GROUP BY DATE(start_at)
-    """, (start, next_end)).fetchall()
-
-    by_date = {}
-    for r in rows:
-        tag_list = (r["tags_raw"] or "").split(",")
-        tag_counts: dict[str, int] = {}
-        for t in tag_list:
-            t = t.strip() or "기타"
-            tag_counts[t] = tag_counts.get(t, 0) + 1
-        by_date[r["date"]] = {
-            "date": r["date"],
-            "sessions": r["sessions"],
-            "hours": round(r["total_min"] / 60, 1),
-            "tags": tag_counts,
-        }
-
-    # 0-fill
-    trend = []
-    current = start_dt
-    while current <= end_dt:
-        ds = current.strftime("%Y-%m-%d")
-        if ds in by_date:
-            trend.append(by_date[ds])
-        else:
-            trend.append({"date": ds, "sessions": 0, "hours": 0.0, "tags": {}})
-        current += timedelta(days=1)
-
-    return trend
-
-
 def _collect_from_conn(conn, start: str, end: str, project_roots: list[str]) -> dict:
     """Collect profile data from a DB connection. Testable entry point."""
     start_dt = datetime.strptime(start, "%Y-%m-%d")
     end_dt = datetime.strptime(end, "%Y-%m-%d")
     days = (end_dt - start_dt).days + 1
+    next_end = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # 1회 쿼리로 sessions + daily_trend 양쪽 커버
+    activity_rows = _query_activities(conn, start, next_end)
 
     return {
         "period": {"start": start, "end": end, "days": days},
-        "sessions": _collect_sessions(conn, start, end),
+        "sessions": _build_sessions(activity_rows),
         "behavioral_signals": _collect_behavioral_signals(conn, start, end),
         "corrections": _collect_corrections(project_roots),
-        "daily_trend": _collect_daily_trend(conn, start, end),
+        "daily_trend": _build_daily_trend(activity_rows, start_dt, end_dt),
     }
 
 
@@ -242,9 +239,10 @@ def main():
 
     if snapshot_path.exists():
         prev_path.write_text(snapshot_path.read_text(), encoding="utf-8")
-    snapshot_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    output = json.dumps(result, ensure_ascii=False, indent=2)
+    snapshot_path.write_text(output, encoding="utf-8")
+    print(output)
 
 
 if __name__ == "__main__":
