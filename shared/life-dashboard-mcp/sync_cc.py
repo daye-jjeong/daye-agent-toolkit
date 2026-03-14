@@ -33,7 +33,11 @@ def _is_non_work_session(session: dict) -> bool:
     """
     summary = session.get("summary", "").strip()
     topic = session.get("topic", "").strip()
-    if summary not in _NON_WORK_PATTERNS and topic not in _NON_WORK_PATTERNS:
+    # 유의미한 summary가 있으면 실제 작업
+    if summary and summary not in _NON_WORK_PATTERNS:
+        return False
+    # topic도 non-work 패턴이 아니면 실제 작업
+    if topic not in _NON_WORK_PATTERNS:
         return False
     # Topic/summary matches non-work pattern, but check for actual work signals
     if session.get("file_count", 0) > 0:
