@@ -48,6 +48,11 @@ _RE_SESSION_HEADER = re.compile(
 _RE_SUMMARY = re.compile(r"^\*\*요약\*\*:\s*(?:\[([^\]]+)\]\s*)?(.+)$")
 _RE_RESULT = re.compile(r"^\*\*결과\*\*:\s*(.+)$")
 _RE_TOPIC = re.compile(r"^\*\*주제\*\*:\s*(.+)$")
+_RE_DECISIONS = re.compile(r"^\*\*결정\*\*:\s*(.+)$")
+_RE_MISTAKES = re.compile(r"^\*\*시행착오\*\*:\s*(.+)$")
+_RE_PATTERNS = re.compile(r"^\*\*패턴\*\*:\s*(.+)$")
+
+_SIGNAL_TYPE_MAP = {"decisions": "decision", "mistakes": "mistake", "patterns": "pattern"}
 
 
 def _parse_work_log_summaries(date_str: str) -> dict[str, dict]:
@@ -88,6 +93,26 @@ def _parse_work_log_summaries(date_str: str) -> dict[str, dict]:
         tm = _RE_TOPIC.match(stripped)
         if tm and "summary" not in current_data:
             current_data["summary"] = tm.group(1).strip()
+            continue
+
+        # Behavioral signals (decisions/mistakes/patterns separated by " ; ")
+        dm = _RE_DECISIONS.match(stripped)
+        if dm:
+            current_data.setdefault("decisions", []).extend(
+                s.strip() for s in dm.group(1).split(" ; ") if s.strip()
+            )
+            continue
+        mm = _RE_MISTAKES.match(stripped)
+        if mm:
+            current_data.setdefault("mistakes", []).extend(
+                s.strip() for s in mm.group(1).split(" ; ") if s.strip()
+            )
+            continue
+        pm = _RE_PATTERNS.match(stripped)
+        if pm:
+            current_data.setdefault("patterns", []).extend(
+                s.strip() for s in pm.group(1).split(" ; ") if s.strip()
+            )
             continue
 
     if current_sid and current_data:
@@ -372,6 +397,21 @@ def sync_date(conn, date_str: str) -> int:
 
             upsert_activity(conn, activity)
             count += 1
+
+            # Insert behavioral signals from work-log (if available)
+            if wl:
+                try:
+                    for plural, singular in _SIGNAL_TYPE_MAP.items():
+                        for content in wl.get(plural, []):
+                            insert_behavioral_signal(conn, {
+                                "session_id": sid,
+                                "date": date_str,
+                                "signal_type": singular,
+                                "content": content,
+                                "repo": activity.get("repo", ""),
+                            })
+                except Exception as e:
+                    print(f"[sync_codex] failed to sync behavioral signals for {sid}: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[sync_codex] failed to parse {jsonl_path.name}: {e}", file=sys.stderr)
 
