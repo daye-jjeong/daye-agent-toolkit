@@ -16,7 +16,8 @@ from pathlib import Path
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals, \
-    query_exercises, query_symptoms, query_meals, query_check_ins, query_expiring_pantry
+    query_exercises, query_symptoms, query_meals, query_check_ins, query_expiring_pantry, \
+    get_mistake_trends
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -25,7 +26,7 @@ from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGR
 KST = timezone(timedelta(hours=9))
 OVERWORK_THRESHOLD_HOURS = 8
 
-from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches
+from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work
 
 
 def get_today_data(conn, date_str: str) -> dict:
@@ -85,6 +86,18 @@ def get_today_data(conn, date_str: str) -> dict:
         print(f"[daily_coach] pantry query failed: {e}", file=sys.stderr)
         pantry_expiry = {"expiring": [], "expired": []}
 
+    # pending work (worktrees)
+    try:
+        pending = get_pending_work()
+    except Exception:
+        pending = []
+
+    # mistake trends (최근 14일)
+    try:
+        mistake_trends = get_mistake_trends(conn, date_str, days=14)
+    except Exception:
+        mistake_trends = {"by_category": [], "uncategorized": [], "total": 0}
+
     return {
         "date": date_str,
         "has_data": True,
@@ -103,6 +116,8 @@ def get_today_data(conn, date_str: str) -> dict:
         "meals": meals,
         "check_in": checkins[0] if checkins else None,
         "pantry_expiry": pantry_expiry,
+        "pending_work": pending,
+        "mistake_trends": mistake_trends,
     }
 
 

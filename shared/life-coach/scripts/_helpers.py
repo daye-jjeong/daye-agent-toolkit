@@ -1,6 +1,7 @@
 """life-coach 스크립트 공유 헬퍼."""
 
 import re
+import subprocess
 from pathlib import Path
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -116,3 +117,41 @@ def find_project_memory(repo_name: str) -> Path | None:
     except FileNotFoundError:
         pass
     return None
+
+
+def get_pending_work() -> list[dict]:
+    """활성 git worktree에서 미완료 작업 감지."""
+    pending = []
+    home = Path.home()
+    git_dirs = [home / "git_workplace"]
+    for git_dir in git_dirs:
+        if not git_dir.exists():
+            continue
+        for repo_dir in git_dir.iterdir():
+            if not (repo_dir / ".git").exists():
+                continue
+            try:
+                result = subprocess.run(
+                    ["git", "worktree", "list", "--porcelain"],
+                    capture_output=True, text=True, cwd=str(repo_dir),
+                    timeout=5,
+                )
+                if result.returncode != 0:
+                    continue
+                worktrees = []
+                current: dict = {}
+                for line in result.stdout.strip().split("\n"):
+                    if line.startswith("worktree "):
+                        if current and current.get("branch"):
+                            worktrees.append(current)
+                        current = {"path": line[9:], "repo": repo_dir.name}
+                    elif line.startswith("branch "):
+                        branch = line[7:].split("/")[-1]
+                        if branch not in ("main", "master"):
+                            current["branch"] = branch
+                if current and current.get("branch"):
+                    worktrees.append(current)
+                pending.extend(worktrees)
+            except Exception:
+                continue
+    return pending
