@@ -48,8 +48,8 @@
 | 규모 | 기본 기준 | 적용 워크플로우 |
 |------|-----------|-----------------|
 | **S** | 1-2 파일, 단순 수정 | worktree → 직접 코딩 → 테스트 → 완료 |
-| **M** | 3-5 파일 | worktree → brainstorming → (plan) → 구현 → 검증 → 리뷰 → 완료 |
-| **L** | 6+ 파일 | M + plan 필수 + Ralph Loop 평가 |
+| **M** | 3-5 파일 | worktree → brainstorming → plan → Codex 리뷰 → 구현 → 검증 → 리뷰 → 완료 |
+| **L** | 6+ 파일 | M + Ralph Loop 평가 |
 
 **복잡도 보정:** 파일 수가 적어도 다음에 해당하면 상위 티어 적용:
 - 코어 로직/아키텍처 변경 → M 이상
@@ -81,13 +81,11 @@ worktree 생성 후 바로 작업:
   - plan을 안 쓰는 경우에도 `docs/plans/<name>.md`에 디자인만 기록
   - compact/핸드오프 시 디자인 의도가 보존됨
 
-### 2. Plan (선택)
-- 태스크 3개 이상이면 `superpowers:writing-plans`로 plan 파일 생성
-- 2개 이하면 plan 없이 바로 구현
+### 2. Plan
+- `superpowers:writing-plans`로 plan 파일 생성
 - 신규 파일 경로만 codebase에서 확인
 
-### 2.5. Codex Plan 리뷰 (plan이 있을 때)
-- plan 파일이 생성된 경우에만 실행
+### 2.5. Codex Plan 리뷰
 - `codex-cli` 스킬의 exec 모드로 plan 파일을 Codex에게 전달:
   ```bash
   {codex-cli}/scripts/call.sh --mode exec --file docs/plans/<name>.md \
@@ -143,7 +141,6 @@ worktree 생성 후 바로 작업:
 
 M과 동일한 구조. 다음만 다름:
 
-- **Plan 필수** (M은 선택)
 - **Ralph Loop 평가:** 각 태스크 실행 전, 자동검증 조건 + 반복패턴 + 20분+ 예상 → 3개 충족시 `/ralph-loop` 제안 (M에서도 조건 충족 시 제안 가능)
 
 ---
@@ -181,11 +178,10 @@ M과 동일한 구조. 다음만 다름:
 
 [S] worktree → 직접 코딩 → 테스트 실행 → 완료 (프로젝트 스킬 우선)
 
-[M] worktree → brainstorming → (plan → Codex 리뷰) → 메인 구현 (TDD or 수동검증)
+[M] worktree → brainstorming → plan → Codex 리뷰 → 메인 구현 (TDD or 수동검증)
     → 자기 검증 → [자동] simplify → pr-review → 수렴 확인 → 완료
 
-[L] worktree → brainstorming → plan → Codex 리뷰 → 메인 구현 (+ Ralph 평가)
-    → 자기 검증 → [자동] simplify → pr-review → 수렴 확인 → 완료
+[L] = M + Ralph Loop 평가
 
 [핸드오프] 이전: WIP 커밋 + plan 업데이트 → 새 세션: 자동 감지 → 이어서
 ```
