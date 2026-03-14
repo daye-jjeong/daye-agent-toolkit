@@ -35,11 +35,12 @@ _infra/       — 빌드/설치/동기화 스크립트
 | work-digest | 스킬 | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
 | youtube-fetch | 스킬 | YouTube 메타데이터 + 자막 추출 |
 
-### Claude Code + OpenClaw 양쪽 (11개) — `shared/` 디렉토리
+### Claude Code + OpenClaw 양쪽 (12개) — `shared/` 디렉토리
 
 | 스킬 | 설명 |
 |------|------|
 | banksalad-import | 뱅크샐러드 → life-dashboard SQLite DB import |
+| codex-cli | Codex CLI 래퍼 — 코드 리뷰, 범용 질문을 Codex(OpenAI)에게 위임 |
 | gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
 | health-tracker | 운동/증상/PT 트래킹 — SQLite 기록 |
 | investment-manager | 투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신 |

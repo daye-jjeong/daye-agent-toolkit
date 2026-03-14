@@ -1,0 +1,6 @@
+{
+  "name": "codex-cli",
+  "version": "1.0.0",
+  "description": "Codex CLI 래퍼 — 코드 리뷰, 범용 질문을 Codex(OpenAI)에게 위임",
+  "entrypoint": "SKILL.md"
+}
