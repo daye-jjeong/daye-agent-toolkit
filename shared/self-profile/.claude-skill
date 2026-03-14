@@ -1,0 +1,6 @@
+{
+  "name": "self-profile",
+  "version": "0.1.0",
+  "description": "업무 데이터 기반 자기 프로파일링 — 정량 분석 + 페르소나 생성",
+  "entrypoint": "SKILL.md"
+}
