@@ -171,17 +171,21 @@ REAL_CODEX_BIN="$(resolve_real_codex_bin || true)"
 
 CURRENT_CWD="$(pwd)"
 
+# Ignore SIGINT in the wrapper script so that it can continue to run the session_end logic
+# after the real codex binary exits (even if it exits due to an interrupt).
+trap '' INT
+
 monitor_compaction "$CURRENT_CWD" &
 MONITOR_PID=$!
 
-run_real_codex "$@" &
-CODEX_PID=$!
-
 EXIT_CODE=0
-wait "$CODEX_PID" || EXIT_CODE=$?
+run_real_codex "$@" || EXIT_CODE=$?
 
 kill "$MONITOR_PID" 2>/dev/null || true
 wait "$MONITOR_PID" 2>/dev/null || true
+
+# Restore default SIGINT handling
+trap - INT
 
 TRANSCRIPT_PATH=""
 DEADLINE=$(( $(date +%s) + DISCOVERY_TIMEOUT ))

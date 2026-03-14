@@ -432,7 +432,22 @@ def summarize_session(conversation: str, repo: str, cwd: str) -> dict[str, str] 
         f"{conversation}\n\n"
         "1줄째: 작업 유형 태그 하나를 골라라. "
         f"선택지: {tags_str}\n"
-        "2줄째부터: 세션 작업을 한국어 2-3줄로 요약해라.\n\n"
+        "태그 선택 기준 (가장 비중이 큰 작업 기준으로 1개만):\n"
+        "- 코딩: 새 기능 구현, 파일 생성, 스크립트 작성\n"
+        "- 디버깅: 버그 수정, 에러 해결, 원인 분석\n"
+        "- 리서치: 조사, 탐색, 문서 읽기, 비교 분석\n"
+        "- 리뷰: 코드 리뷰, PR 리뷰, 감사(audit)\n"
+        "- ops: 배포, 인프라, 서버 운영, 크론 관리\n"
+        "- 설정: 환경 설정, 설치, 구성 변경\n"
+        "- 문서: README, 문서 작성, SKILL.md 작성\n"
+        "- 설계: 브레인스토밍, plan 작성, 아키텍처 설계\n"
+        "- 리팩토링: 기존 코드 구조 변경, 정리, 통합\n"
+        "- 기타: 위 9개 중 어느 것도 맞지 않을 때만\n\n"
+        "2줄째부터: 이 세션에서 한 작업을 한국어 2-3줄로 요약해라. "
+        "결과물/변경사항 중심으로 쓰라 (예: 'sync_codex.py 신규 작성, JSONL 파싱 + work-log 오버레이로 세션 데이터 SQLite 동기화'). "
+        "프로세스 설명(브레인스토밍, 리뷰, 머지 등)은 생략하라. "
+        "사용자가 입력한 원문이 아니라, 실제 수행된 작업의 결과를 쓰라. "
+        "파일 경로나 명령어는 생략하고 작업의 의미만 쓰라.\n\n"
         "형식:\n[태그]\n요약 내용"
     )
 
@@ -699,12 +714,21 @@ def send_session_telegram(data: dict, repo: str, duration_min: int | None) -> No
     send_telegram(message, chat_id_key="CHAT_ID_SESSION", silent=True)
 
 
-def _build_compaction_summary(data: dict, transcript_path: str) -> dict[str, str] | None:
+def _build_compaction_summary(data: dict, transcript_path: str, repo: str, cwd: str) -> dict[str, str] | None:
     text = extract_compaction_text(transcript_path).strip()
     if not text:
         return None
+    # LLM 요약 시도 (compaction 텍스트도 결과 중심으로)
+    summary = summarize_session(text, repo, cwd)
+    if summary:
+        return summary
+    # LLM 실패 시: User: 접두사 제거 + 첫 문장 추출
     first_line = text.splitlines()[0].strip()
-    return {"tag": "설계", "text": first_line[:300]}
+    if first_line.startswith("User: "):
+        first_line = first_line[6:]
+    if first_line.startswith("Assistant: "):
+        first_line = first_line[11:]
+    return {"tag": "기타", "text": first_line[:300]}
 
 
 def main() -> None:
@@ -767,7 +791,7 @@ def main() -> None:
         except Exception as e:
             print(f"[session_logger] ThreadPool failed: {e}", file=sys.stderr)
     elif args.event == "compaction":
-        summary = _build_compaction_summary(data, str(transcript))
+        summary = _build_compaction_summary(data, str(transcript), repo, effective_cwd or str(transcript.parent))
         if summary:
             data["summary"] = summary
 
