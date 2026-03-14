@@ -86,6 +86,16 @@ worktree 생성 후 바로 작업:
 - 2개 이하면 plan 없이 바로 구현
 - 신규 파일 경로만 codebase에서 확인
 
+### 2.5. Codex Plan 리뷰 (plan이 있을 때)
+- plan 파일이 생성된 경우에만 실행
+- `codex-cli` 스킬의 exec 모드로 plan 파일을 Codex에게 전달:
+  ```bash
+  {codex-cli}/scripts/call.sh --mode exec --file docs/plans/<name>.md \
+    "시니어 엔지니어로서 이 구현 계획을 리뷰해줘. 누락된 엣지케이스, 아키텍처 문제, 태스크 순서 문제를 지적해줘."
+  ```
+- Codex 피드백 중 타당한 항목만 plan에 반영 — 무조건 수용하지 않음
+- 사용자에게 Codex 피드백 요약을 보여주고 반영 여부를 확인
+
 ### 3. 메인 세션이 직접 구현
 - **테스트 가능한 코드:** `superpowers:test-driven-development` 따라 RED → GREEN → REFACTOR
 - **테스트 불가한 코드** (CSS, 설정, 인프라, 프로토타입): 구현 후 수동 검증 가능한 확인 방법 제시
@@ -171,10 +181,10 @@ M과 동일한 구조. 다음만 다름:
 
 [S] worktree → 직접 코딩 → 테스트 실행 → 완료 (프로젝트 스킬 우선)
 
-[M] worktree → brainstorming → (plan) → 메인 구현 (TDD or 수동검증)
+[M] worktree → brainstorming → (plan → Codex 리뷰) → 메인 구현 (TDD or 수동검증)
     → 자기 검증 → [자동] simplify → pr-review → 수렴 확인 → 완료
 
-[L] worktree → brainstorming → plan → 메인 구현 (+ Ralph 평가)
+[L] worktree → brainstorming → plan → Codex 리뷰 → 메인 구현 (+ Ralph 평가)
     → 자기 검증 → [자동] simplify → pr-review → 수렴 확인 → 완료
 
 [핸드오프] 이전: WIP 커밋 + plan 업데이트 → 새 세션: 자동 감지 → 이어서
