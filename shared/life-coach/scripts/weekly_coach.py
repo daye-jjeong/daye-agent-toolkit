@@ -16,7 +16,7 @@ from pathlib import Path
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins, get_repeated_signals
+from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins, get_repeated_signals, get_mistake_trends
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -24,7 +24,7 @@ from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGR
 
 KST = timezone(timedelta(hours=9))
 
-from _helpers import find_project_memory
+from _helpers import find_project_memory, get_pending_work
 
 
 def get_week_dates(ref_date: str) -> list[str]:
@@ -114,6 +114,46 @@ def get_week_data(conn, dates: list[str]) -> dict:
     except Exception:
         weekly_signals, repeated = [], []
 
+    # ── 주간 점검 4종 ──
+    review_items = {}
+
+    # 1) "기타" 태그 세션 수
+    try:
+        untagged = conn.execute(
+            "SELECT COUNT(*) as cnt FROM activities "
+            "WHERE start_at >= ? AND start_at < ? AND (tag = '기타' OR tag = '' OR tag IS NULL)",
+            (mon, next_sun),
+        ).fetchone()
+        review_items["untagged_sessions"] = untagged["cnt"]
+    except Exception:
+        review_items["untagged_sessions"] = 0
+
+    # 2) 미분류 mistake 수
+    try:
+        mt = get_mistake_trends(conn, sun, days=7)
+        review_items["uncategorized_mistakes"] = len(mt.get("uncategorized", []))
+        review_items["mistake_trends"] = mt
+    except Exception:
+        review_items["uncategorized_mistakes"] = 0
+        review_items["mistake_trends"] = {"by_category": [], "uncategorized": [], "total": 0}
+
+    # 3) empty summary 세션 수
+    try:
+        empty_sum = conn.execute(
+            "SELECT COUNT(*) as cnt FROM activities "
+            "WHERE start_at >= ? AND start_at < ? AND (summary = '' OR summary IS NULL)",
+            (mon, next_sun),
+        ).fetchone()
+        review_items["empty_summaries"] = empty_sum["cnt"]
+    except Exception:
+        review_items["empty_summaries"] = 0
+
+    # 4) stale worktrees
+    try:
+        review_items["stale_worktrees"] = get_pending_work()
+    except Exception:
+        review_items["stale_worktrees"] = []
+
     return {
         "dates": dates,
         "daily": daily,
@@ -129,6 +169,7 @@ def get_week_data(conn, dates: list[str]) -> dict:
         "check_ins": checkins,
         "weekly_signals": weekly_signals,
         "repeated_patterns": repeated,
+        "review_items": review_items,
     }
 
 
@@ -277,6 +318,30 @@ def _build_health_weekly(data: dict) -> str | None:
     return "💊 주간 건강:\n" + "\n".join(lines)
 
 
+def _build_review_section(data: dict) -> str | None:
+    """주간 점검 결과."""
+    ri = data.get("review_items", {})
+    if not ri:
+        return None
+    lines = []
+    untagged = ri.get("untagged_sessions", 0)
+    if untagged > 0:
+        lines.append(f"  🏷 미분류 태그: {untagged}세션")
+    uncategorized = ri.get("uncategorized_mistakes", 0)
+    if uncategorized > 0:
+        lines.append(f"  ⚠️ 미분류 mistake: {uncategorized}건")
+    empty = ri.get("empty_summaries", 0)
+    if empty > 0:
+        lines.append(f"  📝 빈 summary: {empty}세션")
+    stale = ri.get("stale_worktrees", [])
+    if stale:
+        repos = set(w.get("repo", "") for w in stale)
+        lines.append(f"  🌿 활성 worktree: {len(stale)}개 ({', '.join(sorted(repos)[:5])})")
+    if not lines:
+        return None
+    return "🔍 주간 점검:\n" + "\n".join(lines)
+
+
 def build_template_report(data: dict, coach_state: dict) -> str:
     sections = [_build_header(data["dates"])]
 
@@ -302,6 +367,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
     health_weekly = _build_health_weekly(data)
     if health_weekly:
         sections.append(health_weekly)
+
+    review = _build_review_section(data)
+    if review:
+        sections.append(review)
 
     reflect = _build_reflect_section(data)
     if reflect:
