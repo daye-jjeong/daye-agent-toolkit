@@ -1,67 +1,32 @@
 # Correction Protocol (Auto-loaded every session)
 
-When a user corrects your behavior, AUTOMATICALLY apply this protocol.
-Do NOT wait for `/correction-memory` invocation.
+사용자가 행동을 교정하면 즉시 이 프로토콜 적용. `/correction-memory` 호출 불필요.
 
-## Trigger Detection
+## Trigger Detection (넓게 감지)
 
-You are corrected when the user:
-- Says "always do X", "never do Y", "use X instead of Y"
-- Says "remember this", "don't forget"
-- Repeats the same instruction for the 2nd+ time
-- Corrects a pattern, tool choice, convention, or architecture decision
+- 명시적 지시: "always X", "never Y", "X 대신 Y"
+- 반복: 같은 지시 2회+
+- 방향 전환: "이건 아니야", "그거 말고", "다시 해봐"
+- 선호 표현: "이게 더 낫다", "이렇게 해줘", "이건 별로야"
+- 불만/좌절: "왜 또 이래", "아까 말했는데", 같은 실수 지적
 
-## What to Do
+## 저장 절차
 
-### 1. Apply the correction immediately in current session
+1. **즉시 적용** — 현재 세션에서 바로 행동 변경
+2. **Layer 1 (Rules)** — `.claude/rules/correction-{YYYYMMDD}-{HHmm}-{slug}.md`
+   - 파일당 1건. `{rule}. Why: {reason}` 형식. why 필수.
+   - 중복 확인 후 생성. 50+ 파일이면 `/correction-memory review` 제안.
+3. **Layer 2 (Register)** — auto memory `corrections/{topic}.md`
+   - `- [YYYY-MM-DD] {before} -> {after} (reason)`
+4. **Layer 3 (Log)** — auto memory `corrections/log/YYYY-MM-DD.md`
+   - `{HH:MM} | {topic} | {summary}`
+5. **보고** — `Correction saved: Rule: "..." | Topic: ... | Scope: ...`
 
-### 2. Save to Layer 1 — Rules (git-tracked, shared)
-- Directory: `.claude/rules/` in the current project
-- Create ONE file per correction: `correction-{YYYYMMDD}-{HHmm}-{slug}.md`
-- Slug: lowercase, hyphens, 2-4 words describing the rule
-- Timestamp prevents filename collision between concurrent sessions
-- Example filename: `correction-20260227-1430-use-bun.md`
-- **Every rule MUST include a "why".** Rules without reasons lose to conflicting system prompt directives. Rules with reasons give the model context to weigh them properly (intent engineering).
-- Format: `{rule}. Why: {reason this rule exists}`
-- Example content: `- NEVER Edit/Write without a worktree. Why: risks conflicts with other worktree work and pollutes main.`
-- IMPORTANT: Each rule is a SEPARATE file to prevent concurrent session conflicts
-- Before creating, check existing `correction-*.md` files for duplicates
-- If 50+ correction files exist, suggest running `/correction-memory review`
+## Write Gate
 
-### 3. Save to Layer 2 — Register (auto memory, local only)
-- File: auto memory `corrections/{topic}.md`
-- Topics: tooling, architecture, testing, style, integrations, general
-- Format: `- [YYYY-MM-DD] {before} -> {after} (reason: {reason})`
-- Mark superseded entries with `[superseded]`
+**기본은 저장.** 다음일 때만 skip:
+- 이미 `.claude/rules/` 또는 CLAUDE.md에 존재
+- 정말로 1회성인 게 확실 (확신 없으면 저장)
 
-### 4. Save to Layer 3 — Log (auto memory, local only)
-- File: auto memory `corrections/log/YYYY-MM-DD.md`
-- Format: `{HH:MM} | {topic} | {summary} | {trigger type}`
-
-### 5. Report to user
-```
-Correction saved:
-  Rule: "{rule content}"
-  Topic: {topic}
-  Scope: all sessions in this project
-```
-
-## Write Gate — Do NOT save if:
-- One-time typo or trivial mistake
-- Context-dependent judgment (only valid this session)
-- Rule already exists in CLAUDE.md or .claude/rules/
-- If unsure, ask: "Save this as a permanent rule?"
-
-## CLAUDE.md Auto-Management
-When a correction affects project-wide conventions (not just Claude behavior):
-- Check if CLAUDE.md should be updated too
-- Suggest the update to the user before writing
-- Never modify CLAUDE.md without user confirmation
-
-## Scope Decision
-- Project-specific corrections -> `.claude/rules/correction-{slug}.md`
-- Global corrections (apply to all projects) -> suggest adding to `~/.claude/CLAUDE.md`
-
-## Concurrent Session Safety
-- Each correction = separate file → no write conflicts between sessions
-- `/correction-memory review` consolidates and cleans up files
+프로젝트 관습에 영향 → CLAUDE.md 업데이트도 제안 (사용자 확인 후).
+글로벌 교정 → `~/.claude/CLAUDE.md` 추가 제안.
