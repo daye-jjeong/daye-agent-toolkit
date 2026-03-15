@@ -138,7 +138,11 @@ function tlRowH(lbl,sessions){
 function tlMiniH(sessions){
   return sessions.map(s=>{
     const st=toH(s.start),end=st+s.duration/60;
-    return `<div class="tl-mini-bar" style="left:${pct(st)};width:${pct(end-st)};background:${TC[s.tag]||'#707070'};opacity:.7"></div>`;
+    const c=TC[s.tag]||'#707070';
+    const summary=s.summary||'';
+    const tip=`<b>${s.repo}</b> <span style="color:${c}">[${s.tag}]</span>\n⏱ ${s.start} · ${s.duration}분\n${summary}`;
+    return `<div class="tl-mini-bar" style="left:${pct(st)};width:${pct(end-st)};background:${c};opacity:.7;cursor:default"
+      onmouseenter="tlShowT(event,${JSON.stringify(tip)});tlHighlight('${s.repo}')" onmouseleave="tlHideT();tlUnhighlight()"></div>`;
   }).join('');
 }
 
