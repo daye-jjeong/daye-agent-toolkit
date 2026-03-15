@@ -126,9 +126,10 @@ function tlBarH(s){
   const st=toH(s.start),end=st+s.duration/60;
   const c=TC[s.tag]||'#707070';
   const lbl=s.duration>=45?`${s.start} · ${Math.floor(s.duration/60)}h${String(s.duration%60).padStart(2,'0')}`:'';
-  const tip=`${s.repo} [${s.tag}]\n${s.start} · ${s.duration}분${s.summary?'\n'+s.summary:''}`;
+  const summary=s.summary||'';
+  const tip=`<b>${s.repo}</b> <span style="color:${c}">[${s.tag}]</span>\n⏱ ${s.start} · ${s.duration}분\n${summary}`;
   return `<div class="tl-bar" style="left:${pct(st)};width:${pct(end-st)};background:${c}"
-    onmouseenter="tlShowT(event,${JSON.stringify(tip)})" onmouseleave="tlHideT()">
+    onmouseenter="tlShowT(event,${JSON.stringify(tip)});tlHighlight('${s.repo}')" onmouseleave="tlHideT();tlUnhighlight()">
     <span>${lbl}</span></div>`;
 }
 function tlRowH(lbl,sessions){
@@ -179,6 +180,19 @@ function tlShowT(e,text){const t=document.getElementById('tl-tip');t.style.displ
 function tlMoveT(e){const t=document.getElementById('tl-tip');t.style.left=Math.min(e.clientX+14,window.innerWidth-t.offsetWidth-16)+'px';t.style.top=(e.clientY-10)+'px';}
 function tlHideT(){document.getElementById('tl-tip').style.display='none';}
 document.addEventListener('mousemove',tlMoveT);
+
+// Highlight repo section on timeline hover
+function tlHighlight(repo){
+  document.querySelectorAll('.repo-group').forEach(el=>{
+    const name=el.querySelector('.repo-name');
+    if(name&&name.textContent.trim().startsWith(repo)){
+      el.style.outline='2px solid #F0C040';el.style.outlineOffset='4px';el.style.borderRadius='8px';
+    }else{el.style.opacity='0.3';}
+  });
+}
+function tlUnhighlight(){
+  document.querySelectorAll('.repo-group').forEach(el=>{el.style.outline='';el.style.outlineOffset='';el.style.opacity='';el.style.borderRadius='';});
+}
 
 TL_DATA.forEach(d=>d.sessions.forEach(s=>rc(s.repo)));
 if(TL_DATA.length)tlOpen.add(TL_DATA[0].date);
