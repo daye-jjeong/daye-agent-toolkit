@@ -523,6 +523,151 @@ def parse_transcript(transcript_path: str) -> dict:
     }
 
 
+def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = None) -> dict[str, dict]:
+    """Parse transcript and split by KST date.
+
+    Returns: {"2026-03-14": ParsedData, "2026-03-15": ParsedData, ...}
+    각 ParsedData는 parse_transcript()와 동일한 구조.
+    """
+    by_date: dict[str, dict] = {}
+    current_date = fallback_date
+
+    try:
+        with open(transcript_path, "r") as f:
+            for line in f:
+                try:
+                    entry = json.loads(line.strip())
+                except json.JSONDecodeError:
+                    continue
+
+                ts = entry.get("timestamp")
+                entry_date = current_date
+                entry_ts = None
+                if ts:
+                    try:
+                        dt = datetime.fromisoformat(ts)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        kst_dt = dt.astimezone(KST)
+                        entry_date = kst_dt.strftime("%Y-%m-%d")
+                        entry_ts = kst_dt
+                        current_date = entry_date
+                    except (ValueError, TypeError):
+                        pass
+
+                if not entry_date:
+                    continue
+
+                if entry_date not in by_date:
+                    by_date[entry_date] = {
+                        "files": set(),
+                        "commands": [],
+                        "errors": [],
+                        "topic": "",
+                        "timestamps": [],
+                        "token_input": 0,
+                        "token_output": 0,
+                        "token_cache_read": 0,
+                        "token_cache_create": 0,
+                        "api_calls": 0,
+                        "has_commits": False,
+                    }
+
+                acc = by_date[entry_date]
+                if entry_ts:
+                    acc["timestamps"].append(entry_ts)
+
+                entry_type = entry.get("type", "")
+                msg = entry.get("message", {})
+                content = msg.get("content", "") if isinstance(msg, dict) else ""
+
+                if not acc["topic"] and entry_type == "user":
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                raw = strip_system_tags(block.get("text", ""))
+                                if raw:
+                                    acc["topic"] = raw[:120]
+                                    break
+                    elif isinstance(content, str):
+                        raw = strip_system_tags(content)
+                        if raw:
+                            acc["topic"] = raw[:120]
+
+                if entry_type == "assistant" and isinstance(msg, dict):
+                    usage = msg.get("usage", {})
+                    if usage:
+                        acc["api_calls"] += 1
+                        acc["token_input"] += usage.get("input_tokens", 0)
+                        acc["token_output"] += usage.get("output_tokens", 0)
+                        acc["token_cache_read"] += usage.get("cache_read_input_tokens", 0)
+                        acc["token_cache_create"] += usage.get("cache_creation_input_tokens", 0)
+
+                if entry_type == "assistant" and isinstance(content, list):
+                    for block in content:
+                        if not isinstance(block, dict) or block.get("type") != "tool_use":
+                            continue
+                        tool = block.get("name", "")
+                        inp = block.get("input", {})
+                        if tool in ("Edit", "Write"):
+                            fp = inp.get("file_path", "")
+                            if fp:
+                                acc["files"].add(fp)
+                        if tool == "Bash":
+                            cmd = inp.get("command", "")
+                            if cmd:
+                                if not acc["has_commits"] and "git commit" in cmd.lower():
+                                    acc["has_commits"] = True
+                                acc["commands"].append(cmd[:80])
+
+                if entry_type == "tool_result":
+                    data_field = entry.get("data", {})
+                    text = ""
+                    if isinstance(data_field, dict):
+                        text = str(data_field.get("output", ""))[:120]
+                    if text and ("error" in text.lower() or "Error" in text):
+                        acc["errors"].append(text[:120])
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    result = {}
+    for date_str, acc in by_date.items():
+        timestamps = acc["timestamps"]
+        duration_min = None
+        if len(timestamps) >= 2:
+            active_sec = 0
+            sorted_ts = sorted(timestamps)
+            for i in range(1, len(sorted_ts)):
+                gap = (sorted_ts[i] - sorted_ts[i - 1]).total_seconds()
+                if 0 < gap <= IDLE_THRESHOLD_SEC:
+                    active_sec += gap
+            duration_min = max(1, int(active_sec / 60))
+
+        start_kst = min(timestamps) if timestamps else None
+        end_kst = max(timestamps) if timestamps else None
+        end_time_str = end_kst.strftime("%H:%M") if end_kst else None
+
+        result[date_str] = {
+            "files": sorted(acc["files"]),
+            "commands": acc["commands"][:10],
+            "errors": acc["errors"][:5],
+            "topic": acc["topic"],
+            "duration_min": duration_min,
+            "end_time": end_time_str,
+            "start_kst": start_kst,
+            "has_commits": acc["has_commits"],
+            "tokens": {
+                "input": acc["token_input"],
+                "output": acc["token_output"],
+                "cache_read": acc["token_cache_read"],
+                "cache_create": acc["token_cache_create"],
+                "api_calls": acc["api_calls"],
+            },
+        }
+
+    return result
+
+
 # ── 세션 마커 ─────────────────────────────────────
 
 def _format_tokens(n: int) -> str:
