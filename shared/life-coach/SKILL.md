@@ -42,7 +42,7 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
 # 일일 — 파일명에 날짜 포함 (덮어쓰기 방지)
 python3 {baseDir}/scripts/daily_coach.py --json --date <DATE> > /tmp/_coach_data_<DATE>.json
 # 주간
-python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly.json
+python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly_<DATE>.json
 ```
 
 `has_data: false`이면 sync가 안 된 것이니 Step 1을 다시 확인.
@@ -131,9 +131,9 @@ open /tmp/daily_report.html
 
 # 주간
 python3 {baseDir}/scripts/weekly_report.py \
-  --input /tmp/_coach_data_weekly.json \
-  --coaching /tmp/coaching_weekly.md \
-  --repo-summaries /tmp/repo_summaries_weekly.json
+  --input /tmp/_coach_data_weekly_<DATE>.json \
+  --coaching /tmp/coaching_weekly_<DATE>.md \
+  --repo-summaries /tmp/repo_summaries_weekly_<DATE>.json
 open /tmp/weekly_report.html
 ```
 
