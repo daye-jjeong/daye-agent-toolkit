@@ -63,7 +63,7 @@ JSON 데이터의 각 세션을 확인하고, summary가 부정확하거나 topi
 - **"이 요약만 읽고 어떤 기능이 어떻게 바뀌었는지, 다음에 뭘 해야 하는지 알 수 있는가?"** 기준
 
 **상태 마커 (필수):**
-요약 끝에 반드시 상태를 붙인다:
+요약 앞에 반드시 상태를 붙인다:
 - `[완료]` — 작업이 끝남 (커밋, 머지, 배포 등)
 - `[진행중]` — 아직 작업 중이거나 다음 세션에서 이어야 함
 - `[블로커: ...]` — 다른 사람/시스템의 응답이 필요해서 멈춤
@@ -79,10 +79,10 @@ JSON 데이터의 각 세션을 확인하고, summary가 부정확하거나 topi
 - `"order status 점검. Datadog 로그 확인 필요"` ← 상태 없음, 했는지 안 했는지 모름
 
 **좋은 예:**
-- `"session logger 파이프라인 전면 개편 — 열린 세션 누락 해결. active_session_scanner + date-split 구현, work-log markdown 제거 [완료]"`
-- `"kemii MVP 설계 — spec + plan + HTML 목업 작성 완료. [후속: 다음 세션에서 구현 착수]"`
-- `"order status/item status 전환 흐름 점검 — 비정상 패턴 의심. [블로커: Datadog 로그 확인 + 백엔드 개발자에게 공유 필요]"`
-- `"OpenClaw 모델 변경 — mingming gpt-5.4→sonnet (비용 절감). opus 추가. [완료]"`
+- `"[완료] session logger 파이프라인 전면 개편 — 열린 세션 누락 해결. active_session_scanner + date-split 구현, work-log markdown 제거"`
+- `"[후속: 다음 세션에서 구현 착수] kemii MVP 설계 — spec + plan + HTML 목업 작성 완료"`
+- `"[블로커: Datadog 로그 확인 + 백엔드 개발자 공유 필요] order status/item status 전환 흐름 점검 — 비정상 패턴 의심"`
+- `"[완료] OpenClaw 모델 변경 — mingming gpt-5.4→sonnet (비용 절감). opus 추가"`
 
 ```bash
 # 각 세션에 대해 반복
