@@ -120,6 +120,8 @@ def record_activities(
             if date_str == last_date and summary:
                 tag = summary.get("tag")
                 summary_text = summary.get("text")
+            if not tag:
+                tag = auto_tag(data.get("topic", ""), " ".join(data.get("commands", [])[:5]))
 
             activity = {
                 "source": source,
