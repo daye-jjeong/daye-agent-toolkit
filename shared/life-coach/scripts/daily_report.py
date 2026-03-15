@@ -113,6 +113,13 @@ def _build_work_items(sessions: list[dict]) -> str:
         follow_up = best.get("follow_up", "")
         status_badge = _status_badge(status)
 
+        # source tag (CC/Codex)
+        sources: set[str] = {s["source"] for s in group if s.get("source")}
+        src_html = ""
+        for src in sorted(sources):
+            src_color = SOURCE_COLORS.get(src, "#888")
+            src_html += f'<span class="src-tag" style="color:{src_color}">[{src}]</span> '
+
         meta_parts = []
         if total_dur:
             meta_parts.append(f"{total_dur}m")
@@ -130,6 +137,7 @@ def _build_work_items(sessions: list[dict]) -> str:
         items.append(
             f'<div class="work-item">'
             f'{status_badge}'
+            f'{src_html}'
             f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
             f'<span class="work-summary">{summary}{meta_str}{follow_html}</span>'
             f'</div>'
