@@ -176,7 +176,7 @@ def _build_raw_signals(data: dict) -> str:
 
     by_type: dict[str, list[str]] = {}
     for s in signals:
-        by_type.setdefault(s.get("type", "pattern"), []).append(s.get("content", ""))
+        by_type.setdefault(s.get("signal_type", "pattern"), []).append(s.get("content", ""))
 
     type_config = {
         "mistake":  {"label": "시행착오", "cls": "sig-mistake"},

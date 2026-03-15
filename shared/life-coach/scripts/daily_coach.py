@@ -120,8 +120,12 @@ def get_today_data(conn, date_str: str) -> dict:
         mistake_trends = {"by_category": [], "uncategorized": [], "total": 0}
 
     # 전날 follow_up → 오늘 해소 여부
-    yesterday = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-    yesterday_followups = _get_unresolved_followups(conn, yesterday, date_str)
+    try:
+        yesterday = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        yesterday_followups = _get_unresolved_followups(conn, yesterday, date_str)
+    except Exception as e:
+        print(f"[daily_coach] followup resolution query failed: {e}", file=sys.stderr)
+        yesterday_followups = []
 
     return {
         "date": date_str,
