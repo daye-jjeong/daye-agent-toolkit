@@ -183,19 +183,11 @@ document.getElementById('tl-chart').addEventListener('mouseenter',function(e){
   const c=TC[tag]||'#707070';
   tlTip.innerHTML=`<b>${repo}</b> <span style="color:${c}">[${tag}]</span><br>⏱ ${start} · ${dur}분${summary?'<br>'+summary:''}`;
   tlTip.style.display='block';
-  // highlight repo section
-  document.querySelectorAll('.repo-group').forEach(g=>{
-    const name=g.querySelector('.repo-name');
-    if(name&&name.textContent.trim().startsWith(repo)){
-      g.style.outline='2px solid #F0C040';g.style.outlineOffset='4px';g.style.borderRadius='8px';
-    }else{g.style.opacity='0.3';}
-  });
 },true);
 document.getElementById('tl-chart').addEventListener('mouseleave',function(e){
   const el=e.target.closest('.tl-hoverable');
   if(!el)return;
   tlTip.style.display='none';
-  document.querySelectorAll('.repo-group').forEach(g=>{g.style.outline='';g.style.outlineOffset='';g.style.opacity='';g.style.borderRadius='';});
 },true);
 document.addEventListener('mousemove',function(e){
   if(tlTip.style.display==='block'){
