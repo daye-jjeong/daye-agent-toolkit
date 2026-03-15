@@ -91,6 +91,19 @@ escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션"
 - `[CC]` 또는 `[Codex]` — 세션 source (sessions[].source 참조)
 - `[태그]` — 작업 유형. summary가 부정확하면 commands/messages에서 재판단
 
+**3a-2. 레포별 요약을 DB에 저장**
+
+3a에서 생성한 요약을 DB에도 반영한다. 다음 리포트에서 같은 세션을 다시 해석할 필요가 없어진다.
+
+각 세션의 `session_id`와 `date`를 JSON 데이터에서 확인하고, 레포별 요약에서 해당 세션의 태그+요약을 추출하여 업데이트:
+
+```bash
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
+    --session-id <SID> --date <DATE> --tag "태그" --summary "레포별 요약에서 추출한 구체적 요약"
+```
+
+**모든 세션에 대해 반복.** 이미 요약이 있어도 에이전트가 만든 더 구체적인 요약으로 덮어쓴다.
+
 **3b. 코칭 마크다운** → `/tmp/coaching.md`
 
 **3a의 레포별 요약을 먼저 완성한 뒤** 코칭을 작성한다. "오늘의 정리"는 레포별 요약의 상위 집약이어야 하기 때문.
