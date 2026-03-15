@@ -90,9 +90,11 @@ LLM 요약 없이 마커만 (기존과 동일).
 scan_active_sessions()
   1. ~/.claude/sessions/*.json 읽기 → { pid, sessionId, cwd, startedAt }
   2. transcript 경로 탐색:
-     - cwd → project hash (경로의 /를 -로, 선행 - 추가)
+     - cwd → project hash 변환:
+       a. 경로의 / → -, _ → -, 선행 - 추가
+       b. worktree cwd인 경우: git rev-parse --git-common-dir로 원본 레포 경로 획득 → 원본 경로로 hash 재시도
+       c. 위 모두 실패 시: ~/.claude/projects/ 전체에서 {sessionId}.jsonl 검색 (find fallback)
      - ~/.claude/projects/{hash}/{sessionId}.jsonl
-     - 탐색 실패 시 find fallback
   3. 각 세션에 대해 scan_and_record(force=False)
   4. 죽은 세션(ps -p 실패): transcript 기록은 하되 sessions 파일은 건드리지 않음
 ```
@@ -102,29 +104,39 @@ scan_active_sessions()
 독립 cron이 아닌 daily_coach.py에서 직접 호출:
 
 ```python
-# daily_coach.py main()
-scan_active_sessions()     # 1) 열린 세션 work-log에 기록
-run_sync()                 # 2) work-log → SQLite
-summarize_unsummarized()   # 3) 요약 없는 세션 일괄 요약
-data = get_today_data()    # 4) 리포트 생성
+# daily_coach.py main() — 순차 실행 (각 단계 완료 후 다음 진행)
+scan_active_sessions()     # 1) 열린 세션 work-log에 기록 (완료 필수)
+run_sync()                 # 2) work-log → SQLite (scanner 완료 후)
+data = get_today_data()    # 3) 리포트 생성
 ```
 
-### 4. 일괄 요약: `summarize_unsummarized()`
+cron 변경 불필요: daily_coach.py 내부에서 scanner를 직접 호출하므로 기존 cron 설정 유지.
 
-daily_coach.py에 추가. SQLite sync 후 요약 없는 활동 레코드를 찾아 일괄 요약.
+### 4. 미요약 세션 처리
 
-```python
-summarize_unsummarized(conn, date_str)
-  1. SELECT from activities WHERE date(start_at) = date_str AND (tag IS NULL OR summary IS NULL)
-  2. 각 레코드의 transcript에서 해당 날짜 분량만 추출
-     → extract_conversation_for_date(transcript_path, date_str)
-  3. sonnet 호출 → 태그 + 요약 생성 (session_logger의 summarize_session 재사용)
-  4. SQLite UPDATE
+#### correction rule 준수
+
+`.claude/rules/correction-20260307-2030-no-subprocess-llm.md`에 의해 스킬 스크립트(daily_coach.py 포함)에서 LLM subprocess 호출 금지. 예외는 hook 스크립트(`session_logger.py`)만.
+
+#### 해결: on-demand 패턴
+
+cron(`daily_coach.py`)은 **데이터만 기록**하고, LLM 요약은 하지 않는다:
+
+1. scanner가 raw data를 work-log에 기록 (topic, files, commands — 요약 없음)
+2. sync → SQLite에 tag=NULL, summary=NULL인 레코드 생성
+3. daily_coach.py의 template report는 미요약 세션을 topic으로 표시
+4. `--json` 출력에 미요약 세션 포함 → CC/OpenClaw LLM 세션이 on-demand로 요약 생성
+
+SessionEnd hook이 발동하면 그 시점에 LLM 요약이 붙고 SQLite 업데이트.
+
+#### template report에서의 표시
+
+미요약 세션은 topic(첫 유저 메시지)을 summary 대신 사용:
+
 ```
-
-SessionEnd에서 이미 요약된 세션은 skip.
-
-비용: 하루 미기록 5세션 기준, sonnet 요약 5회 ≈ 40K input tokens ≈ $0.12/일.
+- 14:13 [?] ChatGPT 주간 한도 소진 원인을 ...   ← 미요약 (topic)
+- 00:58 [리뷰] OpenClaw 스킬 호환성 확인        ← 요약 완료
+```
 
 ### 5. sync_cc.py 변경
 
@@ -135,14 +147,26 @@ SessionEnd에서 이미 요약된 세션은 skip.
 
 ### 6. SQLite 스키마 변경
 
+현재 스키마: `CREATE UNIQUE INDEX idx_activities_session ON activities(source, session_id);`
+
+변경:
+1. `date` 컬럼 추가 (TEXT, 'YYYY-MM-DD')
+2. unique index를 `(source, session_id, date)`로 변경
+3. 기존 데이터 마이그레이션
+
 ```sql
--- activities 테이블에 date 컬럼 추가 (없는 경우)
--- unique index를 (session_id, date)로 변경
-CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_session_date
-  ON activities(session_id, date);
+-- 1. date 컬럼 추가
+ALTER TABLE activities ADD COLUMN date TEXT;
+
+-- 2. 기존 레코드 backfill (start_at에서 파생)
+UPDATE activities SET date = date(start_at) WHERE date IS NULL;
+
+-- 3. 기존 unique index 교체
+DROP INDEX IF EXISTS idx_activities_session;
+CREATE UNIQUE INDEX idx_activities_session ON activities(source, session_id, date);
 ```
 
-기존 session_id-only index가 있으면 DROP 후 재생성.
+마이그레이션은 `sync_cc.py` / `db.py` 초기화 시 자동 실행 (ALTER TABLE은 idempotent하지 않으므로 컬럼 존재 여부 확인 후 실행).
 
 ### 7. 에러 처리
 
@@ -152,7 +176,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_session_date
 | transcript 없음/비어있음 | skip, stderr 로그 |
 | timestamp 없는 엔트리 | 직전 timestamped 엔트리의 날짜에 귀속, 없으면 startedAt |
 | work-log 섹션 교체 실패 | append fallback |
-| 동시 실행 (hook + scanner) | fcntl.flock() 파일 락 |
+| 동시 실행 (hook + scanner) | fcntl.flock() — work-log 파일 + state 파일 양쪽에 적용 |
+| state 파일 크기 | recorded 리스트 100개 제한 + 7일 TTL 정리 |
 
 ## 범위 외
 
