@@ -101,3 +101,48 @@ class TestBehavioralSignals:
         result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
         repeats = result["behavioral_signals"]["repeat_signals"]
         assert any(r["content"] == "같은 실수" and r["count"] == 3 for r in repeats)
+
+
+class TestDecisionProfile:
+    """의사결정 성향 프로파일."""
+
+    def test_decision_profile_exists(self, collect_with_db):
+        """decision_profile이 behavioral_signals에 포함."""
+        result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
+        dp = result["behavioral_signals"]["decision_profile"]
+        assert "total" in dp
+        assert "by_category" in dp
+        assert "tradeoff_ratio" in dp
+
+    def test_categorization(self, collect_with_db):
+        """결정이 카테고리별로 분류."""
+        _insert_signal(collect_with_db.conn, session_id="s1",
+                       signal_type="decision",
+                       content="SQLite를 선택 — PostgreSQL 대신 임베디드가 배포 간편해서")
+        _insert_signal(collect_with_db.conn, session_id="s2",
+                       signal_type="decision",
+                       content="모듈을 분리 — 단일 파일이 커지면 테스트가 어려워서")
+        result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
+        dp = result["behavioral_signals"]["decision_profile"]
+        assert dp["total"] == 2
+        assert "기술 선택" in dp["by_category"]
+        assert "아키텍처" in dp["by_category"]
+
+    def test_tradeoff_detection(self, collect_with_db):
+        """트레이드오프 비율 계산."""
+        _insert_signal(collect_with_db.conn, session_id="s1",
+                       signal_type="decision",
+                       content="A 대신 B를 사용하기로 — 성능이 더 좋아서")
+        _insert_signal(collect_with_db.conn, session_id="s2",
+                       signal_type="decision",
+                       content="새 기능을 추가")
+        result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
+        dp = result["behavioral_signals"]["decision_profile"]
+        assert dp["tradeoff_ratio"] == 0.5  # 1 out of 2
+
+    def test_empty_decisions(self, collect_with_db):
+        """결정 없을 때 빈 프로파일."""
+        result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
+        dp = result["behavioral_signals"]["decision_profile"]
+        assert dp["total"] == 0
+        assert dp["tradeoff_ratio"] == 0.0

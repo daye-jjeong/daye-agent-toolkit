@@ -114,6 +114,54 @@ def _build_daily_trend(rows, start_dt: datetime, end_dt: datetime) -> list[dict]
     return trend
 
 
+# 의사결정 카테고리 키워드 매핑 (순서 중요: 먼저 매칭된 것 사용)
+_DECISION_CATEGORIES: list[tuple[str, list[str]]] = [
+    ("기술 선택", ["선택", "채택", "도입", "사용하기로", "라이브러리", "프레임워크", "도구", "SDK", "API"]),
+    ("아키텍처", ["분리", "통합", "구조", "레이어", "모듈", "의존성", "인터페이스", "패턴", "추상화"]),
+    ("범위 결정", ["scope", "범위", "제외", "포함", "축소", "확장", "MVP", "최소", "단순화"]),
+    ("우선순위", ["우선", "먼저", "나중", "미루", "긴급", "순서", "뒤로", "앞으로"]),
+    ("트레이드오프", ["대신", "vs", "트레이드", "희생", "포기", "교환"]),
+]
+
+
+def _categorize_decision(content: str) -> str:
+    """키워드 기반으로 decision 카테고리 분류."""
+    lower = content.lower()
+    for category, keywords in _DECISION_CATEGORIES:
+        if any(kw.lower() in lower for kw in keywords):
+            return category
+    return "기타"
+
+
+def _build_decision_profile(decisions: list[dict]) -> dict:
+    """의사결정 성향 프로파일 생성."""
+    if not decisions:
+        return {"total": 0, "by_category": {}, "by_repo": {}, "tradeoff_ratio": 0.0}
+
+    by_category: dict[str, int] = {}
+    by_repo: dict[str, int] = {}
+    tradeoff_count = 0
+
+    for d in decisions:
+        cat = _categorize_decision(d["content"])
+        by_category[cat] = by_category.get(cat, 0) + 1
+        repo = d.get("repo", "unknown")
+        if repo:
+            by_repo[repo] = by_repo.get(repo, 0) + 1
+        # 트레이드오프 표현 감지
+        content_lower = d["content"].lower()
+        if any(kw in content_lower for kw in ("대신", "vs", "아니라", "보다는", "말고")):
+            tradeoff_count += 1
+
+    total = len(decisions)
+    return {
+        "total": total,
+        "by_category": dict(sorted(by_category.items(), key=lambda x: -x[1])),
+        "by_repo": dict(sorted(by_repo.items(), key=lambda x: -x[1])[:10]),
+        "tradeoff_ratio": round(tradeoff_count / total, 2) if total else 0.0,
+    }
+
+
 def _collect_behavioral_signals(conn, start: str, end: str) -> dict:
     """Query behavioral_signals and build summary."""
     rows = conn.execute("""
@@ -148,6 +196,7 @@ def _collect_behavioral_signals(conn, start: str, end: str) -> dict:
         "top_mistakes": by_type["mistake"][:_TOP_SIGNALS_LIMIT],
         "top_patterns": by_type["pattern"][:_TOP_SIGNALS_LIMIT],
         "repeat_signals": repeat_signals[:_TOP_SIGNALS_LIMIT],
+        "decision_profile": _build_decision_profile(by_type["decision"]),
     }
 
 
