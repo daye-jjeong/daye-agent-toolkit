@@ -26,13 +26,19 @@
 
 ## M 파이프라인 요약
 
-1. `superpowers:brainstorming` → 디자인 합의 → plan `## Design`에 기록
-2. `superpowers:writing-plans` → plan 생성
-3. `codex-cli` exec 모드로 plan 리뷰 (타당한 피드백만 반영)
-4. 메인 세션이 직접 구현 (TDD or 수동검증). 태스크 경계에서 커밋
-5. `superpowers:verification-before-completion` → 자기검증
-6. [자동] `/simplify` → `/pr-review-toolkit:review-pr` → 수렴 확인 → 완료 알림
-7. 사용자 OK 후 완료 (자동 완료 금지)
+1. `superpowers:brainstorming` → 디자인 합의
+2. **⛔ GATE A: spec 완료** — 다음 세 가지 모두 충족 전 `writing-plans` 호출 금지:
+   - spec 문서 커밋 (`docs/superpowers/specs/`)
+   - spec review loop (subagent) 통과
+   - 사용자 spec 리뷰 승인
+3. `superpowers:writing-plans` → plan 생성
+4. **⛔ GATE B: plan 리뷰** — `codex-cli` exec 모드로 plan 리뷰 완료 전 구현 착수 금지
+   - `subagent-driven-development`, `executing-plans` 호출 금지
+   - 타당한 피드백만 반영, 반영 후 plan 파일 업데이트
+5. 메인 세션이 직접 구현 (TDD or 수동검증). 태스크 경계에서 커밋
+6. `superpowers:verification-before-completion` → 자기검증
+7. [자동] `/simplify` → `/pr-review-toolkit:review-pr` → 수렴 확인 → 완료 알림
+8. 사용자 OK 후 완료 (자동 완료 금지)
 
 ## 핸드오프
 
