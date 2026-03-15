@@ -27,20 +27,31 @@ CODEX_BIN_CANDIDATES = ("/opt/homebrew/bin/codex", "/usr/local/bin/codex")
 
 
 def detect_repo(cwd: str) -> str:
+    """cwd에서 repo 이름 추출. worktree면 원본 레포 이름 반환."""
     if not cwd:
         return "unknown"
-    try:
-        result = subprocess.run(
-            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return Path(result.stdout.strip()).name
-    except Exception:
-        pass
-    return Path(cwd).name
+    # 1차: git으로 원본 레포 탐색 (디렉토리가 존재할 때만)
+    cwd_path = Path(cwd)
+    if cwd_path.exists():
+        try:
+            result = subprocess.run(
+                ["git", "-C", cwd, "rev-parse", "--git-common-dir"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                git_common = Path(result.stdout.strip())
+                if not git_common.is_absolute():
+                    git_common = (cwd_path / git_common).resolve()
+                return git_common.parent.name
+        except Exception:
+            pass
+    # 2차: 경로에서 worktree 패턴 탐색 (.worktrees/ 또는 .claude/worktrees/)
+    cwd_str = str(cwd_path)
+    for marker in ("/.worktrees/", "/.claude/worktrees/"):
+        idx = cwd_str.find(marker)
+        if idx != -1:
+            return Path(cwd_str[:idx]).name
+    return cwd_path.name
 
 
 def _parse_timestamp(raw: str | None) -> datetime | None:
