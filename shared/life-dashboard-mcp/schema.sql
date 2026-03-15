@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS activities (
     has_tests INTEGER DEFAULT 0,
     has_commits INTEGER DEFAULT 0,
     token_total INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'in_progress',
+    follow_up TEXT,
     raw_json TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );

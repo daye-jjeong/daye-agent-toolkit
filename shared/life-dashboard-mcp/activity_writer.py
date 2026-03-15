@@ -200,11 +200,20 @@ def cmd_update_summary(args):
     conn = get_conn()
     conn.execute("PRAGMA busy_timeout=5000")
     try:
-        cursor = conn.execute("""
+        sets = ["tag = ?", "summary = ?"]
+        params = [args.tag, args.summary]
+        if args.status:
+            sets.append("status = ?")
+            params.append(args.status)
+        if args.follow_up:
+            sets.append("follow_up = ?")
+            params.append(args.follow_up)
+        params.extend([args.session_id, args.date])
+        cursor = conn.execute(f"""
             UPDATE activities
-            SET tag = ?, summary = ?
+            SET {', '.join(sets)}
             WHERE session_id = ? AND date = ?
-        """, (args.tag, args.summary, args.session_id, args.date))
+        """, params)
         if cursor.rowcount == 0:
             print(f"No activity found: {args.session_id} / {args.date}", file=sys.stderr)
             sys.exit(1)
@@ -227,6 +236,8 @@ def main():
     p_update.add_argument("--date", required=True)
     p_update.add_argument("--tag", required=True)
     p_update.add_argument("--summary", required=True)
+    p_update.add_argument("--status", choices=["completed", "in_progress", "blocked", "follow_up"])
+    p_update.add_argument("--follow-up", dest="follow_up", help="Next action description")
 
     args = parser.parse_args()
     if args.command == "unsummarized":

@@ -40,7 +40,7 @@ def get_today_data(conn, date_str: str) -> dict:
     next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     activities = conn.execute("""
         SELECT source, repo, branch, tag, summary, start_at, end_at, duration_min,
-               token_total, error_count, has_tests, has_commits, raw_json
+               token_total, error_count, has_tests, has_commits, status, follow_up, raw_json
         FROM activities WHERE start_at >= ? AND start_at < ?
         ORDER BY start_at
     """, (date_str, next_date)).fetchall()

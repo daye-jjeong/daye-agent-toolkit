@@ -77,6 +77,18 @@ def _build_nudges(data: dict) -> str:
     return f'<div class="nudge-row">{"".join(nudges)}</div>'
 
 
+STATUS_STYLES = {
+    "completed": ("✓", "#7ABD7E"),
+    "in_progress": ("◦", "#888"),
+    "blocked": ("✕", "#E07B5A"),
+    "follow_up": ("→", "#F0C040"),
+}
+
+def _status_badge(status: str) -> str:
+    icon, color = STATUS_STYLES.get(status, ("◦", "#888"))
+    return f'<span class="status-badge" style="color:{color}" title="{status}">{icon}</span> '
+
+
 def _build_work_items(sessions: list[dict]) -> str:
     """세션을 태그별로 그룹핑, 대표 요약 + 메타 표시."""
     tag_groups: dict[str, list[dict]] = {}
@@ -97,6 +109,10 @@ def _build_work_items(sessions: list[dict]) -> str:
         total_dur = sum(s.get("duration_min", 0) for s in group)
         has_commit = any(s.get("has_commits") for s in group)
 
+        status = best.get("status", "in_progress")
+        follow_up = best.get("follow_up", "")
+        status_badge = _status_badge(status)
+
         meta_parts = []
         if total_dur:
             meta_parts.append(f"{total_dur}m")
@@ -109,10 +125,13 @@ def _build_work_items(sessions: list[dict]) -> str:
             if meta_parts else ""
         )
 
+        follow_html = f' <span class="follow-up">→ {_esc(follow_up)}</span>' if follow_up else ""
+
         items.append(
             f'<div class="work-item">'
+            f'{status_badge}'
             f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
-            f'<span class="work-summary">{summary}{meta_str}</span>'
+            f'<span class="work-summary">{summary}{meta_str}{follow_html}</span>'
             f'</div>'
         )
     return "".join(items)
@@ -340,6 +359,8 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 .repo-meta{font-size:11px;font-weight:400;color:var(--mu)}
 .work-item{display:flex;gap:6px;font-size:12px;padding:3px 0;color:#B0B0B0;line-height:1.5}
 .work-summary{flex:1}
+.status-badge{font-weight:700;font-size:13px;flex-shrink:0}
+.follow-up{color:#F0C040;font-size:11px;font-style:italic}
 .work-meta{font-size:10px;color:var(--mu);font-weight:400}
 .src-tag{flex-shrink:0;font-weight:600;font-size:10px;opacity:0.8}
 .sess-tag{flex-shrink:0;font-weight:600;font-size:11px}

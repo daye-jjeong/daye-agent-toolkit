@@ -79,16 +79,21 @@ JSON 데이터의 각 세션을 확인하고, summary가 부정확하거나 topi
 - `"order status 점검. Datadog 로그 확인 필요"` ← 상태 없음, 했는지 안 했는지 모름
 
 **좋은 예:**
-- `"[완료] session logger 파이프라인 전면 개편 — 열린 세션 누락 해결. active_session_scanner + date-split 구현, work-log markdown 제거"`
-- `"[후속: 다음 세션에서 구현 착수] kemii MVP 설계 — spec + plan + HTML 목업 작성 완료"`
-- `"[블로커: Datadog 로그 확인 + 백엔드 개발자 공유 필요] order status/item status 전환 흐름 점검 — 비정상 패턴 의심"`
-- `"[완료] OpenClaw 모델 변경 — mingming gpt-5.4→sonnet (비용 절감). opus 추가"`
+- summary: `"session logger 파이프라인 전면 개편 — 열린 세션 누락 해결. active_session_scanner + date-split 구현"` + `--status completed`
+- summary: `"kemii MVP 설계 — spec + plan + HTML 목업 작성 완료"` + `--status follow_up --follow-up "다음 세션에서 구현 착수"`
+- summary: `"order status/item status 전환 흐름 점검 — 비정상 패턴 의심"` + `--status blocked --follow-up "Datadog 로그 확인 + 백엔드 개발자 공유 필요"`
+- summary: `"OpenClaw 모델 변경 — mingming gpt-5.4→sonnet (비용 절감). opus 추가"` + `--status completed`
 
 ```bash
-# 각 세션에 대해 반복
+# 각 세션에 대해 반복. 상태 마커는 summary에 넣지 말고 --status / --follow-up으로 분리.
 python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
-    --session-id <SID> --date <DATE> --tag "태그" --summary "구체적 요약"
+    --session-id <SID> --date <DATE> --tag "태그" --summary "구체적 요약" \
+    --status completed \
+    --follow-up "다음 액션 (없으면 생략)"
 ```
+
+`--status` 값: `completed`, `in_progress`, `blocked`, `follow_up`
+`--follow-up`: 블로커 설명이나 다음 액션 (없으면 생략)
 
 **모든 세션에 대해 반복.** 이 요약이 타임라인과 레포별 작업 양쪽에 그대로 사용된다.
 

@@ -38,6 +38,13 @@ def _migrate(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE activities ADD COLUMN date TEXT")
         conn.execute("UPDATE activities SET date = date(start_at) WHERE date IS NULL")
         conn.commit()
+    if "status" not in cols:
+        conn.execute("ALTER TABLE activities ADD COLUMN status TEXT DEFAULT 'in_progress'")
+        conn.execute("UPDATE activities SET status = 'completed' WHERE has_commits = 1")
+        conn.commit()
+    if "follow_up" not in cols:
+        conn.execute("ALTER TABLE activities ADD COLUMN follow_up TEXT")
+        conn.commit()
     # Recreate unique index with date column
     indices = {r[1] for r in conn.execute("PRAGMA index_list(activities)").fetchall()}
     if "idx_activities_session" in indices:
