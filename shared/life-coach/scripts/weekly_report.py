@@ -88,6 +88,48 @@ def _build_repos_summary(data: dict) -> str:
     return f'<div class="section"><h3>레포별</h3>{"".join(rows)}</div>'
 
 
+def _build_blocked_section(data: dict) -> str:
+    """주간 blocked 세션 해소 현황."""
+    blocked = data.get("blocked_resolution", [])
+    if not blocked:
+        return ""
+
+    unresolved = [b for b in blocked if not b.get("resolved")]
+    resolved = [b for b in blocked if b.get("resolved")]
+
+    items = []
+    for b in unresolved:
+        repo = _esc(b.get("repo") or "?")
+        tag = b.get("tag", "")
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        summary = _esc(b.get("summary") or "")
+        items.append(
+            f'<div class="repo-bar-row">'
+            f'<span style="color:#E07B5A;font-weight:700;width:20px">✕</span>'
+            f'<span class="tag-pill" style="border-color:{tag_color};color:{tag_color};font-size:10px">{tag}</span> '
+            f'<span style="flex:1;font-size:12px;color:#B0B0B0">{repo} — {summary}</span>'
+            f'</div>'
+        )
+    for b in resolved:
+        repo = _esc(b.get("repo") or "?")
+        tag = b.get("tag", "")
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        summary = _esc(b.get("summary") or "")
+        items.append(
+            f'<div class="repo-bar-row">'
+            f'<span style="color:#7ABD7E;font-weight:700;width:20px">✓</span>'
+            f'<span class="tag-pill" style="border-color:{tag_color};color:{tag_color};font-size:10px">{tag}</span> '
+            f'<span style="flex:1;font-size:12px;color:#B0B0B0">{repo} — {summary}</span>'
+            f'</div>'
+        )
+
+    count_str = f'{len(unresolved)}건 미해소' if unresolved else '모두 해소'
+    return (
+        f'<div class="section"><h3>블로커 해소 ({count_str})</h3>'
+        f'{"".join(items)}</div>'
+    )
+
+
 def _build_coaching_section(coaching_md: str | None) -> str:
     if not coaching_md:
         return """<div class="section coaching-placeholder">
@@ -249,6 +291,7 @@ def build_weekly_report(data: dict, coaching_md: str | None = None) -> str:
         _build_tag_breakdown(data),
         timeline,
         _build_repos_summary(data),
+        _build_blocked_section(data),
         _build_coaching_section(coaching_md),
         _build_health_section(data),
         _build_raw_signals(data),
