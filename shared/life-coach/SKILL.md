@@ -39,10 +39,10 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
 #### Step 2. JSON 데이터 추출
 
 ```bash
-# 일일
-python3 {baseDir}/scripts/daily_coach.py --json --date <DATE> > /tmp/_coach_data.json
+# 일일 — 파일명에 날짜 포함 (덮어쓰기 방지)
+python3 {baseDir}/scripts/daily_coach.py --json --date <DATE> > /tmp/_coach_data_<DATE>.json
 # 주간
-python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data.json
+python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly.json
 ```
 
 `has_data: false`이면 sync가 안 된 것이니 Step 1을 다시 확인.
@@ -52,7 +52,7 @@ python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data.json
 `references/coaching-prompts.md` 프레임으로 데이터를 해석하고 **두 가지 파일**을 생성한다.
 escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
 
-**3a. 레포별 요약 JSON** → `/tmp/repo_summaries.json`
+**3a. 레포별 요약 JSON** → `/tmp/repo_summaries_<DATE>.json`
 
 세션의 `summary` 필드는 사용자 프롬프트라 의미 없는 경우가 많다.
 `commands`, `user_messages`, `agent_messages`, `files_changed`, `branch` 등을 종합해서
@@ -104,7 +104,7 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
 
 **모든 세션에 대해 반복.** 이미 요약이 있어도 에이전트가 만든 더 구체적인 요약으로 덮어쓴다.
 
-**3b. 코칭 마크다운** → `/tmp/coaching.md`
+**3b. 코칭 마크다운** → `/tmp/coaching_<DATE>.md`
 
 **3a의 레포별 요약을 먼저 완성한 뒤** 코칭을 작성한다. "오늘의 정리"는 레포별 요약의 상위 집약이어야 하기 때문.
 
@@ -122,18 +122,18 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
 #### Step 4. HTML 리포트 생성
 
 ```bash
-# 일일 — --coaching + --repo-summaries 둘 다 전달
+# 일일 — --coaching + --repo-summaries 둘 다 전달. 파일명에 날짜 포함.
 python3 {baseDir}/scripts/daily_report.py \
-  --input /tmp/_coach_data.json \
-  --coaching /tmp/coaching.md \
-  --repo-summaries /tmp/repo_summaries.json
+  --input /tmp/_coach_data_<DATE>.json \
+  --coaching /tmp/coaching_<DATE>.md \
+  --repo-summaries /tmp/repo_summaries_<DATE>.json
 open /tmp/daily_report.html
 
 # 주간
 python3 {baseDir}/scripts/weekly_report.py \
-  --input /tmp/_coach_data.json \
-  --coaching /tmp/coaching.md \
-  --repo-summaries /tmp/repo_summaries.json
+  --input /tmp/_coach_data_weekly.json \
+  --coaching /tmp/coaching_weekly.md \
+  --repo-summaries /tmp/repo_summaries_weekly.json
 open /tmp/weekly_report.html
 ```
 
