@@ -40,7 +40,7 @@ def get_today_data(conn, date_str: str) -> dict:
     next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
     activities = conn.execute("""
         SELECT source, repo, branch, tag, summary, start_at, end_at, duration_min,
-               token_total, error_count, has_tests, has_commits, raw_json
+               token_total, error_count, has_tests, has_commits, status, follow_up, raw_json
         FROM activities WHERE start_at >= ? AND start_at < ?
         ORDER BY start_at
     """, (date_str, next_date)).fetchall()
@@ -403,26 +403,12 @@ def main():
     parser.add_argument("--date", default=datetime.now(KST).strftime("%Y-%m-%d"))
     args = parser.parse_args()
 
-    # 1) 열린 세션 스캔 → work-log에 기록
+    # 열린 CC 세션 스캔 → SQLite 직접 기록
     try:
         from active_session_scanner import scan_active_sessions
         scan_active_sessions()
     except Exception as e:
         print(f"[daily_coach] scanner failed: {e}", file=sys.stderr)
-
-    # 2) work-log → SQLite 동기화 (CC + Codex)
-    try:
-        from sync_cc import sync_date as sync_cc_date
-        from sync_codex import sync_date as sync_codex_date
-        sync_conn = get_conn()
-        try:
-            sync_cc_date(sync_conn, args.date)
-            sync_codex_date(sync_conn, args.date)
-            sync_conn.commit()
-        finally:
-            sync_conn.close()
-    except Exception as e:
-        print(f"[daily_coach] sync failed: {e}", file=sys.stderr)
 
     conn = get_conn()
     try:

@@ -19,25 +19,30 @@ CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통
 
 ### 절차 (반드시 순서대로)
 
-#### Step 1. DB 동기화
-
-데이터가 빠짐없이 모여야 정확한 코칭이 된다. **먼저 sync를 돌려라.**
+#### Step 1. 열린 세션 스캔 + 미요약 세션 요약
 
 ```bash
-# life-dashboard-mcp 디렉토리 기준
-python3 {baseDir}/../life-dashboard-mcp/sync_cc.py --date <DATE>
-python3 {baseDir}/../life-dashboard-mcp/sync_codex.py --date <DATE>
+# 열린 CC 세션을 SQLite에 기록
+python3 {baseDir}/../../cc/work-digest/scripts/active_session_scanner.py
+
+# 미요약 세션 확인
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py unsummarized --date <DATE>
 ```
 
-출력에서 synced 세션 수를 확인. 0이면 해당 날짜에 로그가 없는 것.
+미요약 세션이 있으면, topic을 보고 태그+요약을 생성하여 업데이트:
+
+```bash
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
+    --session-id <SID> --date <DATE> --tag "태그" --summary "요약"
+```
 
 #### Step 2. JSON 데이터 추출
 
 ```bash
-# 일일
-python3 {baseDir}/scripts/daily_coach.py --json --date <DATE> > /tmp/_coach_data.json
+# 일일 — 파일명에 날짜 포함 (덮어쓰기 방지)
+python3 {baseDir}/scripts/daily_coach.py --json --date <DATE> > /tmp/_coach_data_<DATE>.json
 # 주간
-python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data.json
+python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly_<DATE>.json
 ```
 
 `has_data: false`이면 sync가 안 된 것이니 Step 1을 다시 확인.
@@ -47,44 +52,57 @@ python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data.json
 `references/coaching-prompts.md` 프레임으로 데이터를 해석하고 **두 가지 파일**을 생성한다.
 escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
 
-**3a. 레포별 요약 JSON** → `/tmp/repo_summaries.json`
+**3a. 세션 요약을 DB에 업데이트**
 
-세션의 `summary` 필드는 사용자 프롬프트라 의미 없는 경우가 많다.
-`commands`, `user_messages`, `agent_messages`, `files_changed`, `branch` 등을 종합해서
-**실제로 뭘 했는지** 구체적으로 요약한다.
+JSON 데이터의 각 세션을 확인하고, summary가 부정확하거나 topic 수준이면 `commands`, `user_messages`, `agent_messages`, `files_changed`, `branch`를 종합해서 구체적인 요약으로 업데이트한다.
 
 **요약 품질 기준:**
-- 단순히 "디버깅" "리뷰" 같은 한 단어 X → 어떤 기능/파일을 어떤 목적으로 작업했는지
-- 브랜치명이 있으면 포함
-- commands에서 실제 작업 맥락 추론 (git diff, pytest, 특정 파일 경로 등)
-- "이 요약만 읽고 어떤 기능을 작업했는지 알 수 있는가?" 기준으로 판단
+- **무엇을**(어떤 기능/모듈) **왜**(어떤 문제/목적) **결과**(뭐가 만들어졌거나 바뀌었는지) 중심
+- 브랜치명, worktree 이름이 있으면 포함
+- **수단(명령어)을 적지 마라** — "git log로 확인", "rg로 검색" 같은 건 수단이지 결과가 아님
+- **"이 요약만 읽고 어떤 기능이 어떻게 바뀌었는지, 다음에 뭘 해야 하는지 알 수 있는가?"** 기준
 
-```json
-{
-  "dy-minions-squad": [
-    "[CC] [문서] fix/cron-retry-and-reply-routing — 워치독 스캔 머지 + state-sot-unification worktree 변경사항 리뷰. 머지 보류",
-    "[CC] [디버깅] OpenClaw 텔레그램 봇 응답 경로 추적 — openclaw logs에서 lane/session 로그 분석"
-  ],
-  "cube-backend": [
-    "[Codex] [설계] conveyor-belt-monitoring-v2 목업 검증 — RDS/MCP 접근 확인, 유닛 수 수정",
-    "[CC] [리뷰] order-queue-str worktree에서 queue.service.ts 변경사항 diff 리뷰"
-  ]
-}
+**상태 마커 (필수):**
+요약 앞에 반드시 상태를 붙인다:
+- `[완료]` — 작업이 끝남 (커밋, 머지, 배포 등)
+- `[진행중]` — 아직 작업 중이거나 다음 세션에서 이어야 함
+- `[블로커: ...]` — 다른 사람/시스템의 응답이 필요해서 멈춤
+- `[후속: ...]` — 이 세션에서 발견한 것에 대한 다음 액션
+
+**의사결정 컨텍스트:**
+왜 그런 선택을 했는지 이유가 있으면 포함 (예: "gpt-5.4→sonnet 변경 — 비용 절감 + 응답 품질 유사")
+
+**나쁜 예 (금지):**
+- `"설계 논의"` ← 뭘 설계했는지 모름
+- `"PR 리뷰"` ← 어떤 PR인지 모름
+- `"git log/diff로 변경 이력 확인"` ← 수단
+- `"order status 점검. Datadog 로그 확인 필요"` ← 상태 없음, 했는지 안 했는지 모름
+
+**좋은 예:**
+- summary: `"session logger 파이프라인 전면 개편 — 열린 세션 누락 해결. active_session_scanner + date-split 구현"` + `--status completed`
+- summary: `"kemii MVP 설계 — spec + plan + HTML 목업 작성 완료"` + `--status follow_up --follow-up "다음 세션에서 구현 착수"`
+- summary: `"order status/item status 전환 흐름 점검 — 비정상 패턴 의심"` + `--status blocked --follow-up "Datadog 로그 확인 + 백엔드 개발자 공유 필요"`
+- summary: `"OpenClaw 모델 변경 — mingming gpt-5.4→sonnet (비용 절감). opus 추가"` + `--status completed`
+
+```bash
+# 각 세션에 대해 반복. 상태 마커는 summary에 넣지 말고 --status / --follow-up으로 분리.
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
+    --session-id <SID> --date <DATE> --tag "태그" --summary "구체적 요약" \
+    --status completed \
+    --follow-up "다음 액션 (없으면 생략)"
 ```
 
-키는 레포 이름(short name), 값은 기능별 작업 요약 리스트. 단일 문자열도 허용.
+`--status` 값: `completed`, `in_progress`, `blocked`, `follow_up`
+`--follow-up`: 블로커 설명이나 다음 액션 (없으면 생략)
 
-**각 항목 앞에 반드시:**
-- `[CC]` 또는 `[Codex]` — 세션 source (sessions[].source 참조)
-- `[태그]` — 작업 유형. summary가 부정확하면 commands/messages에서 재판단
+**모든 세션에 대해 반복.** 이 요약이 타임라인과 레포별 작업 양쪽에 그대로 사용된다.
 
-**3b. 코칭 마크다운** → `/tmp/coaching.md`
+**3b. 코칭 마크다운** → `/tmp/coaching_<DATE>.md`
 
-**3a의 레포별 요약을 먼저 완성한 뒤** 코칭을 작성한다. "오늘의 정리"는 레포별 요약의 상위 집약이어야 하기 때문.
+**3a를 먼저 완성한 뒤** 코칭을 작성한다.
 
 코칭 결과를 마크다운으로 저장:
 - 섹션 헤더 사용: `## 오늘의 정리`, `## 코칭`, `## 내일 이어할 것` 등
-- **레포별 상세는 여기에 넣지 않는다** (3a의 JSON이 HTML "레포별 작업" 섹션에 직접 들어감)
 
 **"오늘의 정리" 필수 항목:**
 - CC 세션 수/시간/토큰, Codex 세션 수/시간/토큰 (source별 분리)
@@ -96,18 +114,16 @@ escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션"
 #### Step 4. HTML 리포트 생성
 
 ```bash
-# 일일 — --coaching + --repo-summaries 둘 다 전달
+# 일일
 python3 {baseDir}/scripts/daily_report.py \
-  --input /tmp/_coach_data.json \
-  --coaching /tmp/coaching.md \
-  --repo-summaries /tmp/repo_summaries.json
+  --input /tmp/_coach_data_<DATE>.json \
+  --coaching /tmp/coaching_<DATE>.md
 open /tmp/daily_report.html
 
 # 주간
 python3 {baseDir}/scripts/weekly_report.py \
-  --input /tmp/_coach_data.json \
-  --coaching /tmp/coaching.md \
-  --repo-summaries /tmp/repo_summaries.json
+  --input /tmp/_coach_data_weekly_<DATE>.json \
+  --coaching /tmp/coaching_weekly_<DATE>.md
 open /tmp/weekly_report.html
 ```
 
@@ -131,10 +147,11 @@ coach_state의 escalation_level에 따라 톤 변경:
 ### 일일 코칭 구성
 
 1. **오늘의 정리** — 작업 시간, 세션 상세, 토큰 사용량
-2. **레포별 상세** — 세션 수, 작업시간, 핵심 요약, 커밋 여부
-3. **집중도 지표** — 세션 평균 길이, 짧은 세션(<15분) 비율, 작업 완료율(has_commits)
-4. **코칭** — 행동 신호/반복 패턴/과작업/수면 패턴 기반 제안
-5. **자동화 제안** — 반복 명령/패턴 감지
+2. **레포별 상세** — 세션 수, 작업시간, 핵심 요약, status/follow_up
+3. **집중도 지표** — 세션 평균 길이, 짧은 세션(<15분) 비율, 작업 완료율
+4. **구조 리뷰** — 블로커 점검, 후속 작업 위험, 빠진 것, 구조 문제 지적
+5. **태스크 제안** — 내일 해야 할 구체적 태스크 (예상 시간 + 우선순위)
+6. **코칭** — 의사결정 패턴 분석, 시행착오 예방, 시간대 적절성
 6. **내일 이어할 것** — 진행중 작업
 7. **건강** — check_in, exercises, meals, symptoms
 8. **유통기한** — pantry_expiry (만료/임박)

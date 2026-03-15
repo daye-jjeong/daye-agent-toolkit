@@ -97,7 +97,7 @@ TIMELINE_CSS = """
 # ── JS ────────────────────────────────────────────────────────────────────────
 
 TIMELINE_JS = r"""
-const TC={"리팩토링":"#4A90D9","디버깅":"#E07B5A","코딩":"#7ABD7E","설계":"#9B7BC8","ops":"#F0C040","문서":"#5AC8D9","리뷰":"#D9A85A","기타":"#707070"};
+const TC={"리팩토링":"#4A90D9","디버깅":"#E07B5A","코딩":"#7ABD7E","설계":"#9B7BC8","ops":"#F0C040","문서":"#5AC8D9","리뷰":"#D9A85A","설정":"#B8860B","리서치":"#5AC8D9","기타":"#707070"};
 const PAL=["#4A90D9","#E07B5A","#7ABD7E","#9B7BC8","#F0C040","#5AC8D9","#D9A85A","#D95A90","#80C0A0","#C0A080","#A080C0","#80A0C0"];
 let ci=0; const RC={}; function rc(r){if(!RC[r])RC[r]=PAL[ci++%PAL.length];return RC[r];}
 
@@ -122,14 +122,12 @@ function tlGroupBy(sessions,key){
     b[1].reduce((s,x)=>s+x.duration,0)-a[1].reduce((s,x)=>s+x.duration,0));
 }
 
+function esc(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function tlBarH(s){
   const st=toH(s.start),end=st+s.duration/60;
   const c=TC[s.tag]||'#707070';
-  const lbl=s.duration>=45?`${s.start} · ${Math.floor(s.duration/60)}h${String(s.duration%60).padStart(2,'0')}`:'';
-  const tip=`${s.repo} [${s.tag}]\n${s.start} · ${s.duration}분${s.summary?'\n'+s.summary:''}`;
-  return `<div class="tl-bar" style="left:${pct(st)};width:${pct(end-st)};background:${c}"
-    onmouseenter="tlShowT(event,${JSON.stringify(tip)})" onmouseleave="tlHideT()">
-    <span>${lbl}</span></div>`;
+  return `<div class="tl-bar tl-hoverable" style="left:${pct(st)};width:${pct(end-st)};background:${c}"
+    data-repo="${esc(s.repo)}" data-tag="${esc(s.tag)}" data-start="${s.start}" data-dur="${s.duration}" data-summary="${esc(s.summary||'')}"></div>`;
 }
 function tlRowH(lbl,sessions){
   return `<div class="tl-row"><div class="tl-label" title="${lbl}">${lbl}</div><div class="tl-track">${sessions.map(tlBarH).join('')}</div></div>`;
@@ -137,7 +135,9 @@ function tlRowH(lbl,sessions){
 function tlMiniH(sessions){
   return sessions.map(s=>{
     const st=toH(s.start),end=st+s.duration/60;
-    return `<div class="tl-mini-bar" style="left:${pct(st)};width:${pct(end-st)};background:${TC[s.tag]||'#707070'};opacity:.7"></div>`;
+    const c=TC[s.tag]||'#707070';
+    return `<div class="tl-mini-bar tl-hoverable" style="left:${pct(st)};width:${pct(end-st)};background:${c};opacity:.7;cursor:default"
+      data-repo="${esc(s.repo)}" data-tag="${esc(s.tag)}" data-start="${s.start}" data-dur="${s.duration}" data-summary="${esc(s.summary||'')}"></div>`;
   }).join('');
 }
 
@@ -174,11 +174,27 @@ function tlRender(){
 document.getElementById('tl-legend').innerHTML=Object.entries(TC).map(([t,c])=>
   `<div class="tl-lg-item"><div class="tl-lg-dot" style="background:${c}"></div>${t}</div>`).join('');
 
-// Tooltip
-function tlShowT(e,text){const t=document.getElementById('tl-tip');t.style.display='block';t.innerHTML=text.replace(/\n/g,'<br>');tlMoveT(e);}
-function tlMoveT(e){const t=document.getElementById('tl-tip');t.style.left=Math.min(e.clientX+14,window.innerWidth-t.offsetWidth-16)+'px';t.style.top=(e.clientY-10)+'px';}
-function tlHideT(){document.getElementById('tl-tip').style.display='none';}
-document.addEventListener('mousemove',tlMoveT);
+// Tooltip via event delegation
+const tlTip=document.getElementById('tl-tip');
+document.getElementById('tl-chart').addEventListener('mouseenter',function(e){
+  const el=e.target.closest('.tl-hoverable');
+  if(!el)return;
+  const repo=el.dataset.repo, tag=el.dataset.tag, start=el.dataset.start, dur=el.dataset.dur, summary=el.dataset.summary;
+  const c=TC[tag]||'#707070';
+  tlTip.innerHTML=`<b>${repo}</b> <span style="color:${c}">[${tag}]</span><br>⏱ ${start} · ${dur}분${summary?'<br>'+summary:''}`;
+  tlTip.style.display='block';
+},true);
+document.getElementById('tl-chart').addEventListener('mouseleave',function(e){
+  const el=e.target.closest('.tl-hoverable');
+  if(!el)return;
+  tlTip.style.display='none';
+},true);
+document.addEventListener('mousemove',function(e){
+  if(tlTip.style.display==='block'){
+    tlTip.style.left=Math.min(e.clientX+14,window.innerWidth-tlTip.offsetWidth-16)+'px';
+    tlTip.style.top=(e.clientY-10)+'px';
+  }
+});
 
 TL_DATA.forEach(d=>d.sessions.forEach(s=>rc(s.repo)));
 if(TL_DATA.length)tlOpen.add(TL_DATA[0].date);
