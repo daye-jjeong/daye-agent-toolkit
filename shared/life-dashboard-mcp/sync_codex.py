@@ -341,6 +341,7 @@ def _parse_session(path: Path) -> dict | None:
         "summary": summary,
         "start_at": start_at,
         "end_at": end_at,
+        "date": start_at[:10] if start_at else None,
         "duration_min": duration_min,
         "file_count": len(files_changed),
         "error_count": len(errors),
