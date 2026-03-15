@@ -59,20 +59,28 @@ escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션"
 **실제로 뭘 했는지** 구체적으로 요약한다.
 
 **요약 품질 기준:**
-- 단순히 "디버깅" "리뷰" 같은 한 단어 X → 어떤 기능/파일을 어떤 목적으로 작업했는지
-- 브랜치명이 있으면 포함
-- commands에서 실제 작업 맥락 추론 (git diff, pytest, 특정 파일 경로 등)
-- "이 요약만 읽고 어떤 기능을 작업했는지 알 수 있는가?" 기준으로 판단
+- "설계 논의", "리뷰", "디버깅" 같은 한 단어/한 줄 요약 금지
+- **무엇을**(어떤 기능/모듈) **왜**(어떤 문제/목적으로) **어떻게**(어떤 결과/산출물) 했는지 구체적으로
+- 브랜치명, worktree 이름이 있으면 포함
+- commands에서 실제 작업 맥락 추론 (git diff → 리뷰, pytest → 테스트, npm run dev → CLI 확인 등)
+- files_changed에서 어떤 파일/모듈을 건드렸는지 포함
+- user_messages/agent_messages에서 작업 의도와 결과 추출
+- **"이 요약만 읽고 무슨 기능을 왜 작업했는지, 결과가 뭔지 알 수 있는가?"** 기준으로 판단
 
+**나쁜 예 (금지):**
+- `"에이전트 시스템 두 가지 방향 설계 논의"` ← 뭘 설계했는지 모름
+- `"PR 리뷰"` ← 어떤 PR인지 모름
+- `"설정 변경"` ← 뭘 왜 바꿨는지 모름
+
+**좋은 예:**
 ```json
 {
-  "dy-minions-squad": [
-    "[CC] [문서] fix/cron-retry-and-reply-routing — 워치독 스캔 머지 + state-sot-unification worktree 변경사항 리뷰. 머지 보류",
-    "[CC] [디버깅] OpenClaw 텔레그램 봇 응답 경로 추적 — openclaw logs에서 lane/session 로그 분석"
+  "daye-agent-toolkit": [
+    "[CC] [리팩토링] session logger 파이프라인 전면 개편 — active_session_scanner(열린 세션 탐색) + parse_transcript_by_date(날짜 분할) + activity_writer(SQLite 직접 기록) 구현. work-log markdown 중간 단계 제거, sync_cc/sync_codex 등 7개 파일 삭제. session-scanner + direct-sqlite worktree 머지"
   ],
-  "cube-backend": [
-    "[Codex] [설계] conveyor-belt-monitoring-v2 목업 검증 — RDS/MCP 접근 확인, 유닛 수 수정",
-    "[CC] [리뷰] order-queue-str worktree에서 queue.service.ts 변경사항 diff 리뷰"
+  "dy-minions-squad": [
+    "[CC] [설계] wt/suggestion-review-tf — 에이전트 제안 평가 + 태스크 완료 리뷰 기준 체계화. cron run/task list/proactive list CLI로 현재 데이터 구조 확인 후, suggestion approve/reject API + proactive.ts + task.ts 수정. evaluation criteria 설계 문서 작성",
+    "[Codex] [리뷰] 평가 기준 설계 스펙 vs proactive/task 스키마 정합성 검증 — proactive.ts, task.ts, schemas 매핑 후 충돌 지점 식별"
   ]
 }
 ```
