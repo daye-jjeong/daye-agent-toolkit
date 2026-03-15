@@ -384,6 +384,8 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 
 def build_daily_report(data: dict, coaching_md: str | None = None,
                        repo_summaries: dict[str, str | list[str]] | None = None) -> str:
+    # repo_summaries는 deprecated — DB summary를 직접 사용.
+    # 하위 호환을 위해 파라미터는 유지하되 무시.
     if not data.get("has_data"):
         return _build_empty_page(data.get("date", ""))
 
@@ -401,7 +403,7 @@ def build_daily_report(data: dict, coaching_md: str | None = None,
         _build_tag_breakdown(data),
         _build_nudges(data),
         timeline,
-        _build_repos_detail(data, repo_summaries=repo_summaries),
+        _build_repos_detail(data),  # DB summary 직접 사용
         _build_coaching_section(coaching_md),
         _build_health_section(data),
         _build_pantry_section(data),

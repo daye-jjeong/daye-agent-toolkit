@@ -52,66 +52,39 @@ python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly_<DATE
 `references/coaching-prompts.md` 프레임으로 데이터를 해석하고 **두 가지 파일**을 생성한다.
 escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
 
-**3a. 레포별 요약 JSON** → `/tmp/repo_summaries_<DATE>.json`
+**3a. 세션 요약을 DB에 업데이트**
 
-세션의 `summary` 필드는 사용자 프롬프트라 의미 없는 경우가 많다.
-`commands`, `user_messages`, `agent_messages`, `files_changed`, `branch` 등을 종합해서
-**실제로 뭘 했는지** 구체적으로 요약한다.
+JSON 데이터의 각 세션을 확인하고, summary가 부정확하거나 topic 수준이면 `commands`, `user_messages`, `agent_messages`, `files_changed`, `branch`를 종합해서 구체적인 요약으로 업데이트한다.
 
 **요약 품질 기준:**
 - **무엇을**(어떤 기능/모듈) **왜**(어떤 문제/목적) **결과**(뭐가 만들어졌거나 바뀌었는지) 중심
 - 브랜치명, worktree 이름이 있으면 포함
-- **수단(명령어)을 적지 마라** — "git log로 확인", "rg로 검색", "gh pr checks 실행" 같은 건 수단이지 결과가 아님
+- **수단(명령어)을 적지 마라** — "git log로 확인", "rg로 검색" 같은 건 수단이지 결과가 아님
 - **"이 요약만 읽고 어떤 기능이 어떻게 바뀌었는지 알 수 있는가?"** 기준
 
 **나쁜 예 (금지):**
-- `"에이전트 시스템 두 가지 방향 설계 논의"` ← 뭘 설계했는지 모름
+- `"설계 논의"` ← 뭘 설계했는지 모름
 - `"PR 리뷰"` ← 어떤 PR인지 모름
-- `"설정 변경"` ← 뭘 왜 바꿨는지 모름
-- `"git log/diff로 변경 이력 확인"` ← 수단을 적으면 안 됨
-- `"gh pr list로 PR 목록 확인, CI 상태 체크"` ← 수단 나열
+- `"git log/diff로 변경 이력 확인"` ← 수단
 
 **좋은 예:**
-```json
-{
-  "daye-agent-toolkit": [
-    "[CC] [리팩토링] session logger 파이프라인 전면 개편 — 열린 세션 누락 문제 해결. active_session_scanner + date-split + activity_writer 구현, work-log markdown 제거하고 SQLite 직접 기록으로 전환. 7개 파일 삭제"
-  ],
-  "dy-minions-squad": [
-    "[CC] [설계] wt/suggestion-review-tf — 에이전트 제안 평가 + 태스크 완료 리뷰 기준 체계. suggestion approve/reject API, proactive.ts, task.ts 수정. evaluation criteria 설계 문서 작성"
-  ],
-  "cube-backend": [
-    "[CC] [리뷰] chore/add-prisma-skills — 열린 PR 5개 머지 순서 정리. #777 #720 CI 통과 확인"
-  ]
-}
-```
-
-키는 레포 이름(short name), 값은 기능별 작업 요약 리스트. 단일 문자열도 허용.
-
-**각 항목 앞에 반드시:**
-- `[CC]` 또는 `[Codex]` — 세션 source (sessions[].source 참조)
-- `[태그]` — 작업 유형. summary가 부정확하면 commands/messages에서 재판단
-
-**3a-2. 레포별 요약을 DB에 저장**
-
-3a에서 생성한 요약을 DB에도 반영한다. 다음 리포트에서 같은 세션을 다시 해석할 필요가 없어진다.
-
-각 세션의 `session_id`와 `date`를 JSON 데이터에서 확인하고, 레포별 요약에서 해당 세션의 태그+요약을 추출하여 업데이트:
+- `"session logger 파이프라인 전면 개편 — 열린 세션 누락 해결. active_session_scanner + date-split 구현, work-log markdown 제거"`
+- `"chore/add-prisma-skills — 열린 PR 5개 머지 순서 정리. #777 #720 CI 통과 확인"`
 
 ```bash
+# 각 세션에 대해 반복
 python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
-    --session-id <SID> --date <DATE> --tag "태그" --summary "레포별 요약에서 추출한 구체적 요약"
+    --session-id <SID> --date <DATE> --tag "태그" --summary "구체적 요약"
 ```
 
-**모든 세션에 대해 반복.** 이미 요약이 있어도 에이전트가 만든 더 구체적인 요약으로 덮어쓴다.
+**모든 세션에 대해 반복.** 이 요약이 타임라인과 레포별 작업 양쪽에 그대로 사용된다.
 
 **3b. 코칭 마크다운** → `/tmp/coaching_<DATE>.md`
 
-**3a의 레포별 요약을 먼저 완성한 뒤** 코칭을 작성한다. "오늘의 정리"는 레포별 요약의 상위 집약이어야 하기 때문.
+**3a를 먼저 완성한 뒤** 코칭을 작성한다.
 
 코칭 결과를 마크다운으로 저장:
 - 섹션 헤더 사용: `## 오늘의 정리`, `## 코칭`, `## 내일 이어할 것` 등
-- **레포별 상세는 여기에 넣지 않는다** (3a의 JSON이 HTML "레포별 작업" 섹션에 직접 들어감)
 
 **"오늘의 정리" 필수 항목:**
 - CC 세션 수/시간/토큰, Codex 세션 수/시간/토큰 (source별 분리)
@@ -123,18 +96,16 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
 #### Step 4. HTML 리포트 생성
 
 ```bash
-# 일일 — --coaching + --repo-summaries 둘 다 전달. 파일명에 날짜 포함.
+# 일일
 python3 {baseDir}/scripts/daily_report.py \
   --input /tmp/_coach_data_<DATE>.json \
-  --coaching /tmp/coaching_<DATE>.md \
-  --repo-summaries /tmp/repo_summaries_<DATE>.json
+  --coaching /tmp/coaching_<DATE>.md
 open /tmp/daily_report.html
 
 # 주간
 python3 {baseDir}/scripts/weekly_report.py \
   --input /tmp/_coach_data_weekly_<DATE>.json \
-  --coaching /tmp/coaching_weekly_<DATE>.md \
-  --repo-summaries /tmp/repo_summaries_weekly_<DATE>.json
+  --coaching /tmp/coaching_weekly_<DATE>.md
 open /tmp/weekly_report.html
 ```
 
