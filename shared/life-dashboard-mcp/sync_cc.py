@@ -106,6 +106,7 @@ def sync_date(conn, date_str: str) -> int:
                 ),
                 "start_at": start_at,
                 "end_at": end_at,
+                "date": date_str,
                 "duration_min": s.get("duration_min"),
                 "file_count": s.get("file_count", 0),
                 "error_count": len(s.get("errors", [])),

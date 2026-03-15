@@ -403,6 +403,25 @@ def main():
     parser.add_argument("--date", default=datetime.now(KST).strftime("%Y-%m-%d"))
     args = parser.parse_args()
 
+    # 1) 열린 세션 스캔 → work-log에 기록
+    try:
+        from active_session_scanner import scan_active_sessions
+        scan_active_sessions()
+    except Exception as e:
+        print(f"[daily_coach] scanner failed: {e}", file=sys.stderr)
+
+    # 2) work-log → SQLite 동기화
+    try:
+        from sync_cc import sync_date as sync_cc_date
+        sync_conn = get_conn()
+        try:
+            sync_cc_date(sync_conn, args.date)
+            sync_conn.commit()
+        finally:
+            sync_conn.close()
+    except Exception as e:
+        print(f"[daily_coach] sync failed: {e}", file=sys.stderr)
+
     conn = get_conn()
     try:
         data = get_today_data(conn, args.date)
