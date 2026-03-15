@@ -27,6 +27,30 @@ KST = timezone(timedelta(hours=9))
 from _helpers import find_project_memory, get_pending_work
 
 
+def _get_blocked_resolution(conn, mon: str, next_sun: str) -> list[dict]:
+    """해당 주의 blocked 세션 중 같은 레포+브랜치에서 후속 세션이 있으면 해소된 것으로 판단."""
+    blocked = conn.execute("""
+        SELECT repo, branch, tag, summary, start_at FROM activities
+        WHERE start_at >= ? AND start_at < ? AND status = 'blocked'
+        ORDER BY start_at
+    """, (mon, next_sun)).fetchall()
+    if not blocked:
+        return []
+
+    results = []
+    for row in blocked:
+        r = dict(row)
+        # 같은 repo에서 blocked 이후에 세션이 있는지 확인
+        followup = conn.execute("""
+            SELECT 1 FROM activities
+            WHERE repo = ? AND start_at > ? AND start_at < ? AND status != 'blocked'
+            LIMIT 1
+        """, (r["repo"], r["start_at"], next_sun)).fetchone()
+        r["resolved"] = followup is not None
+        results.append(r)
+    return results
+
+
 def get_week_dates(ref_date: str) -> list[str]:
     """ref_date가 속한 주의 월~일 날짜 리스트."""
     dt = datetime.strptime(ref_date, "%Y-%m-%d")
@@ -158,6 +182,13 @@ def get_week_data(conn, dates: list[str]) -> dict:
         print(f"[weekly_coach] stale worktrees scan failed: {e}", file=sys.stderr)
         review_items["stale_worktrees"] = []
 
+    # blocked 해소 추적
+    try:
+        blocked_resolution = _get_blocked_resolution(conn, mon, next_sun)
+    except Exception as e:
+        print(f"[weekly_coach] blocked resolution query failed: {e}", file=sys.stderr)
+        blocked_resolution = []
+
     return {
         "dates": dates,
         "daily": daily,
@@ -174,6 +205,7 @@ def get_week_data(conn, dates: list[str]) -> dict:
         "weekly_signals": weekly_signals,
         "repeated_patterns": repeated,
         "review_items": review_items,
+        "blocked_resolution": blocked_resolution,
     }
 
 

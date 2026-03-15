@@ -29,6 +29,27 @@ OVERWORK_THRESHOLD_HOURS = 8
 from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work
 
 
+def _get_unresolved_followups(conn, prev_date: str, today_date: str) -> list[dict]:
+    """전날 follow_up 세션 중 오늘 같은 레포에서 작업하지 않은 것을 반환."""
+    prev_followups = conn.execute("""
+        SELECT repo, tag, summary, follow_up FROM activities
+        WHERE date = ? AND status = 'follow_up' AND follow_up IS NOT NULL AND follow_up != ''
+    """, (prev_date,)).fetchall()
+    if not prev_followups:
+        return []
+
+    today_repos = {r["repo"] for r in conn.execute(
+        "SELECT DISTINCT repo FROM activities WHERE date = ?", (today_date,)
+    ).fetchall()}
+
+    results = []
+    for row in prev_followups:
+        r = dict(row)
+        r["resolved"] = r["repo"] in today_repos
+        results.append(r)
+    return results
+
+
 def get_today_data(conn, date_str: str) -> dict:
     stats = conn.execute(
         "SELECT * FROM daily_stats WHERE date = ?", (date_str,)
@@ -98,6 +119,10 @@ def get_today_data(conn, date_str: str) -> dict:
         print(f"[daily_coach] mistake trends query failed: {e}", file=sys.stderr)
         mistake_trends = {"by_category": [], "uncategorized": [], "total": 0}
 
+    # 전날 follow_up → 오늘 해소 여부
+    yesterday = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+    yesterday_followups = _get_unresolved_followups(conn, yesterday, date_str)
+
     return {
         "date": date_str,
         "has_data": True,
@@ -118,6 +143,7 @@ def get_today_data(conn, date_str: str) -> dict:
         "pantry_expiry": pantry_expiry,
         "pending_work": pending,
         "mistake_trends": mistake_trends,
+        "yesterday_followups": yesterday_followups,
     }
 
 
