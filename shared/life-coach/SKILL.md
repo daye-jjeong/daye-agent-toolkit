@@ -19,17 +19,22 @@ CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통
 
 ### 절차 (반드시 순서대로)
 
-#### Step 1. DB 동기화
-
-데이터가 빠짐없이 모여야 정확한 코칭이 된다. **먼저 sync를 돌려라.**
+#### Step 1. 열린 세션 스캔 + 미요약 세션 요약
 
 ```bash
-# life-dashboard-mcp 디렉토리 기준
-python3 {baseDir}/../life-dashboard-mcp/sync_cc.py --date <DATE>
-python3 {baseDir}/../life-dashboard-mcp/sync_codex.py --date <DATE>
+# 열린 CC 세션을 SQLite에 기록
+python3 {baseDir}/../../cc/work-digest/scripts/active_session_scanner.py
+
+# 미요약 세션 확인
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py unsummarized --date <DATE>
 ```
 
-출력에서 synced 세션 수를 확인. 0이면 해당 날짜에 로그가 없는 것.
+미요약 세션이 있으면, topic을 보고 태그+요약을 생성하여 업데이트:
+
+```bash
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
+    --session-id <SID> --date <DATE> --tag "태그" --summary "요약"
+```
 
 #### Step 2. JSON 데이터 추출
 

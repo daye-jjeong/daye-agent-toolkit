@@ -4,7 +4,7 @@
 		"schedule": "0 21 * * *",
 		"target": "daily-coach",
 		"reason": "cron: daily-coach",
-		"instructions": "life-coach 스킬의 '일일 코칭' 절차를 따르세요. 톤 에스컬레이션 레벨에 맞춰 코칭을 생성하세요."
+		"instructions": "life-coach 스킬의 '일일 코칭' 절차를 따르세요. 먼저 active_session_scanner.py를 실행하고, 미요약 세션이 있으면 activity_writer.py unsummarized로 조회 후 update-summary로 요약을 업데이트한 뒤, 코칭을 생성하세요."
 	},
 	{
 		"name": "weekly-coach",

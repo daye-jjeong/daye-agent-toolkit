@@ -19,14 +19,9 @@ work-digest/
 ├── .claude-skill
 ├── telegram.conf            # Telegram 설정 (단일 소스)
 ├── scripts/
-│   ├── session_logger.py    # CC 세션 종료 시 LLM 요약 + 로그 + 알림
-│   ├── parse_work_log.py    # work-log .md → 구조화 JSON
-│   ├── daily_digest.py      # 일일 다이제스트 + 레포별 context 갱신
-│   ├── weekly_digest.py     # 주간 리포트 + reflect 질문
+│   ├── session_logger.py    # CC 세션 종료 시 LLM 요약 + SQLite 직접 기록 + 알림
+│   ├── active_session_scanner.py  # 열린 CC 세션 탐색 + SQLite 기록
 │   └── notify.sh            # permission/idle/error 알림 (stop 제외)
-├── work-log/
-│   ├── YYYY-MM-DD.md        # 일별 세션 로그 (자동 생성, git ignored)
-│   └── state/
 └── references/
     └── prompt-template.md
 ```
@@ -36,37 +31,28 @@ work-digest/
 ### Pipeline 1 — Session Logger (CC Hook: SessionEnd/PreCompact)
 
 ```
-CC 세션 종료
+CC 세션 종료 (SessionEnd/PreCompact hook)
   → transcript에서 user/assistant 대화 추출
-  → claude haiku로 [태그] + 2-3줄 요약 생성
-  → work-log/YYYY-MM-DD.md에 기록
+  → 날짜별 분할 (parse_transcript_by_date)
+  → SQLite에 직접 기록 (activity_writer.record_activities)
+  → SessionEnd: claude sonnet으로 [태그] + 요약 생성 → SQLite 업데이트
   → 텔레그램으로 세션 요약 알림 전송
 ```
 
 태그 종류: 코딩, 디버깅, 리서치, 리뷰, ops, 설정, 문서, 기타
 
-### Pipeline 2 — Daily Digest (retired → life-coach로 이관)
+### Pipeline 2 — Active Session Scanner
 
 ```
-parse_work_log.py | daily_digest.py
-  → life-coach/scripts/daily_coach.py가 대체
-  → 세션 상세 + 토큰 + 코칭이 하나의 리포트로 통합
+daily_coach.py 실행 시 (또는 수동)
+  → ~/.claude/sessions/*.json에서 열린 세션 탐색
+  → 각 세션의 transcript를 날짜별로 분할
+  → SQLite에 직접 기록 (요약 없이, topic만)
 ```
 
-### Pipeline 3 — Weekly Digest (retired → life-coach로 이관)
+### Pipeline 3 — Daily/Weekly Coach (life-coach 스킬)
 
-```
-weekly_digest.py
-  → life-coach/scripts/weekly_coach.py가 대체
-  → 주간 트렌드 + 방향성 코칭으로 통합
-```
-
-## 자동화
-
-| Cron | Script | 설명 |
-|------|--------|------|
-| ~~`0 21 * * *`~~ | ~~`daily_digest.py`~~ | retired → `life-coach/daily_coach.py` |
-| ~~`0 21 * * 0`~~ | ~~`weekly_digest.py`~~ | retired → `life-coach/weekly_coach.py` |
+일일/주간 코칭은 `life-coach` 스킬이 담당. work-digest는 데이터 수집만.
 
 ## Telegram 설정
 
@@ -77,7 +63,7 @@ weekly_digest.py
 ## 피드백 루프
 
 ```
-세션 → 요약 → work-log → 다이제스트 → work-context.md
+세션 → 요약 → SQLite → daily-coach → work-context.md
                                               ↓
 다음 세션 시작 ← memory/work-context.md ←────┘
 ```
@@ -89,10 +75,8 @@ weekly_digest.py
 
 | Script | Tier | Purpose |
 |--------|------|---------|
-| `session_logger.py` | 2 (LLM) | 세션 요약 + 태깅 + 로그 + 텔레그램 |
-| `parse_work_log.py` | 1 (0 tokens) | .md → 구조화 JSON |
-| `daily_digest.py` | 2 (LLM) | 일일 다이제스트 + context 갱신 |
-| `weekly_digest.py` | 2 (LLM) | 주간 리포트 + reflect |
+| `session_logger.py` | 2 (LLM) | 세션 요약 + 태깅 + SQLite 기록 + 텔레그램 |
+| `active_session_scanner.py` | 1 (0 tokens) | 열린 세션 탐색 + SQLite 기록 |
 | `notify.sh` | 1 (0 tokens) | permission/idle/error 알림 |
 
 ## Token Usage
