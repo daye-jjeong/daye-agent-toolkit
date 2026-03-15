@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Codex session logger for work-digest."""
+"""Codex session logger — records Codex sessions directly to SQLite."""
 
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -14,8 +12,11 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from _common import BASE_DIR, WEEKDAYS_KO, WORK_TAGS, WORK_TAGS_SET, format_tokens, send_telegram
+from _common import BASE_DIR, WORK_TAGS, WORK_TAGS_SET, send_telegram
 
+_MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"
+sys.path.insert(0, str(_MCP_DIR))
+from activity_writer import record_activities
 
 KST = timezone(timedelta(hours=9))
 IDLE_THRESHOLD_SEC = 300
@@ -23,32 +24,6 @@ SUMMARY_TIMEOUT_SEC = 60
 BEHAVIOR_TIMEOUT_SEC = 60
 CONVERSATION_MAX_CHARS = 8000
 CODEX_BIN_CANDIDATES = ("/opt/homebrew/bin/codex", "/usr/local/bin/codex")
-WORK_LOG_DIR = BASE_DIR / "work-log"
-STATE_FILE = BASE_DIR / "state" / "session_logger_state.json"
-
-
-def load_state() -> dict[str, list[str]]:
-    try:
-        return json.loads(STATE_FILE.read_text())
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"recorded": []}
-
-
-def save_state(state: dict[str, list[str]]) -> None:
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
-
-
-def already_recorded(session_id: str, event: str) -> bool:
-    state = load_state()
-    key = f"{session_id}:{event}"
-    recorded = state.setdefault("recorded", [])
-    if key in recorded:
-        return True
-    recorded.append(key)
-    state["recorded"] = recorded[-100:]
-    save_state(state)
-    return False
 
 
 def detect_repo(cwd: str) -> str:
@@ -593,117 +568,136 @@ def parse_transcript(transcript_path: str) -> dict:
     }
 
 
-def _format_tokens(n: int) -> str:
-    return format_tokens(n, suffix=" tokens")
+def parse_rollout_by_date(transcript_path: str) -> dict[str, dict]:
+    """Parse Codex rollout JSONL and split by KST date.
+
+    Returns: {"2026-03-14": ParsedData, ...}
+    ParsedData는 CC의 parse_transcript_by_date()와 동일한 구조.
+    """
+    by_date: dict[str, dict] = {}
+    current_date: str | None = None
+    prev_token_total = 0
+
+    for entry in _iter_entries(transcript_path):
+        payload = _get_payload(entry)
+        timestamp = _parse_timestamp(entry.get("timestamp"))
+
+        entry_date = current_date
+        if timestamp is not None:
+            kst_dt = _to_kst(timestamp)
+            if kst_dt:
+                entry_date = kst_dt.strftime("%Y-%m-%d")
+                current_date = entry_date
+
+        if not entry_date:
+            continue
+
+        if entry_date not in by_date:
+            by_date[entry_date] = {
+                "files": set(),
+                "commands": [],
+                "errors": [],
+                "topic": "",
+                "timestamps": [],
+                "token_total": 0,
+                "has_commits": False,
+            }
+
+        acc = by_date[entry_date]
+        if timestamp is not None:
+            acc["timestamps"].append(timestamp)
+
+        entry_type = entry.get("type")
+        payload_type = payload.get("type")
+
+        # user message → topic (first per date)
+        if not acc["topic"]:
+            if entry_type == "event_msg" and payload_type == "user_message":
+                candidate = _normalize_user_text(str(payload.get("message", "")))
+                if candidate:
+                    acc["topic"] = candidate[:120]
+            elif entry_type == "response_item" and payload_type == "message" and payload.get("role") == "user":
+                candidate = _normalize_user_text(_extract_content_text(payload.get("content")))
+                if candidate:
+                    acc["topic"] = candidate[:120]
+
+        # tokens (cumulative → delta)
+        if entry_type == "event_msg" and payload_type == "token_count":
+            info = payload.get("info")
+            if isinstance(info, dict):
+                total_usage = info.get("total_token_usage", {})
+                if isinstance(total_usage, dict):
+                    new_total = int(total_usage.get("total_tokens", 0) or 0)
+                    if new_total > prev_token_total:
+                        acc["token_total"] += new_total - prev_token_total
+                        prev_token_total = new_total
+
+        # commands + file changes
+        if entry_type == "response_item" and payload_type == "function_call":
+            args = _parse_arguments(payload.get("arguments"))
+            command = _extract_command(args)
+            if command:
+                acc["commands"].append(command)
+                if not acc["has_commits"] and "git commit" in command.lower():
+                    acc["has_commits"] = True
+            name = payload.get("name", "")
+            if name in ("write_file", "apply_diff", "create_file"):
+                fpath = args.get("path", "") or args.get("file_path", "")
+                if fpath:
+                    acc["files"].add(fpath)
+
+        # errors
+        if entry_type == "response_item" and payload_type == "function_call_output":
+            failure = _extract_failure_text(str(payload.get("output", "")))
+            if failure:
+                acc["errors"].append(failure)
+
+    # accumulator → ParsedData
+    result = {}
+    for date_str, acc in by_date.items():
+        timestamps = acc["timestamps"]
+        duration_min = None
+        if len(timestamps) >= 2:
+            active_sec = 0
+            for prev, curr in zip(timestamps, timestamps[1:]):
+                gap = (curr - prev).total_seconds()
+                if 0 < gap <= IDLE_THRESHOLD_SEC:
+                    active_sec += gap
+            if active_sec > 0:
+                duration_min = max(1, int(active_sec / 60))
+
+        start_kst = _to_kst(min(timestamps)) if timestamps else None
+        end_kst = _to_kst(max(timestamps)) if timestamps else None
+
+        result[date_str] = {
+            "files": sorted(acc["files"]),
+            "commands": acc["commands"][:10],
+            "errors": acc["errors"][:5],
+            "topic": acc["topic"],
+            "duration_min": duration_min,
+            "end_time": end_kst.strftime("%H:%M") if end_kst else None,
+            "start_kst": start_kst,
+            "has_commits": acc["has_commits"],
+            "tokens": {
+                "input": 0, "output": 0,
+                "cache_read": 0, "cache_create": 0,
+                "api_calls": acc["token_total"],
+            },
+        }
+
+    return result
 
 
-def build_frontmatter(now: datetime) -> str:
-    date_str = now.strftime("%Y-%m-%d")
-    weekday = WEEKDAYS_KO[now.weekday()]
-    return (
-        f"---\n"
-        f"date: {date_str}\n"
-        "type: work-log\n"
-        "source: codex\n"
-        "tags: [work-log, codex]\n"
-        "---\n\n"
-        f"# {date_str} ({weekday})\n\n"
-    )
+# ── Telegram ──────────────────────────────────────
 
-
-def build_session_section(session_id: str, data: dict, now: datetime, repo: str, event: str) -> str:
-    time_str = data.get("start_time") or now.strftime("%H:%M")
-    end_time = data.get("end_time")
-    if end_time and end_time != time_str:
-        time_label = f"{time_str}~{end_time}"
-    else:
-        time_label = time_str
-
-    sid_short = session_id[:8] if session_id else "unknown"
-    tokens = data.get("tokens", {})
-    total_tokens = int(tokens.get("total") or 0)
-    if total_tokens <= 0:
-        total_tokens = sum(int(tokens.get(key, 0) or 0) for key in ("input", "cached_input", "output", "reasoning_output"))
-
-    duration = f"{data['duration_min']}분" if data.get("duration_min") else "?분"
-    lines = [
-        f"## 세션 {time_label} ({sid_short}, {repo})",
-        f"> source: codex | event: {event}",
-        f"> 파일 {len(data.get('files', []))}개 | {duration} | {_format_tokens(total_tokens)}",
-        "",
-    ]
-
-    summary = data.get("summary")
-    if isinstance(summary, dict):
-        tag = summary.get("tag", "")
-        text = summary.get("text", "").strip()
-        tag_prefix = f"[{tag}] " if tag else ""
-        if text:
-            lines.extend([f"**요약**: {tag_prefix}{text}", ""])
-    elif data.get("task_complete_message"):
-        lines.extend([f"**결과**: {data['task_complete_message']}", ""])
-    elif data.get("topic"):
-        lines.extend([f"**주제**: {data['topic']}", ""])
-
-    signals = data.get("behavioral_signals")
-    if signals:
-        if signals.get("decisions"):
-            lines.extend([f"**결정**: {' ; '.join(signals['decisions'])}", ""])
-        if signals.get("mistakes"):
-            lines.extend([f"**시행착오**: {' ; '.join(signals['mistakes'])}", ""])
-        if signals.get("patterns"):
-            lines.extend([f"**패턴**: {' ; '.join(signals['patterns'])}", ""])
-
-    if data.get("commands"):
-        lines.append("### 실행 명령")
-        for command in data["commands"][:5]:
-            lines.append(f"- `{command}`")
-        lines.append("")
-
-    if data.get("errors"):
-        lines.append("### 에러/이슈")
-        for error in data["errors"]:
-            lines.append(f"- {error}")
-        lines.append("")
-
-    if any(tokens.values()):
-        lines.append("### 토큰")
-        lines.append(f"- Input: {_format_tokens(int(tokens.get('input', 0) or 0))}")
-        lines.append(f"- Cached input: {_format_tokens(int(tokens.get('cached_input', 0) or 0))}")
-        lines.append(f"- Output: {_format_tokens(int(tokens.get('output', 0) or 0))}")
-        lines.append(f"- Reasoning output: {_format_tokens(int(tokens.get('reasoning_output', 0) or 0))}")
-        lines.append(f"- Total: {_format_tokens(total_tokens)}")
-        lines.append("")
-
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def write_session_marker(session_id: str, data: dict, now: datetime, repo: str, event: str) -> None:
-    marker_time = data.get("end_at")
-    log_time = marker_time if isinstance(marker_time, datetime) else now
-    WORK_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    daily_file = WORK_LOG_DIR / f"{log_time.strftime('%Y-%m-%d')}.md"
-    section = build_session_section(session_id, data, log_time, repo, event)
-
-    with open(daily_file, "a") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        try:
-            if os.fstat(handle.fileno()).st_size == 0:
-                handle.write(build_frontmatter(log_time))
-            handle.write(section)
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
-
-
-def send_session_telegram(data: dict, repo: str, duration_min: int | None) -> None:
-    summary = data.get("summary")
-    if isinstance(summary, dict):
+def send_session_telegram(data: dict, repo: str, duration_min: int | None, summary: dict | None = None) -> None:
+    if summary:
         tag = summary.get("tag", "")
         text = summary.get("text", "")
         tag_prefix = f"[{tag}] " if tag else ""
         message = f"[Codex] {repo} — {tag_prefix}{text}"
     else:
-        topic = data.get("topic") or data.get("task_complete_message") or "작업 완료"
+        topic = data.get("topic", "작업 완료")
         message = f"[Codex] {repo} — {topic[:100]}"
 
     if duration_min:
@@ -718,11 +712,9 @@ def _build_compaction_summary(data: dict, transcript_path: str, repo: str, cwd: 
     text = extract_compaction_text(transcript_path).strip()
     if not text:
         return None
-    # LLM 요약 시도 (compaction 텍스트도 결과 중심으로)
     summary = summarize_session(text, repo, cwd)
     if summary:
         return summary
-    # LLM 실패 시: User: 접두사 제거 + 첫 문장 추출
     first_line = text.splitlines()[0].strip()
     if first_line.startswith("User: "):
         first_line = first_line[6:]
@@ -743,29 +735,31 @@ def main() -> None:
     if not transcript.exists():
         sys.exit(0)
 
-    data = parse_transcript(str(transcript))
-    effective_cwd = args.cwd or data.get("cwd", "")
+    by_date = parse_rollout_by_date(str(transcript))
+    if not by_date:
+        sys.exit(0)
+
+    # cwd: args or session_meta
+    effective_cwd = args.cwd
+    if not effective_cwd:
+        for entry in _iter_entries(str(transcript)):
+            if entry.get("type") in ("session_meta", "turn_context"):
+                effective_cwd = str(_get_payload(entry).get("cwd", ""))
+                if effective_cwd:
+                    break
+
     repo = detect_repo(effective_cwd)
-
-    if not any(
-        [
-            data.get("topic"),
-            data.get("commands"),
-            data.get("compaction_detected"),
-            data.get("last_agent_message"),
-            data.get("task_complete_message"),
-        ]
-    ):
-        sys.exit(0)
-
     session_id = args.session_id or transcript.stem
-    if already_recorded(session_id, args.event):
-        sys.exit(0)
 
-    now = datetime.now(KST)
+    # SQLite에 기록 (요약 없이)
+    record_activities("codex", session_id, by_date, repo)
+
+    # session_end / compaction: LLM 요약
+    summary = None
+    signals = None
+
     if args.event == "session_end":
         from concurrent.futures import ThreadPoolExecutor
-
         conversation = extract_conversation(str(transcript))
         user_msgs = extract_user_messages(str(transcript))
         work_cwd = effective_cwd or str(transcript.parent)
@@ -774,31 +768,31 @@ def main() -> None:
             with ThreadPoolExecutor(max_workers=2) as pool:
                 summary_future = pool.submit(summarize_session, conversation, repo, work_cwd)
                 signals_future = pool.submit(extract_behavioral_signals, user_msgs, repo, work_cwd)
-
                 try:
                     summary = summary_future.result(timeout=SUMMARY_TIMEOUT_SEC + 10)
-                    if summary:
-                        data["summary"] = summary
                 except Exception as e:
-                    print(f"[session_logger] summary future failed: {e}", file=sys.stderr)
-
+                    print(f"[session_logger] summary failed: {e}", file=sys.stderr)
                 try:
                     signals = signals_future.result(timeout=BEHAVIOR_TIMEOUT_SEC + 10)
-                    if signals:
-                        data["behavioral_signals"] = signals
                 except Exception as e:
-                    print(f"[session_logger] signals future failed: {e}", file=sys.stderr)
+                    print(f"[session_logger] signals failed: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[session_logger] ThreadPool failed: {e}", file=sys.stderr)
-    elif args.event == "compaction":
-        summary = _build_compaction_summary(data, str(transcript), repo, effective_cwd or str(transcript.parent))
-        if summary:
-            data["summary"] = summary
 
-    write_session_marker(session_id, data, now, repo, args.event)
+    elif args.event == "compaction":
+        summary = _build_compaction_summary(
+            parse_transcript(str(transcript)), str(transcript),
+            repo, effective_cwd or str(transcript.parent),
+        )
+
+    if summary or signals:
+        record_activities("codex", session_id, by_date, repo,
+                        summary=summary, behavioral_signals=signals)
 
     if args.event == "session_end":
-        send_session_telegram(data, repo, data.get("duration_min"))
+        last_data = by_date[max(by_date.keys())]
+        total_dur = sum(d.get("duration_min") or 0 for d in by_date.values())
+        send_session_telegram(last_data, repo, total_dur or None, summary)
 
 
 if __name__ == "__main__":
