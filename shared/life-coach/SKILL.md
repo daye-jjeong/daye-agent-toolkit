@@ -59,28 +59,29 @@ escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션"
 **실제로 뭘 했는지** 구체적으로 요약한다.
 
 **요약 품질 기준:**
-- "설계 논의", "리뷰", "디버깅" 같은 한 단어/한 줄 요약 금지
-- **무엇을**(어떤 기능/모듈) **왜**(어떤 문제/목적으로) **어떻게**(어떤 결과/산출물) 했는지 구체적으로
+- **무엇을**(어떤 기능/모듈) **왜**(어떤 문제/목적) **결과**(뭐가 만들어졌거나 바뀌었는지) 중심
 - 브랜치명, worktree 이름이 있으면 포함
-- commands에서 실제 작업 맥락 추론 (git diff → 리뷰, pytest → 테스트, npm run dev → CLI 확인 등)
-- files_changed에서 어떤 파일/모듈을 건드렸는지 포함
-- user_messages/agent_messages에서 작업 의도와 결과 추출
-- **"이 요약만 읽고 무슨 기능을 왜 작업했는지, 결과가 뭔지 알 수 있는가?"** 기준으로 판단
+- **수단(명령어)을 적지 마라** — "git log로 확인", "rg로 검색", "gh pr checks 실행" 같은 건 수단이지 결과가 아님
+- **"이 요약만 읽고 어떤 기능이 어떻게 바뀌었는지 알 수 있는가?"** 기준
 
 **나쁜 예 (금지):**
 - `"에이전트 시스템 두 가지 방향 설계 논의"` ← 뭘 설계했는지 모름
 - `"PR 리뷰"` ← 어떤 PR인지 모름
 - `"설정 변경"` ← 뭘 왜 바꿨는지 모름
+- `"git log/diff로 변경 이력 확인"` ← 수단을 적으면 안 됨
+- `"gh pr list로 PR 목록 확인, CI 상태 체크"` ← 수단 나열
 
 **좋은 예:**
 ```json
 {
   "daye-agent-toolkit": [
-    "[CC] [리팩토링] session logger 파이프라인 전면 개편 — active_session_scanner(열린 세션 탐색) + parse_transcript_by_date(날짜 분할) + activity_writer(SQLite 직접 기록) 구현. work-log markdown 중간 단계 제거, sync_cc/sync_codex 등 7개 파일 삭제. session-scanner + direct-sqlite worktree 머지"
+    "[CC] [리팩토링] session logger 파이프라인 전면 개편 — 열린 세션 누락 문제 해결. active_session_scanner + date-split + activity_writer 구현, work-log markdown 제거하고 SQLite 직접 기록으로 전환. 7개 파일 삭제"
   ],
   "dy-minions-squad": [
-    "[CC] [설계] wt/suggestion-review-tf — 에이전트 제안 평가 + 태스크 완료 리뷰 기준 체계화. cron run/task list/proactive list CLI로 현재 데이터 구조 확인 후, suggestion approve/reject API + proactive.ts + task.ts 수정. evaluation criteria 설계 문서 작성",
-    "[Codex] [리뷰] 평가 기준 설계 스펙 vs proactive/task 스키마 정합성 검증 — proactive.ts, task.ts, schemas 매핑 후 충돌 지점 식별"
+    "[CC] [설계] wt/suggestion-review-tf — 에이전트 제안 평가 + 태스크 완료 리뷰 기준 체계. suggestion approve/reject API, proactive.ts, task.ts 수정. evaluation criteria 설계 문서 작성"
+  ],
+  "cube-backend": [
+    "[CC] [리뷰] chore/add-prisma-skills — 열린 PR 5개 머지 순서 정리. #777 #720 CI 통과 확인"
   ]
 }
 ```
