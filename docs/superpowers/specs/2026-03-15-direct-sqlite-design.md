@@ -140,23 +140,65 @@ scan_active_sessions()        # CC 열린 세션 → SQLite 직접
 get_today_data(conn, date)    # SQLite → 리포트 (Codex는 이미 session_logger가 기록)
 ```
 
-### 7. LLM 요약: 에이전트 직접 수행
+### 7. LLM 요약 + activity_writer CLI
 
-cron.json의 daily-coach는 OpenClaw 에이전트가 실행. 에이전트 자체가 LLM이므로 미요약 세션을 직접 요약.
+#### 요약 타이밍 2가지
 
-**SKILL.md 워크플로우 (daily-coach):**
-1. `python3 daily_coach.py --json` → 당일 데이터 JSON 출력
-2. 미요약 세션(tag=NULL)이 있으면, 에이전트가 topic/user_messages를 보고 직접 태그+요약 생성
-3. 생성한 요약을 SQLite에 업데이트 (activity_writer의 update 함수 또는 직접 SQL)
-4. 전체 데이터로 코칭 리포트 생성
-5. 텔레그램 전송
+**A) SessionEnd hook (실시간):**
+세션이 닫히면 session_logger.py가 `claude -p`로 요약 생성 → `record_activities(summary=...)` → SQLite.
+hook은 CC 세션 외부에서 실행되므로 correction rule 예외.
+
+**B) 21시 daily-coach cron (배치):**
+열린 세션은 SessionEnd가 안 탔으므로 요약이 없음. OpenClaw 에이전트가 직접 요약.
+
+#### activity_writer.py CLI 인터페이스
+
+에이전트가 요약을 DB에 쓸 수 있도록 CLI 제공:
+
+```bash
+# 미요약 세션 조회
+python3 activity_writer.py unsummarized --date 2026-03-15
+# → JSON: [{session_id, date, repo, topic, user_messages}, ...]
+
+# 요약 업데이트
+python3 activity_writer.py update-summary \
+    --session-id abc123 --date 2026-03-15 \
+    --tag "코딩" --summary "OpenClaw 스킬 호환성 변경"
+```
+
+#### SKILL.md daily-coach 워크플로우
+
+```
+1. python3 active_session_scanner.py
+   → 열린 CC 세션의 transcript → SQLite 기록 (요약 없이)
+
+2. python3 daily_coach.py --json --date <today>
+   → SQLite에서 당일 데이터 조회 → JSON 출력
+
+3. python3 activity_writer.py unsummarized --date <today>
+   → 미요약 세션 목록 조회
+   → 에이전트가 topic/user_messages를 보고 직접 태그+요약 생성
+   → python3 activity_writer.py update-summary \
+       --session-id X --date Y --tag "태그" --summary "요약"
+   → 세션마다 반복
+
+4. python3 daily_coach.py --json --date <today>
+   → 요약 포함된 최종 데이터 조회
+
+5. 에이전트가 전체 데이터로 코칭 리포트 작성 + 텔레그램 전송
+```
 
 이렇게 하면:
 - `claude -p` subprocess 호출 없음 (correction rule 준수)
-- OpenClaw에서도 동작
+- OpenClaw에서도 동작 (에이전트가 LLM이므로)
 - 열린 세션도 의미 있는 요약이 포함된 리포트
 
-**SessionEnd hook의 LLM 요약은 유지.** hook은 CC 세션 외부에서 실행되므로 correction rule 예외. 세션이 닫히면 즉시 요약이 SQLite에 기록됨.
+#### 엣지 케이스
+
+- **동시 SQLite 쓰기**: hook과 scanner가 동시 실행 가능. `record_activities`에 SQLite busy retry 추가 (`conn.execute("PRAGMA busy_timeout=5000")`).
+- **잘린 transcript**: scanner가 CC가 쓰는 중인 JSONL을 읽을 때 마지막 줄이 잘릴 수 있음. `json.loads` 실패 시 skip → 다음 실행에서 전체를 다시 읽으므로 유실 없음.
+- **3일+ 세션 요약**: SessionEnd 요약은 마지막 날짜에만. 이전 날짜는 에이전트가 daily-coach에서 채움.
+- **Codex 토큰 누적값**: `token_count` 이벤트가 하나뿐이면 해당 날짜에 전체 귀속. 복수 이벤트면 날짜별 마지막 값의 delta로 계산.
 
 ### 8. cron 정리
 
@@ -197,7 +239,7 @@ cron.json의 daily-coach는 OpenClaw 에이전트가 실행. 에이전트 자체
 
 | 파일 | 변경 |
 |------|------|
-| `shared/life-dashboard-mcp/activity_writer.py` | 신규: 공유 SQLite 기록 함수 + auto_tag 이동 |
+| `shared/life-dashboard-mcp/activity_writer.py` | 신규: 공유 SQLite 기록 함수 + auto_tag 이동 + CLI (unsummarized, update-summary) |
 | `cc/work-digest/scripts/session_logger.py` | markdown 제거, record_activities 호출, state 파일 dedup 제거 |
 | `cc/work-digest/scripts/active_session_scanner.py` | scan_and_record 변경 반영 |
 | `codex/work-digest/scripts/session_logger.py` | parse_rollout_by_date + record_activities, markdown 제거 |
