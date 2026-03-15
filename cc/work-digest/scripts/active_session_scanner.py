@@ -137,7 +137,7 @@ def scan_active_sessions(dry_run: bool = False) -> int:
             continue
 
         try:
-            result = scan_and_record(session_id, str(transcript), cwd, force=False)
+            result = scan_and_record(session_id, str(transcript), cwd)
             if result:
                 dates = ", ".join(sorted(result.keys()))
                 print(f"[scanner] {session_id[:8]} ({Path(cwd).name}): recorded {dates}", file=sys.stderr)
