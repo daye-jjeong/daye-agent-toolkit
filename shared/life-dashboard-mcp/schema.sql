@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS activities (
     summary TEXT,
     start_at TEXT NOT NULL,
     end_at TEXT,
+    date TEXT,
     duration_min INTEGER,
     file_count INTEGER DEFAULT 0,
     error_count INTEGER DEFAULT 0,
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS activities (
 
 CREATE INDEX IF NOT EXISTS idx_activities_date ON activities(start_at);
 CREATE INDEX IF NOT EXISTS idx_activities_source ON activities(source);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_session ON activities(source, session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_session ON activities(source, session_id, date);
 
 CREATE TABLE IF NOT EXISTS daily_stats (
     date TEXT PRIMARY KEY,

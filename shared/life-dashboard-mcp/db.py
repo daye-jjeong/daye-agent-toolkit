@@ -34,6 +34,19 @@ def _migrate(conn: sqlite3.Connection):
     if "branch" not in cols:
         conn.execute("ALTER TABLE activities ADD COLUMN branch TEXT")
         conn.commit()
+    if "date" not in cols:
+        conn.execute("ALTER TABLE activities ADD COLUMN date TEXT")
+        conn.execute("UPDATE activities SET date = date(start_at) WHERE date IS NULL")
+        conn.commit()
+    # Recreate unique index with date column
+    indices = {r[1] for r in conn.execute("PRAGMA index_list(activities)").fetchall()}
+    if "idx_activities_session" in indices:
+        idx_info = conn.execute("PRAGMA index_info(idx_activities_session)").fetchall()
+        col_names = {r[2] for r in idx_info}
+        if "date" not in col_names:
+            conn.execute("DROP INDEX idx_activities_session")
+            conn.execute("CREATE UNIQUE INDEX idx_activities_session ON activities(source, session_id, date)")
+            conn.commit()
 
 
 @contextmanager
@@ -54,14 +67,15 @@ def open_conn(auto_commit=True):
 def upsert_activity(conn: sqlite3.Connection, data: dict):
     conn.execute("""
         INSERT INTO activities (source, session_id, repo, branch, tag, summary,
-            start_at, end_at, duration_min, file_count, error_count,
+            start_at, end_at, date, duration_min, file_count, error_count,
             has_tests, has_commits, token_total, raw_json)
         VALUES (:source, :session_id, :repo, :branch, :tag, :summary,
-            :start_at, :end_at, :duration_min, :file_count, :error_count,
+            :start_at, :end_at, :date, :duration_min, :file_count, :error_count,
             :has_tests, :has_commits, :token_total, :raw_json)
-        ON CONFLICT(source, session_id) DO UPDATE SET
+        ON CONFLICT(source, session_id, date) DO UPDATE SET
             repo=excluded.repo, branch=excluded.branch,
-            tag=excluded.tag, summary=excluded.summary,
+            tag=COALESCE(excluded.tag, tag),
+            summary=COALESCE(excluded.summary, summary),
             end_at=excluded.end_at, duration_min=excluded.duration_min,
             file_count=excluded.file_count, token_total=excluded.token_total,
             raw_json=excluded.raw_json
