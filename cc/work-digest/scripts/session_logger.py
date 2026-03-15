@@ -1,99 +1,38 @@
 #!/usr/bin/env python3
 """Session Logger — Claude Code hook for work-digest.
 
-모든 Claude Code 세션에서 발동하여 세션 마커를 기록:
-  → {BASE_DIR}/work-log/YYYY-MM-DD.md
+모든 Claude Code 세션에서 발동하여 활동을 SQLite에 직접 기록.
 
 Hook events:
-- PreCompact → 세션 마커 (mid-session 백업)
-- SessionEnd → 세션 마커 (최종 기록)
+- PreCompact → SQLite 기록 (mid-session 백업)
+- SessionEnd → SQLite 기록 + LLM 요약 + 텔레그램
 
 stdin: { session_id, transcript_path, cwd, hook_event_name, ... }
 """
 
 import sys
-import os
 import json
 import re
-import fcntl
 import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from _common import (
-    BASE_DIR, WEEKDAYS_KO, WORK_TAGS,
-    format_tokens, send_telegram,
-)
+from _common import WORK_TAGS, send_telegram
+
+_MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"
+sys.path.insert(0, str(_MCP_DIR))
+from activity_writer import record_activities
 
 KST = timezone(timedelta(hours=9))
-WORK_LOG_DIR = BASE_DIR / "work-log"
-STATE_FILE = WORK_LOG_DIR / "state" / "session_logger_state.json"
 
 
-# ── stdin / state ─────────────────────────────────
+# ── stdin ─────────────────────────────────────────
 
 def parse_stdin():
     try:
         return json.loads(sys.stdin.read())
     except (json.JSONDecodeError, EOFError):
         return None
-
-
-def load_state() -> dict:
-    try:
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(str(STATE_FILE), os.O_RDONLY | os.O_CREAT)
-        try:
-            fcntl.flock(fd, fcntl.LOCK_SH)
-            content = STATE_FILE.read_text() if STATE_FILE.stat().st_size > 0 else "{}"
-            return json.loads(content)
-        finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            os.close(fd)
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return {"recorded": {}}
-
-
-def save_state(state: dict):
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(STATE_FILE), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        os.write(fd, json.dumps(state, indent=2).encode())
-    finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
-
-
-def _cleanup_state(state: dict) -> dict:
-    """7일 이상 된 엔트리 제거, 100개 제한."""
-    recorded = state.get("recorded", {})
-    if not isinstance(recorded, dict):
-        return {"recorded": {}}
-    cutoff = (datetime.now(KST) - timedelta(days=7)).strftime("%Y-%m-%d")
-    cleaned = {k: v for k, v in recorded.items() if v >= cutoff}
-    if len(cleaned) > 100:
-        sorted_items = sorted(cleaned.items(), key=lambda x: x[1])
-        cleaned = dict(sorted_items[-100:])
-    return {"recorded": cleaned}
-
-
-def already_recorded(session_id: str, date_str: str, force: bool = False) -> bool:
-    """같은 session_id+date 조합의 중복 기록 방지.
-
-    force=True: 기록을 덮어쓰기 위해 항상 False 반환 (SessionEnd용).
-    """
-    key = f"{session_id}:{date_str}"
-    state = load_state()
-    state = _cleanup_state(state)
-
-    if not force and key in state.get("recorded", {}):
-        save_state(state)
-        return True
-
-    state.setdefault("recorded", {})[key] = date_str
-    save_state(state)
-    return False
 
 
 # ── repo 식별 ─────────────────────────────────────
@@ -701,180 +640,25 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
     return result
 
 
-# ── 세션 마커 ─────────────────────────────────────
+# ── scan_and_record ───────────────────────────────
 
-def _format_tokens(n: int) -> str:
-    return format_tokens(n, suffix=" tokens")
-
-
-def build_frontmatter(now):
-    date_str = now.strftime("%Y-%m-%d")
-    weekday = WEEKDAYS_KO[now.weekday()]
-    return (
-        f"---\ndate: {date_str}\ntype: work-log\n"
-        f"tags: [work-log]\n---\n\n# {date_str} ({weekday})\n\n"
-    )
-
-
-def build_session_section(session_id, data, now, repo):
-    # 시작 시각: JSONL 첫 타임스탬프 (실제 대화 시점) 또는 fallback으로 now
-    start_kst = data.get("start_kst") or now
-    time_str = start_kst.strftime("%H:%M")
-    sid_short = session_id[:8] if session_id else "unknown"
-    end_time = data.get("end_time")
-    if end_time and end_time != time_str:
-        time_range = f"{time_str}~{end_time}"
-    else:
-        time_range = time_str
-
-    lines = []
-    lines.append(f"## 세션 {time_range} ({sid_short}, {repo})")
-
-    file_count = len(data["files"])
-    duration = f"{data['duration_min']}분" if data["duration_min"] else "?분"
-    tokens = data.get("tokens", {})
-    total_tokens = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
-    token_str = _format_tokens(total_tokens)
-    commit_flag = " | commit" if data.get("has_commits") else ""
-    lines.append(f"> 파일 {file_count}개 | {duration} | {token_str}{commit_flag}")
-    lines.append("")
-
-    if data.get("branch"):
-        lines.append(f"**브랜치**: {data['branch']}")
-        lines.append("")
-
-    if data.get("summary"):
-        s = data["summary"]
-        tag = s.get("tag", "") if isinstance(s, dict) else ""
-        text = s.get("text", s) if isinstance(s, dict) else s
-        tag_prefix = f"[{tag}] " if tag else ""
-        lines.append(f"**요약**: {tag_prefix}{text}")
-        lines.append("")
-    elif data["topic"]:
-        lines.append(f"**주제**: {data['topic']}")
-        lines.append("")
-
-    signals = data.get("behavioral_signals")
-    if signals:
-        if signals.get("decisions"):
-            lines.append(f"**결정**: {' ; '.join(signals['decisions'])}")
-            lines.append("")
-        if signals.get("mistakes"):
-            lines.append(f"**시행착오**: {' ; '.join(signals['mistakes'])}")
-            lines.append("")
-        if signals.get("patterns"):
-            lines.append(f"**패턴**: {' ; '.join(signals['patterns'])}")
-            lines.append("")
-
-    if data["files"]:
-        lines.append("### 수정된 파일")
-        home = str(Path.home())
-        for fp in data["files"]:
-            lines.append(f"- `{fp.replace(home, '~')}`")
-        lines.append("")
-
-    if data["commands"]:
-        lines.append("### 실행 명령")
-        for cmd in data["commands"][:5]:
-            lines.append(f"- `{cmd}`")
-        lines.append("")
-
-    if data["errors"]:
-        lines.append("### 에러/이슈")
-        for err in data["errors"]:
-            lines.append(f"- {err}")
-        lines.append("")
-
-    if tokens.get("api_calls", 0) > 0:
-        lines.append("### 토큰")
-        lines.append(f"- API 호출: {tokens['api_calls']}회")
-        lines.append(f"- Input: {_format_tokens(tokens.get('input', 0))}")
-        lines.append(f"- Output: {_format_tokens(tokens.get('output', 0))}")
-        lines.append(f"- Cache read: {_format_tokens(tokens.get('cache_read', 0))}")
-        lines.append(f"- Cache create: {_format_tokens(tokens.get('cache_create', 0))}")
-        lines.append("")
-
-    return "\n".join(lines) + "\n"
-
-
-def write_session_marker(session_id, data, date_kst, repo):
-    """세션 마커를 daily log에 기록.
-
-    같은 session_id 섹션이 이미 있으면 교체, 없으면 append.
-    date_kst: 기록할 날짜의 datetime (KST).
-    """
-    WORK_LOG_DIR.mkdir(parents=True, exist_ok=True)
-    daily_file = WORK_LOG_DIR / f"{date_kst.strftime('%Y-%m-%d')}.md"
-    section = build_session_section(session_id, data, date_kst, repo)
-    sid_short = session_id[:8] if session_id else "unknown"
-
-    with open(daily_file, "a+") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            f.seek(0)
-            content = f.read()
-
-            if not content:
-                f.seek(0)
-                f.write(build_frontmatter(date_kst))
-                f.write(section)
-            else:
-                pattern = rf"## 세션 [^\n]*\({sid_short},[^\n]*\n"
-                match = re.search(pattern, content)
-                if match:
-                    section_start = match.start()
-                    next_section = re.search(r"\n## 세션 ", content[match.end():])
-                    if next_section:
-                        section_end = match.end() + next_section.start() + 1
-                    else:
-                        section_end = len(content)
-                    new_content = content[:section_start] + section + content[section_end:]
-                    f.seek(0)
-                    f.truncate()
-                    f.write(new_content)
-                else:
-                    f.seek(0, 2)
-                    f.write(section)
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
-
-
-def scan_and_record(session_id: str, transcript_path: str, cwd: str, force: bool = False) -> dict[str, dict]:
-    """코어: transcript를 날짜별로 분할하여 work-log에 기록.
-
-    Returns: {date_str: parsed_data} — 기록된 날짜별 데이터.
-    """
+def scan_and_record(session_id: str, transcript_path: str, cwd: str) -> dict[str, dict]:
+    """코어: transcript를 날짜별로 분할하여 SQLite에 직접 기록."""
     repo, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
     by_date = parse_transcript_by_date(transcript_path)
-
     if not by_date:
         return {}
-
-    recorded = {}
-    for date_str, data in sorted(by_date.items()):
-        data["branch"] = branch
-
-        if not data["files"] and not data["commands"] and not data["topic"]:
-            continue
-
-        if already_recorded(session_id, date_str, force=force):
-            continue
-
-        date_kst = data.get("start_kst") or datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=KST)
-        write_session_marker(session_id, data, date_kst, repo)
-        recorded[date_str] = data
-
-    return recorded
+    record_activities("cc", session_id, by_date, repo, branch)
+    return by_date
 
 
 # ── Telegram ──────────────────────────────────────
 
-def send_session_telegram(data: dict, repo: str, duration_min: int | None):
+def send_session_telegram(data: dict, repo: str, duration_min: int | None, summary: dict | None = None):
     """세션 종료 시 요약을 텔레그램으로 전송."""
     branch = data.get("branch")
     repo_label = f"{repo}/{branch}" if branch else repo
-    summary = data.get("summary")
-    if isinstance(summary, dict):
+    if summary:
         tag = summary.get("tag", "")
         text = summary.get("text", "")
         tag_str = f"[{tag}] " if tag else ""
@@ -906,25 +690,11 @@ def main():
     if not transcript_path or not Path(transcript_path).exists():
         sys.exit(0)
 
-    force = (event == "SessionEnd")
-    recorded = scan_and_record(session_id, transcript_path, cwd, force=force)
-
-    if not recorded:
+    by_date = scan_and_record(session_id, transcript_path, cwd)
+    if not by_date:
         sys.exit(0)
 
-    repo = Path(cwd).name if cwd else "unknown"
-    try:
-        result = subprocess.run(
-            ["git", "-C", cwd, "rev-parse", "--git-common-dir"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            git_common = Path(result.stdout.strip())
-            if not git_common.is_absolute():
-                git_common = (Path(cwd) / git_common).resolve()
-            repo = git_common.parent.name
-    except Exception:
-        pass
+    repo, _ = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
 
     # SessionEnd: LLM 요약 + 행동 추출 (세션 전체 대상, 1회)
     if event == "SessionEnd":
@@ -943,31 +713,24 @@ def main():
                 try:
                     summary = summary_future.result(timeout=SUMMARY_TIMEOUT_SEC + 10)
                 except Exception as e:
-                    print(f"[session_logger] summary future failed: {e}", file=sys.stderr)
+                    print(f"[session_logger] summary failed: {e}", file=sys.stderr)
 
                 try:
                     signals = signals_future.result(timeout=BEHAVIOR_TIMEOUT_SEC + 10)
                 except Exception as e:
-                    print(f"[session_logger] signals future failed: {e}", file=sys.stderr)
+                    print(f"[session_logger] signals failed: {e}", file=sys.stderr)
         except Exception as e:
             print(f"[session_logger] ThreadPool failed: {e}", file=sys.stderr)
 
-        # 요약을 마지막 활동 날짜의 work-log 섹션에 업데이트
         if summary or signals:
-            last_date = max(recorded.keys())
-            last_data = recorded[last_date]
-            if summary:
-                last_data["summary"] = summary
-            if signals:
-                last_data["behavioral_signals"] = signals
-            date_kst = last_data.get("start_kst") or datetime.strptime(last_date, "%Y-%m-%d").replace(tzinfo=KST)
-            write_session_marker(session_id, last_data, date_kst, repo)
+            _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
+            record_activities("cc", session_id, by_date, repo, branch,
+                            summary=summary, behavioral_signals=signals)
 
         # 텔레그램 전송
-        last_date = max(recorded.keys())
-        last_data = recorded[last_date]
-        total_duration = sum(d.get("duration_min") or 0 for d in recorded.values())
-        send_session_telegram(last_data, repo, total_duration or None)
+        last_data = by_date[max(by_date.keys())]
+        total_duration = sum(d.get("duration_min") or 0 for d in by_date.values())
+        send_session_telegram(last_data, repo, total_duration or None, summary)
 
 
 if __name__ == "__main__":
