@@ -122,15 +122,12 @@ function tlGroupBy(sessions,key){
     b[1].reduce((s,x)=>s+x.duration,0)-a[1].reduce((s,x)=>s+x.duration,0));
 }
 
+function esc(s){return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function tlBarH(s){
   const st=toH(s.start),end=st+s.duration/60;
   const c=TC[s.tag]||'#707070';
-  const lbl=s.duration>=45?`${s.start} · ${Math.floor(s.duration/60)}h${String(s.duration%60).padStart(2,'0')}`:'';
-  const summary=s.summary||'';
-  const tip=`<b>${s.repo}</b> <span style="color:${c}">[${s.tag}]</span>\n⏱ ${s.start} · ${s.duration}분\n${summary}`;
-  return `<div class="tl-bar" style="left:${pct(st)};width:${pct(end-st)};background:${c}"
-    onmouseenter="tlShowT(event,${JSON.stringify(tip)});tlHighlight('${s.repo}')" onmouseleave="tlHideT();tlUnhighlight()">
-    <span>${lbl}</span></div>`;
+  return `<div class="tl-bar tl-hoverable" style="left:${pct(st)};width:${pct(end-st)};background:${c}"
+    data-repo="${esc(s.repo)}" data-tag="${esc(s.tag)}" data-start="${s.start}" data-dur="${s.duration}" data-summary="${esc(s.summary||'')}"></div>`;
 }
 function tlRowH(lbl,sessions){
   return `<div class="tl-row"><div class="tl-label" title="${lbl}">${lbl}</div><div class="tl-track">${sessions.map(tlBarH).join('')}</div></div>`;
@@ -139,10 +136,8 @@ function tlMiniH(sessions){
   return sessions.map(s=>{
     const st=toH(s.start),end=st+s.duration/60;
     const c=TC[s.tag]||'#707070';
-    const summary=s.summary||'';
-    const tip=`<b>${s.repo}</b> <span style="color:${c}">[${s.tag}]</span>\n⏱ ${s.start} · ${s.duration}분\n${summary}`;
-    return `<div class="tl-mini-bar" style="left:${pct(st)};width:${pct(end-st)};background:${c};opacity:.7;cursor:default"
-      onmouseenter="tlShowT(event,${JSON.stringify(tip)});tlHighlight('${s.repo}')" onmouseleave="tlHideT();tlUnhighlight()"></div>`;
+    return `<div class="tl-mini-bar tl-hoverable" style="left:${pct(st)};width:${pct(end-st)};background:${c};opacity:.7;cursor:default"
+      data-repo="${esc(s.repo)}" data-tag="${esc(s.tag)}" data-start="${s.start}" data-dur="${s.duration}" data-summary="${esc(s.summary||'')}"></div>`;
   }).join('');
 }
 
@@ -179,24 +174,35 @@ function tlRender(){
 document.getElementById('tl-legend').innerHTML=Object.entries(TC).map(([t,c])=>
   `<div class="tl-lg-item"><div class="tl-lg-dot" style="background:${c}"></div>${t}</div>`).join('');
 
-// Tooltip
-function tlShowT(e,text){const t=document.getElementById('tl-tip');t.style.display='block';t.innerHTML=text.replace(/\n/g,'<br>');tlMoveT(e);}
-function tlMoveT(e){const t=document.getElementById('tl-tip');t.style.left=Math.min(e.clientX+14,window.innerWidth-t.offsetWidth-16)+'px';t.style.top=(e.clientY-10)+'px';}
-function tlHideT(){document.getElementById('tl-tip').style.display='none';}
-document.addEventListener('mousemove',tlMoveT);
-
-// Highlight repo section on timeline hover
-function tlHighlight(repo){
-  document.querySelectorAll('.repo-group').forEach(el=>{
-    const name=el.querySelector('.repo-name');
+// Tooltip via event delegation
+const tlTip=document.getElementById('tl-tip');
+document.getElementById('tl-chart').addEventListener('mouseenter',function(e){
+  const el=e.target.closest('.tl-hoverable');
+  if(!el)return;
+  const repo=el.dataset.repo, tag=el.dataset.tag, start=el.dataset.start, dur=el.dataset.dur, summary=el.dataset.summary;
+  const c=TC[tag]||'#707070';
+  tlTip.innerHTML=`<b>${repo}</b> <span style="color:${c}">[${tag}]</span><br>⏱ ${start} · ${dur}분${summary?'<br>'+summary:''}`;
+  tlTip.style.display='block';
+  // highlight repo section
+  document.querySelectorAll('.repo-group').forEach(g=>{
+    const name=g.querySelector('.repo-name');
     if(name&&name.textContent.trim().startsWith(repo)){
-      el.style.outline='2px solid #F0C040';el.style.outlineOffset='4px';el.style.borderRadius='8px';
-    }else{el.style.opacity='0.3';}
+      g.style.outline='2px solid #F0C040';g.style.outlineOffset='4px';g.style.borderRadius='8px';
+    }else{g.style.opacity='0.3';}
   });
-}
-function tlUnhighlight(){
-  document.querySelectorAll('.repo-group').forEach(el=>{el.style.outline='';el.style.outlineOffset='';el.style.opacity='';el.style.borderRadius='';});
-}
+},true);
+document.getElementById('tl-chart').addEventListener('mouseleave',function(e){
+  const el=e.target.closest('.tl-hoverable');
+  if(!el)return;
+  tlTip.style.display='none';
+  document.querySelectorAll('.repo-group').forEach(g=>{g.style.outline='';g.style.outlineOffset='';g.style.opacity='';g.style.borderRadius='';});
+},true);
+document.addEventListener('mousemove',function(e){
+  if(tlTip.style.display==='block'){
+    tlTip.style.left=Math.min(e.clientX+14,window.innerWidth-tlTip.offsetWidth-16)+'px';
+    tlTip.style.top=(e.clientY-10)+'px';
+  }
+});
 
 TL_DATA.forEach(d=>d.sessions.forEach(s=>rc(s.repo)));
 if(TL_DATA.length)tlOpen.add(TL_DATA[0].date);
