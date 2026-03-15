@@ -193,4 +193,5 @@ CREATE UNIQUE INDEX idx_activities_session ON activities(source, session_id, dat
 | `cc/work-digest/scripts/active_session_scanner.py` | 신규: 열린 세션 탐색 + scan_and_record 호출 |
 | `shared/life-coach/scripts/daily_coach.py` | scanner + sync + 일괄 요약 호출 추가 |
 | `shared/life-dashboard-mcp/sync_cc.py` | (session_id, date) 복합키 upsert |
-| `shared/life-dashboard-mcp/schema.sql` | activities unique index 변경 |
+| `shared/life-dashboard-mcp/db.py` | upsert_activity ON CONFLICT 절 변경 + 마이그레이션 함수 |
+| `shared/life-dashboard-mcp/schema.sql` | activities date 컬럼 추가 + unique index 변경 |
