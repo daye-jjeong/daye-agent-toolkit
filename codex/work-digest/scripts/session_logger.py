@@ -329,7 +329,7 @@ def _parse_signals_response(raw: str) -> dict | None:
     for key in ("decisions", "mistakes", "patterns"):
         items = data.get(key, [])
         if isinstance(items, list):
-            result[key] = [str(item)[:60] for item in items if item]
+            result[key] = [str(item) for item in items if item]
         else:
             result[key] = []
     if not any(result.values()):
@@ -349,11 +349,13 @@ def extract_behavioral_signals(user_messages: str, repo: str, cwd: str) -> dict 
         f"레포: {repo}\n\n"
         "다음은 Codex CLI 세션에서 사용자가 보낸 메시지들이다.\n\n"
         f"{user_messages}\n\n"
-        "이 사용자의 행동 신호를 추출해라. 각 항목은 1줄, 30자 이내.\n"
-        "- decisions: 사용자가 명시적 선택을 한 것 (A 대신 B 선택 등)\n"
-        "- mistakes: 되돌린 것, 교정한 것, 시행착오\n"
-        "- patterns: 관찰되는 작업 습관 (좋든 나쁘든)\n"
-        "없으면 빈 배열.\n\n"
+        "이 사용자의 행동 신호를 추출해라.\n"
+        "- decisions: 사용자가 명시적 선택을 한 것. **반드시 판단 근거(왜 A가 아니라 B를 선택했는지)를 포함**해라.\n"
+        "  나쁜 예: '별도 프로젝트로 분리'\n"
+        "  좋은 예: 'self-profile을 별도 worktree로 분리 — 기존 레포에 넣으면 scope이 커지고 독립 배포가 어려워서'\n"
+        "- mistakes: 되돌린 것, 교정한 것, 시행착오. 무엇을 왜 되돌렸는지.\n"
+        "- patterns: 관찰되는 작업 습관 (좋든 나쁘든). 구체적 행동과 맥락.\n"
+        "각 항목은 1-2줄. 글자 수 제한 없음. 없으면 빈 배열.\n\n"
         'JSON으로만 출력. 다른 텍스트 없이:\n'
         '{"decisions": [...], "mistakes": [...], "patterns": [...]}'
     )
