@@ -235,6 +235,48 @@ def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] |
 
 
 
+def _build_followup_section(data: dict) -> str:
+    """어제 follow_up 중 미해소 건 표시."""
+    followups = data.get("yesterday_followups", [])
+    if not followups:
+        return ""
+
+    unresolved = [f for f in followups if not f.get("resolved")]
+    resolved = [f for f in followups if f.get("resolved")]
+
+    items = []
+    for f in unresolved:
+        repo = _esc(f.get("repo") or "?")
+        tag = f.get("tag", "")
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        follow = _esc(f.get("follow_up", ""))
+        items.append(
+            f'<div class="work-item">'
+            f'<span class="status-badge" style="color:#E07B5A" title="unresolved">✕</span> '
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'<span class="work-summary">{repo} — {follow}</span>'
+            f'</div>'
+        )
+    for f in resolved:
+        repo = _esc(f.get("repo") or "?")
+        tag = f.get("tag", "")
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        follow = _esc(f.get("follow_up", ""))
+        items.append(
+            f'<div class="work-item">'
+            f'<span class="status-badge" style="color:#7ABD7E" title="resolved">✓</span> '
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'<span class="work-summary">{repo} — {follow}</span>'
+            f'</div>'
+        )
+
+    count_str = f'{len(unresolved)}건 미해소' if unresolved else '모두 해소'
+    return (
+        f'<div class="section"><h3>어제 후속 작업 ({count_str})</h3>'
+        f'{"".join(items)}</div>'
+    )
+
+
 def _build_coaching_section(coaching_md: str | None) -> str:
     if not coaching_md:
         return """<div class="section coaching-placeholder" id="coaching-section">
@@ -433,6 +475,7 @@ def build_daily_report(data: dict, coaching_md: str | None = None,
         _build_nudges(data),
         timeline,
         _build_repos_detail(data),  # DB summary 직접 사용
+        _build_followup_section(data),
         _build_coaching_section(coaching_md),
         _build_health_section(data),
         _build_pantry_section(data),
