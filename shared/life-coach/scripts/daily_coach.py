@@ -410,12 +410,14 @@ def main():
     except Exception as e:
         print(f"[daily_coach] scanner failed: {e}", file=sys.stderr)
 
-    # 2) work-log → SQLite 동기화
+    # 2) work-log → SQLite 동기화 (CC + Codex)
     try:
         from sync_cc import sync_date as sync_cc_date
+        from sync_codex import sync_date as sync_codex_date
         sync_conn = get_conn()
         try:
             sync_cc_date(sync_conn, args.date)
+            sync_codex_date(sync_conn, args.date)
             sync_conn.commit()
         finally:
             sync_conn.close()
