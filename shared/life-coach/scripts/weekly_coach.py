@@ -16,7 +16,7 @@ from pathlib import Path
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins, get_repeated_signals, get_mistake_trends
+from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins, get_repeated_signals, get_mistake_trends, get_open_followups, get_coaching_entry
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -27,28 +27,15 @@ KST = timezone(timedelta(hours=9))
 from _helpers import find_project_memory, get_pending_work
 
 
-def _get_blocked_resolution(conn, mon: str, next_sun: str) -> list[dict]:
-    """해당 주의 blocked 세션 중 같은 레포+브랜치에서 후속 세션이 있으면 해소된 것으로 판단."""
-    blocked = conn.execute("""
-        SELECT repo, branch, tag, summary, start_at FROM activities
-        WHERE start_at >= ? AND start_at < ? AND status = 'blocked'
-        ORDER BY start_at
-    """, (mon, next_sun)).fetchall()
-    if not blocked:
-        return []
-
-    results = []
-    for row in blocked:
-        r = dict(row)
-        # 같은 repo에서 blocked 이후에 세션이 있는지 확인
-        followup = conn.execute("""
-            SELECT 1 FROM activities
-            WHERE repo = ? AND start_at > ? AND start_at < ? AND status != 'blocked'
-            LIMIT 1
-        """, (r["repo"], r["start_at"], next_sun)).fetchone()
-        r["resolved"] = followup is not None
-        results.append(r)
-    return results
+def _get_weekly_followup_status(conn, mon: str, sun: str) -> list[dict]:
+    """해당 주의 followup_chains 상태 — open/resolved 모두 포함."""
+    rows = conn.execute("""
+        SELECT *, CAST(julianday(?) - julianday(origin_date) AS INTEGER) as days_open
+        FROM followup_chains
+        WHERE origin_date >= ? AND origin_date <= ?
+        ORDER BY origin_date
+    """, (sun, mon, sun)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_week_dates(ref_date: str) -> list[str]:
@@ -61,7 +48,6 @@ def get_week_dates(ref_date: str) -> list[str]:
 def get_week_data(conn, dates: list[str]) -> dict:
     """7일간 daily_stats + activities 집계."""
     mon, sun = dates[0], dates[6]
-    next_sun = (datetime.strptime(sun, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
 
     # daily_stats 조회
     stats_rows = conn.execute(
@@ -72,17 +58,17 @@ def get_week_data(conn, dates: list[str]) -> dict:
 
     # 토큰 합계 (SQL SUM)
     token_row = conn.execute(
-        "SELECT COALESCE(SUM(token_total), 0) AS total FROM activities "
-        "WHERE start_at >= ? AND start_at < ?",
-        (mon, next_sun),
+        "SELECT COALESCE(SUM(token_total), 0) AS total FROM sessions "
+        "WHERE date >= ? AND date <= ?",
+        (mon, sun),
     ).fetchone()
     total_tokens = token_row["total"]
 
     # work-context용 세션 요약 (필요 컬럼만)
     context_rows = conn.execute(
-        "SELECT repo, summary, start_at FROM activities "
-        "WHERE start_at >= ? AND start_at < ? ORDER BY start_at",
-        (mon, next_sun),
+        "SELECT repo, summary, start_at FROM sessions "
+        "WHERE date >= ? AND date <= ? ORDER BY start_at",
+        (mon, sun),
     ).fetchall()
 
     # 일별 집계
@@ -128,7 +114,7 @@ def get_week_data(conn, dates: list[str]) -> dict:
     try:
         all_signals = conn.execute(
             "SELECT signal_type, content, COUNT(*) as cnt "
-            "FROM behavioral_signals WHERE date >= ? AND date <= ? "
+            "FROM signals WHERE date >= ? AND date <= ? "
             "GROUP BY signal_type, content ORDER BY cnt DESC",
             (mon, sun),
         ).fetchall()
@@ -144,9 +130,9 @@ def get_week_data(conn, dates: list[str]) -> dict:
     # 1) "기타" 태그 세션 수
     try:
         untagged = conn.execute(
-            "SELECT COUNT(*) as cnt FROM activities "
-            "WHERE start_at >= ? AND start_at < ? AND (tag = '기타' OR tag = '' OR tag IS NULL)",
-            (mon, next_sun),
+            "SELECT COUNT(*) as cnt FROM sessions "
+            "WHERE date >= ? AND date <= ? AND (tag = '기타' OR tag = '' OR tag IS NULL)",
+            (mon, sun),
         ).fetchone()
         review_items["untagged_sessions"] = untagged["cnt"]
     except Exception as e:
@@ -166,9 +152,9 @@ def get_week_data(conn, dates: list[str]) -> dict:
     # 3) empty summary 세션 수
     try:
         empty_sum = conn.execute(
-            "SELECT COUNT(*) as cnt FROM activities "
-            "WHERE start_at >= ? AND start_at < ? AND (summary = '' OR summary IS NULL)",
-            (mon, next_sun),
+            "SELECT COUNT(*) as cnt FROM sessions "
+            "WHERE date >= ? AND date <= ? AND summary_source = 'pending'",
+            (mon, sun),
         ).fetchone()
         review_items["empty_summaries"] = empty_sum["cnt"]
     except Exception as e:
@@ -182,15 +168,27 @@ def get_week_data(conn, dates: list[str]) -> dict:
         print(f"[weekly_coach] stale worktrees scan failed: {e}", file=sys.stderr)
         review_items["stale_worktrees"] = []
 
-    # blocked 해소 추적
+    # v2: followup_chains 기반 추적
     try:
-        blocked_resolution = _get_blocked_resolution(conn, mon, next_sun)
+        followup_status = _get_weekly_followup_status(conn, mon, sun)
     except Exception as e:
-        print(f"[weekly_coach] blocked resolution query failed: {e}", file=sys.stderr)
-        blocked_resolution = []
+        print(f"[weekly_coach] followup status query failed: {e}", file=sys.stderr)
+        followup_status = []
+
+    # v2: 주간 coaching_entries 집계
+    try:
+        coaching_entries = [dict(r) for r in conn.execute("""
+            SELECT date, sections FROM coaching_entries
+            WHERE date >= ? AND date <= ? AND period_type = 'daily'
+            ORDER BY date
+        """, (mon, sun)).fetchall()]
+    except Exception as e:
+        print(f"[weekly_coach] coaching entries query failed: {e}", file=sys.stderr)
+        coaching_entries = []
 
     return {
         "dates": dates,
+        "monday": mon,
         "daily": daily,
         "total_sessions": total_sessions,
         "total_hours": round(total_hours, 1),
@@ -205,7 +203,8 @@ def get_week_data(conn, dates: list[str]) -> dict:
         "weekly_signals": weekly_signals,
         "repeated_patterns": repeated,
         "review_items": review_items,
-        "blocked_resolution": blocked_resolution,
+        "followup_status": followup_status,
+        "coaching_entries": coaching_entries,
     }
 
 
