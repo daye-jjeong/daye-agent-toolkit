@@ -40,13 +40,14 @@ def to_h(t: str) -> float:
 
 
 def dedup_sessions(sessions: list) -> list:
-    """(start_at, repo, tag) 기준 중복 세션 제거."""
-    seen, out = set(), []
+    """session_id prefix 기준 중복 제거. full UUID가 short prefix를 포함하면 full 우선."""
+    seen = {}
     for s in sessions:
-        k = (s.get("start_at"), s.get("repo"), s.get("tag"))
-        if k not in seen:
-            seen.add(k); out.append(s)
-    return out
+        sid = s.get("session_id", "")
+        key = sid[:8] if len(sid) > 8 else sid
+        if key not in seen or len(sid) > len(seen[key].get("session_id", "")):
+            seen[key] = s
+    return list(seen.values())
 
 
 def md_to_html(md: str) -> str:

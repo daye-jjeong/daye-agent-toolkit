@@ -21,7 +21,7 @@ from _common import WORK_TAGS, send_telegram
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from activity_writer import record_activities
+from activity_writer import record_sessions
 
 KST = timezone(timedelta(hours=9))
 
@@ -540,6 +540,8 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                         "commands": [],
                         "errors": [],
                         "topic": "",
+                        "user_messages": [],
+                        "agent_messages": [],
                         "timestamps": [],
                         "token_input": 0,
                         "token_output": 0,
@@ -569,6 +571,28 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                         raw = strip_system_tags(content)
                         if raw:
                             acc["topic"] = raw[:120]
+
+                # user_messages 수집 (date-slice local, 최대 20개)
+                if entry_type == "user" and len(acc["user_messages"]) < 20:
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                raw = strip_system_tags(block.get("text", ""))
+                                if raw:
+                                    acc["user_messages"].append(raw[:500])
+                    elif isinstance(content, str):
+                        raw = strip_system_tags(content)
+                        if raw:
+                            acc["user_messages"].append(raw[:500])
+
+                # agent_messages 수집 (최대 5개)
+                if entry_type == "assistant" and isinstance(content, list) and len(acc["agent_messages"]) < 5:
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            text = block.get("text", "").strip()
+                            if text:
+                                acc["agent_messages"].append(text[:500])
+                                break
 
                 if entry_type == "assistant" and isinstance(msg, dict):
                     usage = msg.get("usage", {})
@@ -628,6 +652,8 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
             "commands": acc["commands"][:10],
             "errors": acc["errors"][:5],
             "topic": acc["topic"],
+            "user_messages": acc["user_messages"],
+            "agent_messages": acc["agent_messages"],
             "duration_min": duration_min,
             "end_time": end_time_str,
             "start_kst": start_kst,
@@ -652,7 +678,10 @@ def scan_and_record(session_id: str, transcript_path: str, cwd: str) -> dict[str
     by_date = parse_transcript_by_date(transcript_path)
     if not by_date:
         return {}
-    record_activities("cc", session_id, by_date, repo, branch)
+    try:
+        record_sessions("cc", session_id, by_date, repo, branch)
+    except Exception as e:
+        print(f"[session_logger] record_sessions failed: {e}", file=sys.stderr)
     return by_date
 
 
@@ -728,8 +757,26 @@ def main():
 
         if summary or signals:
             _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
-            record_activities("cc", session_id, by_date, repo, branch,
-                            summary=summary, behavioral_signals=signals)
+            record_sessions("cc", session_id, by_date, repo, branch,
+                           summary=summary, behavioral_signals=signals,
+                           is_session_end=True)
+        else:
+            # Layer 2 실패 → SessionEnd이므로 최소한 status를 completed로
+            try:
+                from db import get_conn as _get_conn
+                _conn = _get_conn()
+                try:
+                    for _d in by_date:
+                        _conn.execute("""
+                            UPDATE sessions SET status = 'completed'
+                            WHERE source = 'cc' AND session_id = ? AND date = ?
+                              AND status = 'in_progress'
+                        """, (session_id, _d))
+                    _conn.commit()
+                finally:
+                    _conn.close()
+            except Exception as e:
+                print(f"[session_logger] status update failed: {e}", file=sys.stderr)
 
         # 텔레그램 전송
         last_data = by_date[max(by_date.keys())]

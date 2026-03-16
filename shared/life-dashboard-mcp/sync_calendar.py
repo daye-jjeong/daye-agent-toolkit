@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from db import get_conn, upsert_activity, update_daily_stats
+from db import get_conn, upsert_session, update_daily_stats
 
 KST = timezone(timedelta(hours=9))
 SWIFT_SCRIPT = Path(__file__).resolve().parent / "cal_events.swift"
@@ -92,12 +92,17 @@ def sync_date(conn, date_str: str) -> int:
         start_at = ev["start"].replace(" ", "T") + ":00" if len(ev["start"]) == 16 else ev["start"]
         end_at = ev["end"].replace(" ", "T") + ":00" if len(ev["end"]) == 16 else ev["end"]
 
-        activity = {
+        session_data = {
             "source": "calendar",
             "session_id": session_id,
+            "date": date_str,
             "repo": "[캘린더]",
+            "branch": None,
             "tag": tag,
             "summary": ev["title"],
+            "summary_source": "manual",
+            "status": "completed",
+            "follow_up": None,
             "start_at": start_at,
             "end_at": end_at,
             "duration_min": duration,
@@ -106,9 +111,8 @@ def sync_date(conn, date_str: str) -> int:
             "has_tests": 0,
             "has_commits": 0,
             "token_total": 0,
-            "raw_json": "",
         }
-        upsert_activity(conn, activity)
+        upsert_session(conn, session_data)
         count += 1
 
     if count > 0:

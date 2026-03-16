@@ -111,6 +111,43 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
 
 **이 단계를 건너뛰면 HTML에 코칭이 빠지고 세션 원문이 그대로 노출된다.**
 
+#### Step 3b-1. 이전 코칭 참조
+
+코칭 생성 전에 어제 코칭 + pending 태스크 + open follow-up을 확인:
+
+```bash
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py previous-coaching --date <DATE>
+```
+
+이 출력(yesterday_coaching, pending_tasks, open_followups)을 코칭 생성 시 참조하여:
+- 어제 태스크 제안 이행 여부 판단
+- follow-up 에스컬레이션 결정
+- 연속 패턴 분석
+
+#### Step 3e. 코칭 저장
+
+코칭 마크다운을 생성한 뒤, **섹션별로 분해**하여 DB에 저장:
+
+```bash
+# 코칭 저장 (sections JSON은 LLM이 마크다운에서 분해)
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-coaching \
+    --date <DATE> --period daily \
+    --content /tmp/coaching_<DATE>.md \
+    --sections '{"summary":"...","structure_review":"...","coaching":"...","question":"..."}'
+
+# 태스크 제안 저장 (각 제안마다 반복)
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-task \
+    --date <DATE> --description "태스크 설명" --estimated-min 30 --priority 1 --source-type coaching
+
+# 태스크 해소 (LLM이 판단 가능한 것)
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py resolve-task \
+    --id <TASK_ID> --status done --date <DATE> --method auto
+
+# Follow-up 해소
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py resolve-followup \
+    --id <CHAIN_ID> --status resolved --date <DATE> --note "해소 사유"
+```
+
 #### Step 4. HTML 리포트 생성
 
 ```bash
@@ -118,13 +155,13 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
 python3 {baseDir}/scripts/daily_report.py \
   --input /tmp/_coach_data_<DATE>.json \
   --coaching /tmp/coaching_<DATE>.md
-open /tmp/daily_report.html
+open /tmp/daily_report_<DATE>.html
 
 # 주간
 python3 {baseDir}/scripts/weekly_report.py \
   --input /tmp/_coach_data_weekly_<DATE>.json \
   --coaching /tmp/coaching_weekly_<DATE>.md
-open /tmp/weekly_report.html
+open /tmp/weekly_report_<DATE>.html
 ```
 
 #### 의도 확인
@@ -172,7 +209,7 @@ coach_state의 escalation_level에 따라 톤 변경:
 
 주간 코칭에서 `review_items` 데이터를 확인하고 다음을 교정한다:
 
-1. **미분류 태그 (untagged_sessions)**: "기타"로 분류된 세션의 raw_json을 보고 올바른 태그로 수정. 반복되는 패턴이면 `_sync_common.py`의 TAG_KEYWORDS에 키워드 추가.
+1. **미분류 태그 (untagged_sessions)**: "기타"로 분류된 세션의 session_content를 보고 올바른 태그로 수정. 반복되는 패턴이면 `activity_writer.py`의 TAG_KEYWORDS에 키워드 추가.
 2. **미분류 mistake (uncategorized_mistakes)**: 분류되지 않은 mistake 신호를 확인하고 `references/mistake-categories.json`에 새 키워드 추가.
 3. **빈 summary (empty_summaries)**: summary가 비어있는 세션을 확인. sync 로직 개선이 필요한지 판단.
 4. **stale worktree (stale_worktrees)**: 오래된 worktree가 있으면 머지 또는 정리 여부를 사용자에게 제안.

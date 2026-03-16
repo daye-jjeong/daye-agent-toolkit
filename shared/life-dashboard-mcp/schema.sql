@@ -61,6 +61,122 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_unique ON behavioral_signals(sessi
 CREATE INDEX IF NOT EXISTS idx_signals_date ON behavioral_signals(date);
 CREATE INDEX IF NOT EXISTS idx_signals_type ON behavioral_signals(signal_type);
 
+-- ── Work Tracking (v2) ──────────────────────────
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    repo TEXT,
+    branch TEXT,
+    tag TEXT,
+    summary TEXT,
+    summary_source TEXT DEFAULT 'pending',
+    status TEXT DEFAULT 'in_progress',
+    follow_up TEXT,
+    start_at TEXT NOT NULL,
+    end_at TEXT,
+    duration_min INTEGER DEFAULT 0,
+    file_count INTEGER DEFAULT 0,
+    error_count INTEGER DEFAULT 0,
+    has_tests INTEGER DEFAULT 0,
+    has_commits INTEGER DEFAULT 0,
+    token_total INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(source, session_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
+CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_summary_source ON sessions(summary_source);
+
+CREATE TABLE IF NOT EXISTS session_content (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    topic TEXT,
+    user_messages TEXT,
+    agent_messages TEXT,
+    files_changed TEXT,
+    commands TEXT,
+    errors TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(source, session_id, date),
+    FOREIGN KEY (source, session_id, date)
+        REFERENCES sessions(source, session_id, date)
+        ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    signal_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    reasoning TEXT,
+    repo TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(session_id, signal_type, content)
+);
+
+CREATE INDEX IF NOT EXISTS idx_signals_v2_date ON signals(date);
+CREATE INDEX IF NOT EXISTS idx_signals_v2_type ON signals(signal_type);
+
+-- ── Coaching ────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS coaching_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    period_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    sections TEXT NOT NULL,
+    escalation_level INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(date, period_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coaching_date ON coaching_entries(date);
+
+CREATE TABLE IF NOT EXISTS task_suggestions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    suggested_date TEXT NOT NULL,
+    description TEXT NOT NULL,
+    estimated_min INTEGER,
+    priority INTEGER,
+    source_type TEXT NOT NULL,
+    origin_session_id TEXT,
+    status TEXT DEFAULT 'pending',
+    resolved_date TEXT,
+    resolved_session_id TEXT,
+    resolution_method TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(suggested_date, description)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON task_suggestions(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_date ON task_suggestions(suggested_date);
+
+CREATE TABLE IF NOT EXISTS followup_chains (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    origin_session_id TEXT NOT NULL,
+    origin_date TEXT NOT NULL,
+    origin_repo TEXT,
+    description TEXT NOT NULL,
+    status TEXT DEFAULT 'open',
+    resolved_date TEXT,
+    resolved_session_id TEXT,
+    resolution_note TEXT,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(origin_session_id, origin_date, description)
+);
+
+CREATE INDEX IF NOT EXISTS idx_followup_status ON followup_chains(status);
+CREATE INDEX IF NOT EXISTS idx_followup_origin_date ON followup_chains(origin_date);
+
 -- ── Finance (banksalad import) ──────────────
 
 CREATE TABLE IF NOT EXISTS finance_transactions (
