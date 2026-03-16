@@ -89,8 +89,47 @@ def _status_badge(status: str) -> str:
     return f'<span class="status-badge" style="color:{color}" title="{status}">{icon}</span> '
 
 
-def _build_work_items(sessions: list[dict]) -> str:
-    """세션을 태그별로 그룹핑, 대표 요약 + 메타 표시."""
+def _build_topic_items(topics: list[dict]) -> str:
+    """session_topics 기준 작업 표시."""
+    items = []
+    for t in topics:
+        tag = t.get("tag") or "기타"
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        summary = _esc(t.get("summary") or "(요약 없음)")
+        status = t.get("status", "in_progress")
+        status_badge = _status_badge(status)
+        source = t.get("s_source") or t.get("source", "")
+        src_html = ""
+        if source:
+            src_color = SOURCE_COLORS.get(source, "#888")
+            src_html = f'<span class="src-tag" style="color:{src_color}">[{source}]</span> '
+        dur = t.get("duration_estimate_min")
+        meta_parts = []
+        if dur:
+            meta_parts.append(f"~{dur}m")
+        if t.get("has_commits"):
+            meta_parts.append("커밋")
+        meta_str = (
+            f' <span class="work-meta">({", ".join(meta_parts)})</span>'
+            if meta_parts else ""
+        )
+        items.append(
+            f'<div class="work-item">'
+            f'{status_badge}'
+            f'{src_html}'
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'<span class="work-summary">{summary}{meta_str}</span>'
+            f'</div>'
+        )
+    return "".join(items)
+
+
+def _build_work_items(sessions: list[dict], topics: list[dict] | None = None) -> str:
+    """토픽별(우선) 또는 세션별 작업 표시."""
+    if topics:
+        return _build_topic_items(topics)
+
+    # 기존 세션별 로직 (폴백)
     tag_groups: dict[str, list[dict]] = {}
     for s in sessions:
         tag = s.get("tag") or "기타"
@@ -187,10 +226,36 @@ def _match_repo_summary(repo: str, summaries: dict[str, str | list[str]]) -> str
 
 
 def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] | None = None) -> str:
-    """레포별 작업. repo_summaries가 있으면 LLM 요약을 표시, 없으면 세션 원문."""
+    """레포별 작업. topics 있으면 토픽 기준, 없으면 세션 원문."""
     sessions = data.get("sessions", [])
-    if not sessions:
+    topics = data.get("topics", [])
+    if not sessions and not topics:
         return ""
+
+    # topics가 있으면 토픽 기준 repo 그룹핑
+    if topics:
+        repo_topics: dict[str, list[dict]] = {}
+        for t in topics:
+            r = (t.get("repo") or "unknown").split("/")[-1]
+            repo_topics.setdefault(r, []).append(t)
+        rows = []
+        for r, ts in sorted(repo_topics.items()):
+            inner_html = _build_topic_items(ts)
+            rows.append(
+                f'<div class="repo-group">'
+                f'<div class="repo-name">{_esc(r)}</div>'
+                f'{inner_html}'
+                f'</div>'
+            )
+        legend = (
+            '<div class="status-legend">'
+            '<span style="color:#7ABD7E">✓</span> 완료 '
+            '<span style="color:#888">◦</span> 진행중 '
+            '<span style="color:#E07B5A">✕</span> 블로커 '
+            '<span style="color:#F0C040">→</span> 후속필요'
+            '</div>'
+        )
+        return f'<div class="section"><h3>레포별 작업</h3>{legend}{"".join(rows)}</div>'
 
     rows = []
     for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(sessions, short_repo=True):
