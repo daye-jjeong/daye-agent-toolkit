@@ -214,21 +214,26 @@ def record_sessions(
                                     t["duration_estimate_min"] = matched["duration_min"]
                         upsert_session_topics(conn, source, session_id, date_str, topics)
                     elif topic_segments:
-                        # LLM topics 없으면: segments를 proto-topics로 직접 사용
-                        proto_topics = []
-                        for seg in topic_segments:
-                            seg_repo = seg.get("repo") or repo
-                            seg_wu = seg.get("work_unit") or seg_repo.split("/")[-1]
-                            proto_topics.append({
-                                "tag": auto_tag("", ""),
-                                "summary": f"{seg_wu} 작업",
-                                "repo": seg_repo,
-                                "start_at": seg["start_at"],
-                                "duration_estimate_min": seg["duration_min"],
-                                "status": "in_progress",
-                            })
-                        if proto_topics:
-                            upsert_session_topics(conn, source, session_id, date_str, proto_topics)
+                        # 기존에 교정된 토픽(tag != 기타)이 있으면 proto-topics로 덮어쓰지 않음
+                        existing_enriched = conn.execute(
+                            "SELECT COUNT(*) FROM session_topics WHERE source=? AND session_id=? AND date=? AND tag != '기타'",
+                            (source, session_id, date_str),
+                        ).fetchone()[0]
+                        if existing_enriched == 0:
+                            proto_topics = []
+                            for seg in topic_segments:
+                                seg_repo = seg.get("repo") or repo
+                                seg_wu = seg.get("work_unit") or seg_repo.split("/")[-1]
+                                proto_topics.append({
+                                    "tag": auto_tag("", ""),
+                                    "summary": f"{seg_wu} 작업",
+                                    "repo": seg_repo,
+                                    "start_at": seg["start_at"],
+                                    "duration_estimate_min": seg["duration_min"],
+                                    "status": "in_progress",
+                                })
+                            if proto_topics:
+                                upsert_session_topics(conn, source, session_id, date_str, proto_topics)
                     else:
                         # segments도 없으면 세션 전체를 하나의 proto-topic으로
                         upsert_session_topics(conn, source, session_id, date_str, [{
