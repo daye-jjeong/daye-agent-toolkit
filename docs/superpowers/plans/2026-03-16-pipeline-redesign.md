@@ -462,7 +462,9 @@ def record_sessions(
                 if summary.get("status"):
                     status = summary["status"]
             # SessionEnd: 닫힌 세션이 in_progress로 남지 않도록
-            if status == "in_progress" and has_commits:
+            # LLM이 blocked/follow_up 판정하지 않았으면 모두 completed
+            # (has_commits 여부와 무관 — 세션이 끝났으면 completed)
+            if status == "in_progress":
                 status = "completed"
 
             session_data = {
@@ -502,19 +504,29 @@ def record_sessions(
                 })
 
         # signals — primary date에 1회 기록
+        # 현재 extract_behavioral_signals()는 str 리스트를 반환.
+        # reasoning을 채우려면 LLM 프롬프트를 {"content": str, "reasoning": str} 형식으로 변경해야 함.
+        # 이번 구현에서는 기존 str 형식도 지원하되, dict 형식이 오면 reasoning도 저장.
         if behavioral_signals:
             for plural, singular in _SIGNAL_TYPE_MAP.items():
                 items = behavioral_signals.get(plural, [])
                 if isinstance(items, list):
-                    for content in items:
-                        insert_signal(conn, {
-                            "session_id": session_id,
-                            "date": primary_date,
-                            "signal_type": singular,
-                            "content": content if isinstance(content, str) else content.get("content", ""),
-                            "reasoning": content.get("reasoning") if isinstance(content, dict) else None,
-                            "repo": repo,
-                        })
+                    for item in items:
+                        if isinstance(item, dict):
+                            content_text = item.get("content", "")
+                            reasoning_text = item.get("reasoning")
+                        else:
+                            content_text = str(item)
+                            reasoning_text = None
+                        if content_text:
+                            insert_signal(conn, {
+                                "session_id": session_id,
+                                "date": primary_date,
+                                "signal_type": singular,
+                                "content": content_text,
+                                "reasoning": reasoning_text,
+                                "repo": repo,
+                            })
 
         for date_str in recorded:
             update_daily_stats(conn, date_str)
@@ -618,10 +630,15 @@ def cmd_update_summary(args):
         conn.close()
 ```
 
-- [ ] **Step 6: CLI --before 플래그 추가**
+- [ ] **Step 6: CLI 플래그 추가**
 
 ```python
+# unsummarized에 --before 추가
 p_unsummarized.add_argument("--before", help="Catch-up: list pending sessions before this date")
+
+# update-summary에 --summary-source 추가 (기존 parser에)
+p_update.add_argument("--summary-source", dest="summary_source",
+                      choices=["llm", "manual"], default="llm")
 ```
 
 - [ ] **Step 7: 수동 검증**
@@ -693,61 +710,98 @@ git commit -m "feat: server.py + sync_calendar — migrate to sessions table"
 
 - [ ] **Step 1: parse_transcript_by_date()에 user_messages, agent_messages 추출 추가**
 
-기존 `parse_transcript_by_date()`가 반환하는 `by_date[date_str]` dict에 두 필드 추가:
+기존 `parse_transcript_by_date()`가 반환하는 `by_date[date_str]` dict에 두 필드 추가.
+
+**주의**: 현재 transcript 포맷에서 entry type은 `"user"` (not `"human"`), content는 문자열 또는 text block 리스트.
+
+acc 초기값에 추가:
+```python
+"user_messages": [],
+"agent_messages": [],
+```
+
+기존 topic 추출 블록(line 560-571) 근처에 user_messages 수집 추가:
 
 ```python
-# 기존 추출 루프 안에서:
-user_messages = []
-agent_messages = []
+# user_messages 수집 (topic 추출 로직 바로 아래)
+if entry_type == "user":
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                raw = strip_system_tags(block.get("text", ""))
+                if raw:
+                    acc["user_messages"].append(raw[:500])
+    elif isinstance(content, str):
+        raw = strip_system_tags(content)
+        if raw:
+            acc["user_messages"].append(raw[:500])
 
-# entry 파싱 시:
-if entry_type == "human":
-    msg = entry.get("message", {}).get("content", "")
-    if isinstance(msg, str) and msg.strip():
-        user_messages.append(msg[:500])  # 500자 제한
-elif entry_type == "assistant":
-    msg = entry.get("message", {}).get("content", "")
-    if isinstance(msg, str) and msg.strip() and len(agent_messages) < 5:
-        agent_messages.append(msg[:500])
+# agent_messages 수집 (assistant 블록에서, 최대 5개)
+if entry_type == "assistant" and isinstance(content, list):
+    if len(acc["agent_messages"]) < 5:
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "").strip()
+                if text:
+                    acc["agent_messages"].append(text[:500])
+                    break
+```
 
-# date_data에 추가:
-date_data["user_messages"] = user_messages
-date_data["agent_messages"] = agent_messages
+result 딕셔너리에 추가 (line 626-642 근처):
+```python
+result[date_str] = {
+    # ... 기존 필드 ...
+    "user_messages": acc["user_messages"],
+    "agent_messages": acc["agent_messages"],
+}
 ```
 
 - [ ] **Step 2: scan_and_record()에서 record_activities → record_sessions 전환**
 
+**중요**: 현재 구조를 유지한다. `scan_and_record()`는 Layer 1 헬퍼로, `main()`에서 호출된다. SessionEnd의 Layer 2 (summary/signals)는 `main()`에서 별도로 `record_sessions()`를 다시 호출한다.
+
 ```python
 from activity_writer import record_sessions  # 기존 record_activities 대신
 
-# scan_and_record() 내부:
-recorded = record_sessions(
-    source="cc",
-    session_id=session_id,
-    by_date=by_date,
-    repo=repo,
-    branch=branch,
-    summary=summary,           # Layer 2 결과 (None if failed)
-    behavioral_signals=signals, # Layer 2 결과 (None if failed)
-)
+def scan_and_record(session_id: str, transcript_path: str, cwd: str) -> dict[str, dict]:
+    """Layer 1: transcript를 날짜별로 분할하여 sessions + session_content에 기록."""
+    repo, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
+    by_date = parse_transcript_by_date(transcript_path)
+    if not by_date:
+        return {}
+    record_sessions("cc", session_id, by_date, repo, branch)
+    # summary=None, signals=None → Layer 1만 (summary_source='pending')
+    return by_date
 ```
 
-- [ ] **Step 3: Layer 2 실패 시 summary=NULL 보장**
+- [ ] **Step 3: main()의 SessionEnd 블록에서 Layer 2 배선**
 
-기존 코드에서 LLM 실패 시 topic을 summary로 넣는 fallback 제거:
+기존 main() 구조 유지 — `scan_and_record()`로 Layer 1 실행 후, SessionEnd이면 LLM 시도 후 `record_sessions()`를 다시 호출:
 
 ```python
-# 기존 (제거):
-# if not summary_text:
-#     summary_text = first_user_msg[:120]
+# main() 내 SessionEnd 블록 (line 704-732):
+if event == "SessionEnd":
+    # ... 기존 ThreadPoolExecutor로 summary/signals 추출 ...
 
-# 새: LLM 실패 → summary=None, summary_source='pending'
-summary = None
-try:
-    summary = summarize_session(conversation_text)
-except Exception:
-    pass  # Layer 1 데이터는 이미 저장됨
+    if summary or signals:
+        _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
+        record_sessions("cc", session_id, by_date, repo, branch,
+                        summary=summary, behavioral_signals=signals)
+    else:
+        # Layer 2 실패 → SessionEnd이므로 최소한 status를 completed로
+        # (scan_and_record에서 이미 Layer 1 기록됨, status만 업데이트)
+        conn = get_conn()
+        for date_str in by_date:
+            conn.execute("""
+                UPDATE sessions SET status = 'completed'
+                WHERE source = 'cc' AND session_id = ? AND date = ?
+                  AND status = 'in_progress'
+            """, (session_id, date_str))
+        conn.commit()
+        conn.close()
 ```
+
+**topic → summary fallback 제거**: `summarize_session()` 실패 시 topic을 summary에 넣는 기존 코드가 있으면 삭제. summary=NULL(pending) 유지.
 
 - [ ] **Step 4: 수동 검증**
 
@@ -782,20 +836,11 @@ git commit -m "feat: session_logger — Layer 1/2 split, user/agent messages ext
 
 `from activity_writer import record_sessions` (기존 `record_activities` 대신)
 
-- [ ] **Step 2: scan_and_record 호출부에서 record_sessions 사용**
+- [ ] **Step 2: scan_and_record 호출 확인**
 
-scanner는 summary/signals 없이 호출하므로 Layer 1만 실행됨:
+**현재 구조**: `active_session_scanner.py`는 `session_logger.scan_and_record()`에 위임한다. scan_and_record() 내부에서 이미 `record_sessions()`를 호출하므로 scanner 자체는 import만 바꾸면 된다.
 
-```python
-recorded = record_sessions(
-    source="cc",
-    session_id=session_id,
-    by_date=by_date,
-    repo=repo,
-    branch=branch,
-    # summary=None, behavioral_signals=None → Layer 1만
-)
-```
+`from session_logger import scan_and_record` — 이 import는 이미 있음. scan_and_record()가 내부적으로 record_sessions()를 호출하므로 scanner 코드 변경 최소화.
 
 - [ ] **Step 3: 수동 검증**
 
@@ -967,12 +1012,37 @@ git commit -m "fix: dedup_sessions — connect to daily_coach, handle short/full
 
 ## Chunk 4: Reports + SKILL.md
 
-### Task 10: daily_report.py — 날짜 기반 파일명
+### Task 10: daily_report.py — 날짜 기반 파일명 + data contract 업데이트
 
 **Files:**
 - Modify: `shared/life-coach/scripts/daily_report.py`
 
-- [ ] **Step 1: 출력 파일명에 날짜 포함**
+- [ ] **Step 1: follow-up 섹션을 새 data contract에 맞게 수정**
+
+기존 `_build_followup_section(data)` (line 238-277)은 `yesterday_followups`에서 `resolved` 불리언을 읽는다. 새 구조에서는 `open_followups`(followup_chains 기반) + `pending_tasks`를 읽도록 변경:
+
+```python
+def _build_followup_section(data: dict) -> str:
+    """open follow-ups + pending tasks 표시."""
+    followups = data.get("open_followups", [])
+    tasks = data.get("pending_tasks", [])
+    if not followups and not tasks:
+        return ""
+
+    items = []
+    for f in followups:
+        days = f.get("days_open", 0)
+        cls = "followup-urgent" if days >= 3 else "followup-open"
+        items.append(f'<div class="{cls}">🔗 [{days}일] {_esc(f["description"])} ({_esc(f.get("origin_repo",""))})</div>')
+    for t in tasks:
+        days = ... # calculate from suggested_date
+        cls = "task-urgent" if days >= 3 else "task-pending"
+        items.append(f'<div class="{cls}">📋 {_esc(t["description"])} ({t.get("estimated_min","?")}분)</div>')
+
+    return f'<div class="section"><h3>미해소 항목</h3>{"".join(items)}</div>'
+```
+
+- [ ] **Step 2: 출력 파일명에 날짜 포함**
 
 ```python
 # 기존:
@@ -1006,7 +1076,9 @@ git commit -m "fix: daily_report — date-based output filename"
 - [ ] **Step 1: 동일 패턴 적용**
 
 ```python
-date_str = data.get("week_start", "unknown")
+# weekly_coach.py의 반환값에 week_start 키가 없으므로 dates["monday"]를 사용
+# (또는 weekly_coach.py에서 week_start를 추가)
+date_str = data.get("monday", data.get("date_range", "unknown").split("~")[0].strip())
 default_output = f"/tmp/weekly_report_{date_str}.html"
 output_path = args.output or default_output
 ```
@@ -1032,16 +1104,36 @@ git commit -m "fix: weekly_report — date-based output filename"
 
 이전 단계에서 생성한 코칭 마크다운을 DB에 저장:
 
+코칭 마크다운을 저장할 때 **sections JSON도 함께 전달**한다. LLM이 코칭을 생성하면서 각 섹션 헤더(##)를 파싱하여 JSON으로 분해:
+
 ```bash
 python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-coaching \
-    --date <DATE> --period daily --content /tmp/coaching_<DATE>.md
+    --date <DATE> --period daily \
+    --content /tmp/coaching_<DATE>.md \
+    --sections '{"summary":"오늘의 정리 내용","structure_review":"구조 리뷰 내용","coaching":"코칭 내용","question":"마무리 질문"}'
 ```
+
+**sections 분해 책임**: CC 세션의 LLM이 코칭 마크다운을 생성한 뒤, 각 섹션을 JSON 키로 분리하여 `--sections` 인자로 전달. SKILL.md에 이 절차를 명시.
 
 태스크 제안도 구조화하여 저장:
 
 ```bash
 python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-task \
-    --date <DATE> --description "태스크 설명" --estimated-min 30 --priority 1 --source coaching
+    --date <DATE> --description "태스크 설명" --estimated-min 30 --priority 1 --source-type coaching
+```
+
+태스크 해소:
+
+```bash
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py resolve-task \
+    --id <TASK_ID> --status done --date <DATE> --method auto
+```
+
+Follow-up 해소:
+
+```bash
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py resolve-followup \
+    --id <CHAIN_ID> --status resolved --date <DATE> --note "해소 사유"
 ```
 ```
 
@@ -1093,11 +1185,24 @@ git commit -m "feat: SKILL.md — add coaching storage + previous coaching refer
 - 미해소 + days_open >= 3: 에스컬레이션.
 ```
 
-- [ ] **Step 2: 커밋**
+- [ ] **Step 2: 기존 `blocked_resolution` 참조를 followup_chains 기반으로 수정**
+
+주간 코칭 섹션의 `### 🚧 블로커 해소 현황` (line 140-143):
+- 기존: "같은 repo에서 후속 세션이 있으면 resolved" 설명 제거
+- 새: "followup_chains 테이블의 status 기반. 코칭 시 LLM이 내용 기반으로 해소 판단"
+
+- [ ] **Step 3: SKILL.md의 구 참조 정리**
+
+`shared/life-coach/SKILL.md`에서:
+- `raw_json` 참조 제거 → `session_content` 참조로 변경
+- report 출력 예시의 고정 파일명 → 날짜 기반 파일명으로 변경
+- `resolve-task`, `resolve-followup` CLI 예시 추가
+
+- [ ] **Step 4: 커밋**
 
 ```bash
-git add shared/life-coach/references/coaching-prompts.md
-git commit -m "feat: coaching-prompts — add task review + followup chain check sections"
+git add shared/life-coach/references/coaching-prompts.md shared/life-coach/SKILL.md
+git commit -m "feat: coaching-prompts + SKILL.md — followup_chains migration, raw_json removal"
 ```
 
 ### Task 14: activity_writer.py — 코칭 저장 CLI 추가
@@ -1169,7 +1274,34 @@ def cmd_previous_coaching(args):
         conn.close()
 ```
 
-- [ ] **Step 4: main()에 새 커맨드 등록**
+- [ ] **Step 4: resolve-task, resolve-followup CLI 커맨드**
+
+```python
+def cmd_resolve_task(args):
+    conn = get_conn()
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        update_task_resolution(conn, args.id, args.status, args.date,
+                              args.session_id, args.method, args.notes)
+        conn.commit()
+        print(f"Task {args.id} → {args.status}", file=sys.stderr)
+    finally:
+        conn.close()
+
+
+def cmd_resolve_followup(args):
+    conn = get_conn()
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        update_followup_resolution(conn, args.id, args.status, args.date,
+                                   args.session_id, args.note)
+        conn.commit()
+        print(f"Followup {args.id} → {args.status}", file=sys.stderr)
+    finally:
+        conn.close()
+```
+
+- [ ] **Step 5: main()에 새 커맨드 등록**
 
 ```python
 p_coaching = sub.add_parser("save-coaching")
@@ -1190,6 +1322,21 @@ p_task.add_argument("--origin-session-id", dest="origin_session_id")
 p_prev = sub.add_parser("previous-coaching")
 p_prev.add_argument("--date", required=True)
 
+p_resolve_task = sub.add_parser("resolve-task")
+p_resolve_task.add_argument("--id", required=True, type=int)
+p_resolve_task.add_argument("--status", required=True, choices=["done", "skipped", "deferred"])
+p_resolve_task.add_argument("--date", required=True)
+p_resolve_task.add_argument("--session-id", dest="session_id")
+p_resolve_task.add_argument("--method", default="user", choices=["auto", "user"])
+p_resolve_task.add_argument("--notes")
+
+p_resolve_followup = sub.add_parser("resolve-followup")
+p_resolve_followup.add_argument("--id", required=True, type=int)
+p_resolve_followup.add_argument("--status", required=True, choices=["resolved", "abandoned", "superseded"])
+p_resolve_followup.add_argument("--date", required=True)
+p_resolve_followup.add_argument("--session-id", dest="session_id")
+p_resolve_followup.add_argument("--note")
+
 # dispatch:
 elif args.command == "save-coaching":
     cmd_save_coaching(args)
@@ -1197,6 +1344,10 @@ elif args.command == "save-task":
     cmd_save_task(args)
 elif args.command == "previous-coaching":
     cmd_previous_coaching(args)
+elif args.command == "resolve-task":
+    cmd_resolve_task(args)
+elif args.command == "resolve-followup":
+    cmd_resolve_followup(args)
 ```
 
 - [ ] **Step 5: 수동 검증**
@@ -1246,8 +1397,8 @@ python3 shared/life-coach/scripts/daily_coach.py --dry-run --date 2026-03-16
 - [ ] **Step 2: DB 확인**
 
 ```bash
-python3 -c "
-from shared.life_dashboard_mcp.db import get_conn
+cd shared/life-dashboard-mcp && python3 -c "
+from db import get_conn
 c = get_conn()
 for table in ['sessions', 'session_content', 'signals', 'coaching_entries', 'task_suggestions', 'followup_chains']:
     count = c.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
