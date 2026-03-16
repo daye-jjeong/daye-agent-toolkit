@@ -23,10 +23,13 @@ def main():
 
     conn = get_conn()
     try:
-        # v2 sessions 테이블 우선
+        # v2 sessions + session_content JOIN
         rows = conn.execute(
-            "SELECT id, source, session_id, date, repo, tag, summary "
-            "FROM sessions WHERE tag = '기타' OR tag = '' OR tag IS NULL"
+            "SELECT s.id, s.source, s.session_id, s.date, s.repo, s.tag, s.summary, "
+            "       sc.topic, sc.commands "
+            "FROM sessions s "
+            "LEFT JOIN session_content sc USING (source, session_id, date) "
+            "WHERE s.tag = '기타' OR s.tag = '' OR s.tag IS NULL"
         ).fetchall()
 
         if not rows:
@@ -46,14 +49,8 @@ def main():
             try:
                 summary = r["summary"] or ""
                 if table == "sessions":
-                    # session_content에서 topic, commands 조회
-                    sc = conn.execute(
-                        "SELECT topic, commands FROM session_content "
-                        "WHERE source = ? AND session_id = ? AND date = ?",
-                        (r["source"], r["session_id"], r["date"])
-                    ).fetchone()
-                    topic = sc["topic"] if sc else ""
-                    commands = " ".join(json.loads(sc["commands"] or "[]")[:5]) if sc else ""
+                    topic = r["topic"] or ""
+                    commands = " ".join(json.loads(r["commands"] or "[]")[:5])
                 else:
                     raw = json.loads(r["raw_json"] or "{}")
                     topic = raw.get("topic", "")

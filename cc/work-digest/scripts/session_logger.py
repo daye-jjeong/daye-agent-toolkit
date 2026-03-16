@@ -572,8 +572,8 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                         if raw:
                             acc["topic"] = raw[:120]
 
-                # user_messages 수집 (date-slice local)
-                if entry_type == "user":
+                # user_messages 수집 (date-slice local, 최대 20개)
+                if entry_type == "user" and len(acc["user_messages"]) < 20:
                     if isinstance(content, list):
                         for block in content:
                             if isinstance(block, dict) and block.get("type") == "text":

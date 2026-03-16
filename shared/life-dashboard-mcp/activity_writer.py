@@ -82,6 +82,43 @@ _TEST_KEYWORDS = frozenset({"pytest", "jest", "test", "vitest"})
 _TEST_PATTERNS = ("npm run test", "npx test", "npm test", "bun test")
 
 
+# ── Shared preparation ───────────────────────────
+
+def _prepare_fields(data: dict, date_str: str) -> dict | None:
+    """날짜별 데이터에서 공통 필드를 추출. skip할 데이터면 None 반환."""
+    if not data.get("files") and not data.get("commands") and not data.get("topic"):
+        return None
+
+    tokens = data.get("tokens", {})
+    token_total = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
+    if token_total == 0:
+        token_total = tokens.get("api_calls", 0)
+
+    has_tests = 0
+    has_commits = data.get("has_commits", False)
+    for cmd in data.get("commands", []):
+        cmd_lower = cmd.lower()
+        if any(kw in cmd_lower for kw in _TEST_KEYWORDS) or \
+           any(pat in cmd_lower for pat in _TEST_PATTERNS):
+            has_tests = 1
+
+    start_kst = data.get("start_kst")
+    start_at = start_kst.strftime("%Y-%m-%dT%H:%M:%S") if start_kst else f"{date_str}T00:00:00"
+    end_time = data.get("end_time")
+    end_at = f"{date_str}T{end_time}:00" if end_time else None
+
+    return {
+        "token_total": token_total,
+        "has_tests": has_tests,
+        "has_commits": 1 if has_commits else 0,
+        "start_at": start_at,
+        "end_at": end_at,
+        "file_count": len(data.get("files", [])),
+        "error_count": len(data.get("errors", [])),
+        "duration_min": data.get("duration_min"),
+    }
+
+
 # ── record_sessions (v2) ─────────────────────────
 
 def record_sessions(
@@ -98,7 +135,6 @@ def record_sessions(
         return {}
 
     conn = get_conn()
-    conn.execute("PRAGMA busy_timeout=5000")
     recorded = {}
     dates = sorted(by_date.keys())
     primary_date = dates[0]
@@ -106,27 +142,9 @@ def record_sessions(
     try:
         for date_str in dates:
             data = by_date[date_str]
-
-            if not data.get("files") and not data.get("commands") and not data.get("topic"):
+            fields = _prepare_fields(data, date_str)
+            if not fields:
                 continue
-
-            tokens = data.get("tokens", {})
-            token_total = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
-            if token_total == 0:
-                token_total = tokens.get("api_calls", 0)
-
-            has_tests = 0
-            has_commits = data.get("has_commits", False)
-            for cmd in data.get("commands", []):
-                cmd_lower = cmd.lower()
-                if any(kw in cmd_lower for kw in _TEST_KEYWORDS) or \
-                   any(pat in cmd_lower for pat in _TEST_PATTERNS):
-                    has_tests = 1
-
-            start_kst = data.get("start_kst")
-            start_at = start_kst.strftime("%Y-%m-%dT%H:%M:%S") if start_kst else f"{date_str}T00:00:00"
-            end_time = data.get("end_time")
-            end_at = f"{date_str}T{end_time}:00" if end_time else None
 
             # Layer 1: tag만 auto, summary는 NULL (pending)
             tag = auto_tag(data.get("topic", ""), " ".join(data.get("commands", [])[:5]))
@@ -154,12 +172,7 @@ def record_sessions(
                 "repo": repo, "branch": branch, "tag": tag,
                 "summary": summary_text, "summary_source": summary_source,
                 "status": status, "follow_up": follow_up_text,
-                "start_at": start_at, "end_at": end_at,
-                "duration_min": data.get("duration_min"),
-                "file_count": len(data.get("files", [])),
-                "error_count": len(data.get("errors", [])),
-                "has_tests": has_tests, "has_commits": 1 if has_commits else 0,
-                "token_total": token_total,
+                **fields,
             }
             upsert_session(conn, session_data)
 
@@ -233,7 +246,6 @@ def record_activities(
         return {}
 
     conn = get_conn()
-    conn.execute("PRAGMA busy_timeout=5000")
     recorded = {}
     dates = sorted(by_date.keys())
     last_date = dates[-1]
@@ -241,26 +253,9 @@ def record_activities(
     try:
         for date_str in dates:
             data = by_date[date_str]
-            if not data.get("files") and not data.get("commands") and not data.get("topic"):
+            fields = _prepare_fields(data, date_str)
+            if not fields:
                 continue
-
-            tokens = data.get("tokens", {})
-            token_total = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
-            if token_total == 0:
-                token_total = tokens.get("api_calls", 0)
-
-            has_tests = 0
-            has_commits = data.get("has_commits", False)
-            for cmd in data.get("commands", []):
-                cmd_lower = cmd.lower()
-                if any(kw in cmd_lower for kw in _TEST_KEYWORDS) or \
-                   any(pat in cmd_lower for pat in _TEST_PATTERNS):
-                    has_tests = 1
-
-            start_kst = data.get("start_kst")
-            start_at = start_kst.strftime("%Y-%m-%dT%H:%M:%S") if start_kst else f"{date_str}T00:00:00"
-            end_time = data.get("end_time")
-            end_at = f"{date_str}T{end_time}:00" if end_time else None
 
             tag = None
             summary_text = None
@@ -273,12 +268,8 @@ def record_activities(
             activity = {
                 "source": source, "session_id": session_id, "repo": repo,
                 "branch": branch, "tag": tag, "summary": summary_text,
-                "start_at": start_at, "end_at": end_at, "date": date_str,
-                "duration_min": data.get("duration_min"),
-                "file_count": len(data.get("files", [])),
-                "error_count": len(data.get("errors", [])),
-                "has_tests": has_tests, "has_commits": 1 if has_commits else 0,
-                "token_total": token_total,
+                "date": date_str,
+                **fields,
                 "raw_json": json.dumps({
                     "topic": data.get("topic", ""),
                     "files_changed": data.get("files", []),
@@ -348,7 +339,7 @@ def cmd_unsummarized(args):
 
 def cmd_update_summary(args):
     conn = get_conn()
-    conn.execute("PRAGMA busy_timeout=5000")
+
     try:
         summary_source = getattr(args, 'summary_source', None) or "llm"
         sets = ["tag = ?", "summary = ?", "summary_source = ?"]
@@ -387,7 +378,7 @@ def cmd_update_summary(args):
 
 def cmd_save_coaching(args):
     conn = get_conn()
-    conn.execute("PRAGMA busy_timeout=5000")
+
     try:
         content_path = Path(args.content)
         content = content_path.read_text() if content_path.exists() else args.content
@@ -407,7 +398,7 @@ def cmd_save_coaching(args):
 
 def cmd_save_task(args):
     conn = get_conn()
-    conn.execute("PRAGMA busy_timeout=5000")
+
     try:
         upsert_task_suggestion(conn, {
             "suggested_date": args.date,
@@ -443,7 +434,7 @@ def cmd_previous_coaching(args):
 
 def cmd_resolve_task(args):
     conn = get_conn()
-    conn.execute("PRAGMA busy_timeout=5000")
+
     try:
         update_task_resolution(conn, args.id, args.status, args.date,
                               args.session_id, args.method, args.notes)
@@ -455,7 +446,7 @@ def cmd_resolve_task(args):
 
 def cmd_resolve_followup(args):
     conn = get_conn()
-    conn.execute("PRAGMA busy_timeout=5000")
+
     try:
         update_followup_resolution(conn, args.id, args.status, args.date,
                                    args.session_id, args.note)
