@@ -17,7 +17,7 @@ _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals, \
     query_exercises, query_symptoms, query_meals, query_check_ins, query_expiring_pantry, \
-    get_mistake_trends
+    get_mistake_trends, get_coaching_entry, get_pending_tasks, get_open_followups
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -29,27 +29,6 @@ OVERWORK_THRESHOLD_HOURS = 8
 from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work
 
 
-def _get_unresolved_followups(conn, prev_date: str, today_date: str) -> list[dict]:
-    """전날 follow_up 세션 중 오늘 같은 레포에서 작업하지 않은 것을 반환."""
-    prev_followups = conn.execute("""
-        SELECT repo, tag, summary, follow_up FROM activities
-        WHERE date = ? AND status = 'follow_up' AND follow_up IS NOT NULL AND follow_up != ''
-    """, (prev_date,)).fetchall()
-    if not prev_followups:
-        return []
-
-    today_repos = {r["repo"] for r in conn.execute(
-        "SELECT DISTINCT repo FROM activities WHERE date = ?", (today_date,)
-    ).fetchall()}
-
-    results = []
-    for row in prev_followups:
-        r = dict(row)
-        r["resolved"] = r["repo"] in today_repos
-        results.append(r)
-    return results
-
-
 def get_today_data(conn, date_str: str) -> dict:
     stats = conn.execute(
         "SELECT * FROM daily_stats WHERE date = ?", (date_str,)
@@ -58,36 +37,49 @@ def get_today_data(conn, date_str: str) -> dict:
     if not stats:
         return {"date": date_str, "has_data": False}
 
-    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-    activities = conn.execute("""
-        SELECT source, repo, branch, tag, summary, start_at, end_at, duration_min,
-               token_total, error_count, has_tests, has_commits, status, follow_up, raw_json
-        FROM activities WHERE start_at >= ? AND start_at < ?
-        ORDER BY start_at
-    """, (date_str, next_date)).fetchall()
+    # v2: sessions + session_content JOIN
+    rows = conn.execute("""
+        SELECT s.source, s.repo, s.branch, s.tag, s.summary, s.summary_source,
+               s.start_at, s.end_at, s.duration_min, s.token_total,
+               s.error_count, s.has_tests, s.has_commits, s.status, s.follow_up,
+               s.session_id,
+               sc.topic, sc.user_messages, sc.agent_messages,
+               sc.files_changed, sc.commands
+        FROM sessions s
+        LEFT JOIN session_content sc USING (source, session_id, date)
+        WHERE s.date = ?
+        ORDER BY s.start_at
+    """, (date_str,)).fetchall()
 
     sessions = []
-    for a in activities:
-        s = dict(a)
-        # raw_json에서 LLM 요약에 필요한 context 추출
-        raw = json.loads(s.pop("raw_json", "null") or "{}")
-        if raw.get("commands"):
-            s["commands"] = raw["commands"][:5]
-        if raw.get("user_messages"):
-            s["user_messages"] = [m[:200] for m in raw["user_messages"][:3]]
-        if raw.get("agent_messages"):
-            s["agent_messages"] = [m[:200] for m in raw["agent_messages"][:2]]
-        if raw.get("files_changed"):
-            s["files_changed"] = raw["files_changed"][:10]
-        if raw.get("topic"):
-            s["topic"] = raw["topic"][:200]
+    for r in rows:
+        s = dict(r)
+        # JSON 필드 파싱
+        for field in ("user_messages", "agent_messages", "files_changed", "commands"):
+            val = s.get(field)
+            if isinstance(val, str):
+                try:
+                    s[field] = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    s[field] = []
+        # 길이 제한
+        if s.get("commands"):
+            s["commands"] = s["commands"][:5]
+        if s.get("user_messages"):
+            s["user_messages"] = [m[:200] for m in s["user_messages"][:3]]
+        if s.get("agent_messages"):
+            s["agent_messages"] = [m[:200] for m in s["agent_messages"][:2]]
+        if s.get("files_changed"):
+            s["files_changed"] = s["files_changed"][:10]
+        if s.get("topic"):
+            s["topic"] = s["topic"][:200]
         sessions.append(s)
 
-    # 오늘의 행동 신호
+    # v2: signals 테이블
     signals = conn.execute("""
-        SELECT signal_type, content FROM behavioral_signals WHERE date = ?
+        SELECT signal_type, content, reasoning FROM signals WHERE date = ?
     """, (date_str,)).fetchall()
-    today_signals = [{"type": r["signal_type"], "content": r["content"]} for r in signals]
+    today_signals = [{"type": r["signal_type"], "content": r["content"], "reasoning": r["reasoning"]} for r in signals]
 
     # 최근 7일 반복 패턴
     repeated = get_repeated_signals(conn, date_str, days=7, min_count=2)
@@ -119,13 +111,25 @@ def get_today_data(conn, date_str: str) -> dict:
         print(f"[daily_coach] mistake trends query failed: {e}", file=sys.stderr)
         mistake_trends = {"by_category": [], "uncategorized": [], "total": 0}
 
-    # 전날 follow_up → 오늘 해소 여부
+    # v2: followup_chains + task_suggestions + 이전 코칭
+    try:
+        open_followups = get_open_followups(conn)
+    except Exception as e:
+        print(f"[daily_coach] followup query failed: {e}", file=sys.stderr)
+        open_followups = []
+
+    try:
+        pending_tasks = get_pending_tasks(conn)
+    except Exception as e:
+        print(f"[daily_coach] pending tasks query failed: {e}", file=sys.stderr)
+        pending_tasks = []
+
     try:
         yesterday = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-        yesterday_followups = _get_unresolved_followups(conn, yesterday, date_str)
+        yesterday_coaching = get_coaching_entry(conn, yesterday, "daily")
     except Exception as e:
-        print(f"[daily_coach] followup resolution query failed: {e}", file=sys.stderr)
-        yesterday_followups = []
+        print(f"[daily_coach] yesterday coaching query failed: {e}", file=sys.stderr)
+        yesterday_coaching = None
 
     return {
         "date": date_str,
@@ -147,7 +151,9 @@ def get_today_data(conn, date_str: str) -> dict:
         "pantry_expiry": pantry_expiry,
         "pending_work": pending,
         "mistake_trends": mistake_trends,
-        "yesterday_followups": yesterday_followups,
+        "open_followups": open_followups,
+        "pending_tasks": pending_tasks,
+        "yesterday_coaching": yesterday_coaching,
     }
 
 
