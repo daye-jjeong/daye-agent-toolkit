@@ -17,14 +17,30 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _helpers import WEEKDAY, dedup_sessions as dedup, to_h
 
+def _wall_duration(s: dict) -> int:
+    """start_at ~ end_at 벽시계 시간(분). end_at 없으면 duration_min 폴백."""
+    start = s.get("start_at", "")
+    end = s.get("end_at", "")
+    if start and end and len(start) >= 16 and len(end) >= 16:
+        try:
+            sh, sm = int(start[11:13]), int(start[14:16])
+            eh, em = int(end[11:13]), int(end[14:16])
+            wall = (eh * 60 + em) - (sh * 60 + sm)
+            if wall > 0:
+                return wall
+        except (ValueError, IndexError):
+            pass
+    return s.get("duration_min") or 30
+
+
 def prep(sessions):
-    """세션에서 타임라인 데이터 생성. 타임라인은 시간 기반이므로 항상 세션 사용 (토픽은 시간 정보 없음)."""
+    """세션에서 타임라인 데이터 생성. 벽시계 시간으로 바 길이 계산."""
     return [
         {
             "repo":     (s.get("repo") or "?").split("/")[-1],
             "tag":      s.get("tag") or "기타",
             "start":    (s.get("start_at") or "00:00")[11:16],
-            "duration": s.get("duration_min") or 30,
+            "duration": _wall_duration(s),
             "summary":  (s.get("summary") or "")[:100],
         }
         for s in dedup(sessions)
