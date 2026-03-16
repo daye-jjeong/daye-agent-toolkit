@@ -193,26 +193,40 @@ def record_sessions(
             upsert_session_content(conn, content_data)
             recorded[date_str] = session_id
 
-            # session_topics — 마지막 날짜에만 토픽 저장 (summary와 동일 패턴)
-            if topics and date_str == dates[-1]:
+            # session_topics — 마지막 날짜에만 토픽 저장
+            if date_str == dates[-1]:
                 try:
-                    # work_unit_time_ranges가 있으면 토픽에 실제 duration + start_at 주입
-                    wu_ranges = data.get("work_unit_time_ranges", {})
-                    if wu_ranges:
+                    topic_segments = data.get("topic_segments", [])
+
+                    if topics:
+                        # LLM topics가 있으면: topic_segments에서 시간 매칭
                         for t in topics:
-                            # 토픽의 summary나 repo에서 work_unit 매칭 시도
                             matched = None
-                            topic_repo = (t.get("repo") or "").split("/")[-1]
-                            for wu_name, wu_data in wu_ranges.items():
-                                if wu_name == topic_repo or wu_name in t.get("summary", ""):
-                                    matched = wu_data
+                            topic_key = (t.get("repo") or "").split("/")[-1]
+                            for seg in topic_segments:
+                                if seg["work_unit"] == topic_key or seg["work_unit"] in t.get("summary", ""):
+                                    matched = seg
                                     break
                             if matched:
-                                if not t.get("duration_estimate_min"):
-                                    t["duration_estimate_min"] = matched.get("duration_min")
                                 if not t.get("start_at"):
-                                    t["start_at"] = matched.get("start_at")
-                    upsert_session_topics(conn, source, session_id, date_str, topics)
+                                    t["start_at"] = matched["start_at"]
+                                if not t.get("duration_estimate_min"):
+                                    t["duration_estimate_min"] = matched["duration_min"]
+                        upsert_session_topics(conn, source, session_id, date_str, topics)
+                    elif topic_segments:
+                        # LLM topics 없으면: segments를 proto-topics로 직접 사용
+                        proto_topics = []
+                        for seg in topic_segments:
+                            proto_topics.append({
+                                "tag": auto_tag("", ""),
+                                "summary": f"{seg['work_unit']} 작업",
+                                "repo": seg.get("repo", repo),
+                                "start_at": seg["start_at"],
+                                "duration_estimate_min": seg["duration_min"],
+                                "status": "in_progress",
+                            })
+                        if proto_topics:
+                            upsert_session_topics(conn, source, session_id, date_str, proto_topics)
                 except Exception as e:
                     print(f"[activity_writer] upsert_session_topics failed: {e}", file=sys.stderr)
 

@@ -599,6 +599,102 @@ def _extract_work_unit(file_path: str) -> tuple[str, str]:
     return ("", "")
 
 
+def _compute_topic_segments(file_timeline: list[tuple], all_timestamps: list, idle_threshold: int = 300) -> list[dict]:
+    """파일 작업의 work_unit 전환 + 메시지 타임스탬프 → 토픽 구간 목록.
+
+    Returns: [{"work_unit": str, "repo": str, "start_at": str, "end_at": str, "duration_min": int}, ...]
+    각 구간은 같은 work_unit에서 연속 작업한 시간. idle gap으로 분리.
+    """
+    if not all_timestamps:
+        return []
+
+    # 1. 파일 작업에서 (timestamp, work_unit, repo) 이벤트 수집
+    file_events = []
+    for ts, fp in sorted(file_timeline):
+        repo, wu = _extract_work_unit(fp)
+        if wu:
+            file_events.append((ts, wu, repo))
+
+    # 2. 모든 타임스탬프를 시간순 정렬하고, 각 시점의 "현재 work_unit" 결정
+    # file 이벤트가 있는 시점에서 work_unit이 바뀜. 없으면 이전 work_unit 유지.
+    sorted_all = sorted(all_timestamps)
+    file_idx = 0
+    sorted_file = sorted(file_events)
+
+    current_wu = ""
+    current_repo = ""
+    segments = []
+    seg_start = sorted_all[0]
+    seg_end = sorted_all[0]
+
+    for ts in sorted_all:
+        # 이 시점까지의 file 이벤트 처리 → work_unit 업데이트
+        while file_idx < len(sorted_file) and sorted_file[file_idx][0] <= ts:
+            _, wu, repo = sorted_file[file_idx]
+            if wu != current_wu and current_wu:
+                # work_unit 전환 → 이전 구간 저장
+                dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
+                segments.append({
+                    "work_unit": current_wu, "repo": current_repo,
+                    "start_at": seg_start.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+                    "end_at": seg_end.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+                    "duration_min": dur,
+                })
+                seg_start = ts
+            current_wu = wu
+            current_repo = repo
+            file_idx += 1
+
+        # idle gap 체크
+        gap = (ts - seg_end).total_seconds()
+        if gap > idle_threshold and current_wu:
+            # idle gap → 이전 구간 저장, 새 구간 시작
+            dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
+            segments.append({
+                "work_unit": current_wu, "repo": current_repo,
+                "start_at": seg_start.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+                "end_at": seg_end.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+                "duration_min": dur,
+            })
+            seg_start = ts
+
+        seg_end = ts
+
+    # 마지막 구간
+    if current_wu:
+        dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
+        segments.append({
+            "work_unit": current_wu, "repo": current_repo,
+            "start_at": seg_start.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+            "end_at": seg_end.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+            "duration_min": dur,
+        })
+    elif sorted_all:
+        # file 작업 없는 세션 → 전체를 하나의 구간으로
+        dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
+        segments.append({
+            "work_unit": "", "repo": "",
+            "start_at": seg_start.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+            "end_at": seg_end.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+            "duration_min": dur,
+        })
+
+    # 같은 work_unit의 연속 구간 병합 + 2분 이하 잡음 흡수
+    merged = []
+    for seg in segments:
+        if merged and merged[-1]["work_unit"] == seg["work_unit"]:
+            merged[-1]["end_at"] = seg["end_at"]
+            merged[-1]["duration_min"] += seg["duration_min"]
+        elif seg["duration_min"] <= 2 and merged:
+            # 2분 이하 구간 → 이전 구간에 흡수
+            merged[-1]["end_at"] = seg["end_at"]
+            merged[-1]["duration_min"] += seg["duration_min"]
+        else:
+            merged.append(dict(seg))
+
+    return merged
+
+
 def _compute_work_unit_time_ranges(file_timeline: list[tuple]) -> dict[str, dict]:
     """file_timeline [(timestamp, path), ...] → {work_unit: {start_at, end_at, duration_min, repo}}
 
@@ -782,8 +878,11 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
         end_kst = max(timestamps) if timestamps else None
         end_time_str = end_kst.strftime("%H:%M") if end_kst else None
 
-        # file_timeline → work_unit_time_ranges (기능 단위별 시간 범위)
+        # file_timeline → work_unit_time_ranges + topic_segments
         work_unit_time_ranges = _compute_work_unit_time_ranges(acc.get("file_timeline", []))
+        topic_segments = _compute_topic_segments(
+            acc.get("file_timeline", []), timestamps, IDLE_THRESHOLD_SEC
+        )
 
         # 활동 구간 (idle gap > 5분 기준으로 분리)
         activity_segments = []
@@ -823,6 +922,7 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
             "start_kst": start_kst,
             "has_commits": acc["has_commits"],
             "work_unit_time_ranges": work_unit_time_ranges,
+            "topic_segments": topic_segments,
             "activity_segments": activity_segments,
             "tokens": {
                 "input": acc["token_input"],
