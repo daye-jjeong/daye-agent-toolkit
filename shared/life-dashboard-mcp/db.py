@@ -186,6 +186,19 @@ def upsert_session_topics(
     if not valid:
         return
 
+    # duration_estimate_min 자동 채우기 — 명시 안 된 토픽은 세션 시간 균등 분배
+    any_missing = any(not t.get("duration_estimate_min") for t in valid)
+    if any_missing:
+        row = conn.execute(
+            "SELECT duration_min FROM sessions WHERE source=? AND session_id=? AND date=?",
+            (source, session_id, date),
+        ).fetchone()
+        session_dur = row["duration_min"] if row and row["duration_min"] else 30
+        per_topic = max(1, session_dur // len(valid))
+        for t in valid:
+            if not t.get("duration_estimate_min"):
+                t["duration_estimate_min"] = per_topic
+
     conn.execute(
         "DELETE FROM session_topics WHERE source=? AND session_id=? AND date=?",
         (source, session_id, date),
