@@ -217,16 +217,26 @@ def record_sessions(
                         # LLM topics 없으면: segments를 proto-topics로 직접 사용
                         proto_topics = []
                         for seg in topic_segments:
+                            seg_repo = seg.get("repo") or repo
+                            seg_wu = seg.get("work_unit") or seg_repo.split("/")[-1]
                             proto_topics.append({
                                 "tag": auto_tag("", ""),
-                                "summary": f"{seg['work_unit']} 작업",
-                                "repo": seg.get("repo", repo),
+                                "summary": f"{seg_wu} 작업",
+                                "repo": seg_repo,
                                 "start_at": seg["start_at"],
                                 "duration_estimate_min": seg["duration_min"],
                                 "status": "in_progress",
                             })
                         if proto_topics:
                             upsert_session_topics(conn, source, session_id, date_str, proto_topics)
+                    else:
+                        # segments도 없으면 세션 전체를 하나의 proto-topic으로
+                        upsert_session_topics(conn, source, session_id, date_str, [{
+                            "tag": tag,
+                            "summary": f"{repo.split('/')[-1]} 작업",
+                            "repo": repo,
+                            "status": "in_progress",
+                        }])
                 except Exception as e:
                     print(f"[activity_writer] upsert_session_topics failed: {e}", file=sys.stderr)
 
