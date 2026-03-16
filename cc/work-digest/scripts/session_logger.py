@@ -761,6 +761,7 @@ def main():
         user_msgs = extract_user_messages(transcript_path)
         summary = None
         signals = None
+        legacy_summary = None
 
         try:
             with ThreadPoolExecutor(max_workers=2) as pool:
