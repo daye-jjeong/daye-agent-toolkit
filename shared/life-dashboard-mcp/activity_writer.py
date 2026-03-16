@@ -29,7 +29,7 @@ from db import (
     # v1 (Codex compat)
     upsert_activity, insert_behavioral_signal,
     # v2
-    upsert_session, upsert_session_content, insert_signal,
+    upsert_session, upsert_session_content, upsert_session_topics, insert_signal,
     upsert_followup_chain, update_daily_stats,
     upsert_coaching_entry, upsert_task_suggestion,
     update_task_resolution, update_followup_resolution,
@@ -128,6 +128,7 @@ def record_sessions(
     repo: str,
     branch: str | None = None,
     summary: dict | None = None,
+    topics: list[dict] | None = None,
     behavioral_signals: dict | None = None,
     is_session_end: bool = False,
 ) -> dict[str, str]:
@@ -191,6 +192,19 @@ def record_sessions(
             }
             upsert_session_content(conn, content_data)
             recorded[date_str] = session_id
+
+            # session_topics — topics가 있으면 해당 date의 토픽 저장
+            if topics:
+                date_topics = [t for t in topics if t.get("date", date_str) == date_str]
+                if not date_topics:
+                    date_topics = topics
+                if date_topics:
+                    upsert_session_topics(conn, source, session_id, date_str, date_topics)
+                    first = date_topics[0]
+                    conn.execute("""
+                        UPDATE sessions SET summary = ?, tag = ?, summary_source = 'llm'
+                        WHERE source = ? AND session_id = ? AND date = ?
+                    """, (first["summary"], first.get("tag"), source, session_id, date_str))
 
             # followup_chains — status가 follow_up/blocked이면 자동 생성
             if status in ("follow_up", "blocked") and follow_up_text:
@@ -386,6 +400,34 @@ def cmd_update_summary(args):
         conn.close()
 
 
+def cmd_update_topics(args):
+    """Step 3a용: 세션의 토픽을 전체 교체."""
+    conn = get_conn()
+    try:
+        topics = json.loads(args.topics)
+        if not isinstance(topics, list) or not topics:
+            print("Error: --topics must be a non-empty JSON array", file=sys.stderr)
+            sys.exit(1)
+        valid = [t for t in topics if t.get("summary")]
+        if not valid:
+            print("Error: no valid topics (summary required)", file=sys.stderr)
+            sys.exit(1)
+        if len(valid) > 10:
+            print(f"Warning: {len(valid)} topics, capping at 10", file=sys.stderr)
+            valid = valid[:10]
+        upsert_session_topics(conn, "cc", args.session_id, args.date, valid)
+        first = valid[0]
+        conn.execute("""
+            UPDATE sessions SET summary = ?, tag = ?, summary_source = 'llm'
+            WHERE source = 'cc' AND session_id = ? AND date = ?
+        """, (first["summary"], first.get("tag"), args.session_id, args.date))
+        update_daily_stats(conn, args.date)
+        conn.commit()
+        print(f"Updated {len(valid)} topics for {args.session_id}", file=sys.stderr)
+    finally:
+        conn.close()
+
+
 def cmd_save_coaching(args):
     conn = get_conn()
 
@@ -488,6 +530,11 @@ def main():
     p_update.add_argument("--summary-source", dest="summary_source",
                           choices=["llm", "manual"], default="llm")
 
+    p_topics = sub.add_parser("update-topics", help="Replace session topics")
+    p_topics.add_argument("--session-id", required=True)
+    p_topics.add_argument("--date", required=True)
+    p_topics.add_argument("--topics", required=True, help='JSON array: [{"tag":"..","summary":"..","repo":".."}]')
+
     p_coaching = sub.add_parser("save-coaching", help="Save coaching entry")
     p_coaching.add_argument("--date", required=True)
     p_coaching.add_argument("--period", required=True, choices=["daily", "weekly"])
@@ -525,6 +572,7 @@ def main():
     dispatch = {
         "unsummarized": cmd_unsummarized,
         "update-summary": cmd_update_summary,
+        "update-topics": cmd_update_topics,
         "save-coaching": cmd_save_coaching,
         "save-task": cmd_save_task,
         "previous-coaching": cmd_previous_coaching,
