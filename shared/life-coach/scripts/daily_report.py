@@ -106,7 +106,8 @@ def _build_topic_items(topics: list[dict]) -> str:
         dur = t.get("duration_estimate_min")
         meta_parts = []
         if dur:
-            meta_parts.append(f"~{dur}m")
+            prefix = "" if t.get("start_at") else "~"
+            meta_parts.append(f"{prefix}{dur}m")
         if t.get("has_commits"):
             meta_parts.append("커밋")
         meta_str = (
