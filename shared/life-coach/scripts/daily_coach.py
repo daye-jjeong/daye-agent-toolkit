@@ -26,7 +26,7 @@ from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGR
 KST = timezone(timedelta(hours=9))
 OVERWORK_THRESHOLD_HOURS = 8
 
-from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work
+from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work, dedup_sessions
 
 
 def get_today_data(conn, date_str: str) -> dict:
@@ -74,6 +74,8 @@ def get_today_data(conn, date_str: str) -> dict:
         if s.get("topic"):
             s["topic"] = s["topic"][:200]
         sessions.append(s)
+
+    sessions = dedup_sessions(sessions)
 
     # v2: signals 테이블
     signals = conn.execute("""
