@@ -775,6 +775,32 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
         # file_timeline → work_unit_time_ranges (기능 단위별 시간 범위)
         work_unit_time_ranges = _compute_work_unit_time_ranges(acc.get("file_timeline", []))
 
+        # 활동 구간 (idle gap > 5분 기준으로 분리)
+        activity_segments = []
+        if len(timestamps) >= 2:
+            sorted_ts = sorted(timestamps)
+            seg_start = sorted_ts[0]
+            seg_end = sorted_ts[0]
+            for i in range(1, len(sorted_ts)):
+                gap = (sorted_ts[i] - sorted_ts[i - 1]).total_seconds()
+                if gap > IDLE_THRESHOLD_SEC:
+                    # 이전 구간 저장
+                    dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
+                    activity_segments.append({
+                        "start": seg_start.strftime("%H:%M"),
+                        "end": seg_end.strftime("%H:%M"),
+                        "duration_min": dur,
+                    })
+                    seg_start = sorted_ts[i]
+                seg_end = sorted_ts[i]
+            # 마지막 구간
+            dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
+            activity_segments.append({
+                "start": seg_start.strftime("%H:%M"),
+                "end": seg_end.strftime("%H:%M"),
+                "duration_min": dur,
+            })
+
         result[date_str] = {
             "files": sorted(acc["files"]),
             "commands": acc["commands"][:10],
@@ -787,6 +813,7 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
             "start_kst": start_kst,
             "has_commits": acc["has_commits"],
             "work_unit_time_ranges": work_unit_time_ranges,
+            "activity_segments": activity_segments,
             "tokens": {
                 "input": acc["token_input"],
                 "output": acc["token_output"],
