@@ -317,7 +317,7 @@ def main():
     parser = argparse.ArgumentParser(description="Weekly HTML report")
     parser.add_argument("--input", help="JSON file (default: stdin)")
     parser.add_argument("--coaching", help="LLM coaching markdown file")
-    parser.add_argument("--output", default="/tmp/weekly_report.html")
+    parser.add_argument("--output", help="Output HTML path (default: date-based)")
     args = parser.parse_args()
 
     raw = json.load(open(args.input) if args.input else sys.stdin)
@@ -328,8 +328,10 @@ def main():
 
     html = build_weekly_report(raw, coaching_md)
 
-    Path(args.output).write_text(html, encoding="utf-8")
-    print(f"[weekly_report] saved: {args.output}", file=sys.stderr)
+    monday = raw.get("monday", raw.get("dates", ["unknown"])[0])
+    output_path = args.output or f"/tmp/weekly_report_{monday}.html"
+    Path(output_path).write_text(html, encoding="utf-8")
+    print(f"[weekly_report] saved: {output_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

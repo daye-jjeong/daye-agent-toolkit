@@ -236,43 +236,36 @@ def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] |
 
 
 def _build_followup_section(data: dict) -> str:
-    """어제 follow_up 중 미해소 건 표시."""
-    followups = data.get("yesterday_followups", [])
-    if not followups:
+    """v2: open followup_chains + pending task_suggestions 표시."""
+    followups = data.get("open_followups", [])
+    tasks = data.get("pending_tasks", [])
+    if not followups and not tasks:
         return ""
 
-    unresolved = [f for f in followups if not f.get("resolved")]
-    resolved = [f for f in followups if f.get("resolved")]
-
     items = []
-    for f in unresolved:
-        repo = _esc(f.get("repo") or "?")
-        tag = f.get("tag", "")
-        tag_color = TAG_COLORS.get(tag, "#707070")
-        follow = _esc(f.get("follow_up", ""))
+    for f in followups:
+        days = f.get("days_open", 0)
+        repo = _esc(f.get("origin_repo") or "?")
+        desc = _esc(f.get("description", ""))
+        cls = "color:#E07B5A" if days >= 3 else "color:#F0C040"
         items.append(
             f'<div class="work-item">'
-            f'<span class="status-badge" style="color:#E07B5A" title="unresolved">✕</span> '
-            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
-            f'<span class="work-summary">{repo} — {follow}</span>'
+            f'<span class="status-badge" style="{cls}" title="{days}일">🔗</span> '
+            f'<span class="work-summary">[{days}일] {repo} — {desc}</span>'
             f'</div>'
         )
-    for f in resolved:
-        repo = _esc(f.get("repo") or "?")
-        tag = f.get("tag", "")
-        tag_color = TAG_COLORS.get(tag, "#707070")
-        follow = _esc(f.get("follow_up", ""))
+    for t in tasks:
+        desc = _esc(t.get("description", ""))
+        est = t.get("estimated_min", "?")
         items.append(
             f'<div class="work-item">'
-            f'<span class="status-badge" style="color:#7ABD7E" title="resolved">✓</span> '
-            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
-            f'<span class="work-summary">{repo} — {follow}</span>'
+            f'<span class="status-badge" style="color:#5AC8D9" title="task">📋</span> '
+            f'<span class="work-summary">{desc} ({est}분)</span>'
             f'</div>'
         )
 
-    count_str = f'{len(unresolved)}건 미해소' if unresolved else '모두 해소'
     return (
-        f'<div class="section"><h3>어제 후속 작업 ({count_str})</h3>'
+        f'<div class="section"><h3>미해소 항목 ({len(followups)}건 follow-up, {len(tasks)}건 태스크)</h3>'
         f'{"".join(items)}</div>'
     )
 
@@ -516,7 +509,7 @@ def main():
     parser.add_argument("--input", help="JSON file (default: stdin)")
     parser.add_argument("--coaching", help="LLM coaching markdown file")
     parser.add_argument("--repo-summaries", help="LLM repo summaries JSON file")
-    parser.add_argument("--output", default="/tmp/daily_report.html")
+    parser.add_argument("--output", help="Output HTML path (default: date-based)")
     args = parser.parse_args()
 
     raw = json.load(open(args.input) if args.input else sys.stdin)
@@ -531,8 +524,10 @@ def main():
 
     html = build_daily_report(raw, coaching_md, repo_summaries=repo_summaries)
 
-    Path(args.output).write_text(html, encoding="utf-8")
-    print(f"[daily_report] saved: {args.output}", file=sys.stderr)
+    date_str = raw.get("date", "unknown")
+    output_path = args.output or f"/tmp/daily_report_{date_str}.html"
+    Path(output_path).write_text(html, encoding="utf-8")
+    print(f"[daily_report] saved: {output_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
