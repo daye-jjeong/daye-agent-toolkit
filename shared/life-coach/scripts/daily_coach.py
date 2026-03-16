@@ -195,16 +195,22 @@ def _build_repos_detail(data: dict) -> str | None:
 
     lines = ["📂 레포별:"]
 
-    if topics:
-        repo_topics = group_topics_by_repo(topics)
-        for repo, ts in sorted(repo_topics.items()):
-            lines.append(f"  ▸ {repo}")
-            for t in ts[:5]:
-                tag = t.get("tag", "")
-                summary = (t.get("summary") or "")[:80]
-                lines.append(f"    - [{tag}] {summary}")
-    else:
-        for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(sessions):
+    # 토픽 있는 레포 + 토픽 없는 세션 모두 표시
+    topic_repos = group_topics_by_repo(topics) if topics else {}
+    topic_session_ids = {t.get("session_id") for t in topics} if topics else set()
+    untopiced = [s for s in sessions if s.get("session_id") not in topic_session_ids]
+
+    for repo, ts in sorted(topic_repos.items()):
+        lines.append(f"  ▸ {repo}")
+        for t in ts[:5]:
+            tag = t.get("tag", "")
+            summary = (t.get("summary") or "")[:80]
+            lines.append(f"    - [{tag}] {summary}")
+
+    if untopiced:
+        for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(untopiced):
+            if repo in topic_repos:
+                continue
             sess_count = sum(len(bs) for bs in branch_groups.values())
             parts = [f"{sess_count}세션"]
             if total_dur > 0:

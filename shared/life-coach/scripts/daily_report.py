@@ -232,67 +232,68 @@ def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] |
     if not sessions and not topics:
         return ""
 
-    # topics가 있으면 토픽 기준 repo 그룹핑
-    if topics:
-        repo_topics = group_topics_by_repo(topics)
-        rows = []
-        for r, ts in sorted(repo_topics.items()):
-            inner_html = _build_topic_items(ts)
-            rows.append(
-                f'<div class="repo-group">'
-                f'<div class="repo-name">{_esc(r)}</div>'
-                f'{inner_html}'
-                f'</div>'
-            )
-        legend = (
-            '<div class="status-legend">'
-            '<span style="color:#7ABD7E">✓</span> 완료 '
-            '<span style="color:#888">◦</span> 진행중 '
-            '<span style="color:#E07B5A">✕</span> 블로커 '
-            '<span style="color:#F0C040">→</span> 후속필요'
-            '</div>'
-        )
-        return f'<div class="section"><h3>레포별 작업</h3>{legend}{"".join(rows)}</div>'
+    # 토픽이 있는 레포 + 토픽 없는 세션 모두 표시
+    topic_repos = group_topics_by_repo(topics) if topics else {}
+    # 토픽이 커버하는 session_id 집합
+    topic_session_ids = {t.get("session_id") for t in topics} if topics else set()
+    # 토픽이 없는 세션만 필터
+    untopiced_sessions = [s for s in sessions if s.get("session_id") not in topic_session_ids]
 
     rows = []
-    for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(sessions, short_repo=True):
-        sess_count = sum(len(bs) for bs in branch_groups.values())
-        h, m = divmod(total_dur, 60)
-        dur_str = f"{h}h {m}m" if h else f"{m}m"
-        meta = f'{sess_count}세션 · {dur_str}'
-        if total_tok > 0:
-            meta += f' · {_fmt_tokens(total_tok)} tokens'
 
-        # LLM 요약이 있으면 사용, 없으면 세션 원문 fallback
-        summary = _match_repo_summary(repo, repo_summaries) if repo_summaries else None
-        if summary is not None:
-            if isinstance(summary, list):
-                items = "".join(_render_summary_item(s) for s in summary)
-                inner_html = f'<div class="repo-summary-list">{items}</div>'
-            else:
-                inner_html = f'<div class="repo-summary">{_esc(summary)}</div>'
-        elif has_meaningful_branches(branch_groups):
-            inner_html = ""
-            for branch, bsess in branch_groups.items():
-                if branch:
-                    inner_html += (
-                        f'<div class="branch-group">'
-                        f'<div class="branch-name">{_esc(branch)}</div>'
-                        f'{_build_work_items(bsess)}'
-                        f'</div>'
-                    )
-                else:
-                    inner_html += _build_work_items(bsess)
-        else:
-            all_sess = [s for bs in branch_groups.values() for s in bs]
-            inner_html = _build_work_items(all_sess)
-
+    # 1) 토픽 기준 레포 표시
+    for r, ts in sorted(topic_repos.items()):
+        inner_html = _build_topic_items(ts)
         rows.append(
             f'<div class="repo-group">'
-            f'<div class="repo-name">{_esc(repo)} <span class="repo-meta">{meta}</span></div>'
+            f'<div class="repo-name">{_esc(r)}</div>'
             f'{inner_html}'
             f'</div>'
         )
+
+    # 2) 토픽 없는 세션 — 기존 방식으로 표시
+    if untopiced_sessions:
+        for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(untopiced_sessions, short_repo=True):
+            if repo in topic_repos:
+                continue  # 이미 토픽으로 표시된 레포는 skip
+            sess_count = sum(len(bs) for bs in branch_groups.values())
+            h, m = divmod(total_dur, 60)
+            dur_str = f"{h}h {m}m" if h else f"{m}m"
+            meta = f'{sess_count}세션 · {dur_str}'
+            if total_tok > 0:
+                meta += f' · {_fmt_tokens(total_tok)} tokens'
+            summary = _match_repo_summary(repo, repo_summaries) if repo_summaries else None
+            if summary is not None:
+                if isinstance(summary, list):
+                    items = "".join(_render_summary_item(s) for s in summary)
+                    inner_html = f'<div class="repo-summary-list">{items}</div>'
+                else:
+                    inner_html = f'<div class="repo-summary">{_esc(summary)}</div>'
+            elif has_meaningful_branches(branch_groups):
+                inner_html = ""
+                for branch, bsess in branch_groups.items():
+                    if branch:
+                        inner_html += (
+                            f'<div class="branch-group">'
+                            f'<div class="branch-name">{_esc(branch)}</div>'
+                            f'{_build_work_items(bsess)}'
+                            f'</div>'
+                        )
+                    else:
+                        inner_html += _build_work_items(bsess)
+            else:
+                all_sess = [s for bs in branch_groups.values() for s in bs]
+                inner_html = _build_work_items(all_sess)
+            rows.append(
+                f'<div class="repo-group">'
+                f'<div class="repo-name">{_esc(repo)} <span class="repo-meta">{meta}</span></div>'
+                f'{inner_html}'
+                f'</div>'
+            )
+
+    if not rows:
+        return ""
+
     legend = (
         '<div class="status-legend">'
         '<span style="color:#7ABD7E">✓</span> 완료 '
