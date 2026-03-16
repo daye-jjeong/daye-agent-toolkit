@@ -110,6 +110,29 @@ CREATE TABLE IF NOT EXISTS session_content (
         ON DELETE CASCADE
 );
 
+-- ── Session Topics (1:N from sessions) ──────────
+
+CREATE TABLE IF NOT EXISTS session_topics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    topic_order INTEGER NOT NULL DEFAULT 0,
+    tag TEXT,
+    summary TEXT NOT NULL,
+    repo TEXT,
+    duration_estimate_min INTEGER,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(source, session_id, date, topic_order),
+    FOREIGN KEY (source, session_id, date)
+        REFERENCES sessions(source, session_id, date)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_topics_date ON session_topics(date);
+CREATE INDEX IF NOT EXISTS idx_session_topics_tag ON session_topics(tag);
+CREATE INDEX IF NOT EXISTS idx_session_topics_fk ON session_topics(source, session_id, date);
+
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
