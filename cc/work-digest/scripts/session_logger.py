@@ -527,6 +527,41 @@ def parse_transcript(transcript_path: str) -> dict:
     }
 
 
+def _extract_repo_from_path(file_path: str) -> str:
+    """파일 경로에서 레포명 추출. /Users/.../git_workplace/cube-backend/src/... → cube-backend"""
+    parts = file_path.split("/")
+    for i, p in enumerate(parts):
+        if p in ("git_workplace", "worktrees") and i + 1 < len(parts):
+            return parts[i + 1]
+    return ""
+
+
+def _compute_repo_time_ranges(file_timeline: list[tuple]) -> dict[str, dict]:
+    """file_timeline [(timestamp, path), ...] → {repo: {start_at: str, end_at: str, duration_min: int}}"""
+    if not file_timeline:
+        return {}
+
+    repo_events: dict[str, list] = {}
+    for ts, fp in sorted(file_timeline):
+        repo = _extract_repo_from_path(fp)
+        if repo:
+            repo_events.setdefault(repo, []).append(ts)
+
+    result = {}
+    for repo, timestamps in repo_events.items():
+        if not timestamps:
+            continue
+        first = min(timestamps)
+        last = max(timestamps)
+        dur = max(1, int((last - first).total_seconds() / 60))
+        result[repo] = {
+            "start_at": first.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+            "end_at": last.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
+            "duration_min": dur,
+        }
+    return result
+
+
 def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = None) -> dict[str, dict]:
     """Parse transcript and split by KST date.
 
@@ -565,6 +600,7 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                 if entry_date not in by_date:
                     by_date[entry_date] = {
                         "files": set(),
+                        "file_timeline": [],  # [(timestamp, file_path), ...] 시간순 파일 작업
                         "commands": [],
                         "errors": [],
                         "topic": "",
@@ -641,6 +677,8 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                             fp = inp.get("file_path", "")
                             if fp:
                                 acc["files"].add(fp)
+                                if entry_ts:
+                                    acc["file_timeline"].append((entry_ts, fp))
                         if tool == "Bash":
                             cmd = inp.get("command", "")
                             if cmd:
@@ -675,6 +713,9 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
         end_kst = max(timestamps) if timestamps else None
         end_time_str = end_kst.strftime("%H:%M") if end_kst else None
 
+        # file_timeline → repo_time_ranges (레포별 시간 범위)
+        repo_time_ranges = _compute_repo_time_ranges(acc.get("file_timeline", []))
+
         result[date_str] = {
             "files": sorted(acc["files"]),
             "commands": acc["commands"][:10],
@@ -686,6 +727,7 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
             "end_time": end_time_str,
             "start_kst": start_kst,
             "has_commits": acc["has_commits"],
+            "repo_time_ranges": repo_time_ranges,
             "tokens": {
                 "input": acc["token_input"],
                 "output": acc["token_output"],
