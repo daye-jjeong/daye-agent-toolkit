@@ -52,8 +52,27 @@ python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly_<DATE
 `references/coaching-prompts.md` 프레임으로 데이터를 해석하고 **두 가지 파일**을 생성한다.
 escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
 
-**3a. 세션 요약을 DB에 업데이트**
+**3a-1. 토픽 분해**
 
+각 세션의 session_content를 보고 **작업 단위별로 분해**한다.
+
+토픽 분리 기준:
+- 다른 레포로 전환 → 별도 토픽
+- 다른 브랜치로 전환 → 별도 토픽
+- 명확히 다른 목적의 작업 → 별도 토픽
+- 같은 목적의 연속 작업 → 하나로 합침
+
+한 작업만 한 세션은 토픽 1개. 무리하게 쪼개지 마라.
+
+```bash
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-topics \
+    --session-id <SID> --date <DATE> \
+    --topics '[{"tag":"설계","summary":"spec 작성 — 3계층 분리","repo":"daye-agent-toolkit"},{"tag":"코딩","summary":"DB CRUD 구현","repo":"daye-agent-toolkit"}]'
+```
+
+**3a-2. 세션 요약 + 상태 업데이트**
+
+update-topics를 실행한 세션도 update-summary로 상태를 업데이트한다.
 JSON 데이터의 각 세션을 확인하고, summary가 부정확하거나 topic 수준이면 `commands`, `user_messages`, `agent_messages`, `files_changed`, `branch`를 종합해서 구체적인 요약으로 업데이트한다.
 
 **요약 품질 기준:**
