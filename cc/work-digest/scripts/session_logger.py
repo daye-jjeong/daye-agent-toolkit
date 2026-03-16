@@ -531,10 +531,13 @@ def parse_transcript(transcript_path: str) -> dict:
 def _extract_work_unit(file_path: str) -> tuple[str, str]:
     """파일 경로에서 (repo, work_unit) 추출.
 
-    work_unit = worktree 이름이 있으면 "repo/worktree", 없으면 "repo".
-    예:
-      .claude/worktrees/pipeline-redesign/shared/... → ("daye-agent-toolkit", "pipeline-redesign")
-      /git_workplace/cube-backend/src/... → ("cube-backend", "cube-backend")
+    work_unit = worktree 이름이 있으면 worktree명, 없으면 repo명.
+    다양한 경로 패턴 지원:
+      .claude/worktrees/pipeline-redesign/... → ("daye-agent-toolkit", "pipeline-redesign")
+      /git_workplace/cube-backend/... → ("cube-backend", "cube-backend")
+      ~/.openclaw/workspace-mingming/... → ("openclaw", "workspace-mingming")
+      ~/dy-minions-squad-fix-.../... → ("dy-minions-squad-fix-...", "dy-minions-squad-fix-...")
+      ~/.claude/projects/-Users-...-dy-minions-squad/... → ("dy-minions-squad", "dy-minions-squad")
     """
     parts = file_path.split("/")
 
@@ -542,7 +545,6 @@ def _extract_work_unit(file_path: str) -> tuple[str, str]:
     for i, p in enumerate(parts):
         if p == "worktrees" and i + 1 < len(parts):
             wt_name = parts[i + 1]
-            # worktree의 상위에서 repo명 추출 시도
             repo = ""
             for j, q in enumerate(parts):
                 if q == "git_workplace" and j + 1 < len(parts):
@@ -554,6 +556,35 @@ def _extract_work_unit(file_path: str) -> tuple[str, str]:
     for i, p in enumerate(parts):
         if p == "git_workplace" and i + 1 < len(parts):
             return (parts[i + 1], parts[i + 1])
+
+    # .openclaw/workspace-<name>/...
+    for i, p in enumerate(parts):
+        if p == ".openclaw" and i + 1 < len(parts):
+            return ("openclaw", parts[i + 1])
+
+    # .claude/projects/-Users-...-<repo>/...
+    for i, p in enumerate(parts):
+        if p == "projects" and i + 1 < len(parts) and parts[i + 1].startswith("-"):
+            project_hash = parts[i + 1]
+            # 마지막 하이픈 구분 단어들에서 레포명 추출
+            segments = project_hash.split("-")
+            # -Users-dayejeong-git-workplace-daye-agent-toolkit → daye-agent-toolkit
+            # -Users-dayejeong-dy-minions-squad → dy-minions-squad
+            if "git" in segments and "workplace" in segments:
+                idx = segments.index("workplace")
+                repo = "-".join(segments[idx + 1:])
+            else:
+                # Users, dayejeong 등 제거 후 나머지
+                repo = "-".join(segments[3:]) if len(segments) > 3 else project_hash
+            return (repo, repo) if repo else ("", "")
+
+    # home directory 직접 경로: ~/some-project-name/...
+    home = str(Path.home())
+    if file_path.startswith(home):
+        rel = file_path[len(home):].strip("/")
+        top_dir = rel.split("/")[0] if "/" in rel else rel
+        if top_dir and not top_dir.startswith("."):
+            return (top_dir, top_dir)
 
     return ("", "")
 
