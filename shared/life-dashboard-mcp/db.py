@@ -91,11 +91,18 @@ def upsert_activity(conn: sqlite3.Connection, data: dict):
 
 def update_daily_stats(conn: sqlite3.Connection, date_str: str):
     next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    # v2: sessions 테이블 우선, 없으면 activities fallback
     rows = conn.execute("""
         SELECT tag, repo, duration_min, start_at, end_at
-        FROM activities
-        WHERE start_at >= ? AND start_at < ?
-    """, (date_str, next_date)).fetchall()
+        FROM sessions
+        WHERE date = ?
+    """, (date_str,)).fetchall()
+    if not rows:
+        rows = conn.execute("""
+            SELECT tag, repo, duration_min, start_at, end_at
+            FROM activities
+            WHERE start_at >= ? AND start_at < ?
+        """, (date_str, next_date)).fetchall()
 
     if not rows:
         conn.execute("DELETE FROM daily_stats WHERE date = ?", (date_str,))
@@ -161,36 +168,46 @@ def insert_behavioral_signal(conn: sqlite3.Connection, signal: dict):
 
 
 def get_repeated_signals(conn: sqlite3.Connection, date_str: str, days: int = 7, min_count: int = 2) -> list[dict]:
-    """최근 N일간 반복된 행동 신호 집계."""
+    """최근 N일간 반복된 행동 신호 집계. v2: signals 테이블 우선."""
     since = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
+    # v2 signals 먼저 시도
     rows = conn.execute("""
         SELECT content, signal_type, COUNT(*) as cnt
-        FROM behavioral_signals
+        FROM signals
         WHERE date >= ? AND signal_type IN ('mistake', 'pattern')
         GROUP BY content, signal_type
         HAVING cnt >= ?
-        ORDER BY cnt DESC
-        LIMIT 10
+        ORDER BY cnt DESC LIMIT 10
     """, (since, min_count)).fetchall()
+    if not rows:
+        # fallback: 구 behavioral_signals
+        rows = conn.execute("""
+            SELECT content, signal_type, COUNT(*) as cnt
+            FROM behavioral_signals
+            WHERE date >= ? AND signal_type IN ('mistake', 'pattern')
+            GROUP BY content, signal_type
+            HAVING cnt >= ?
+            ORDER BY cnt DESC LIMIT 10
+        """, (since, min_count)).fetchall()
     return [{"content": r["content"], "signal_type": r["signal_type"], "count": r["cnt"]} for r in rows]
 
 
 def get_mistake_trends(conn: sqlite3.Connection, date_str: str, days: int = 14) -> dict:
-    """최근 N일간 mistake 신호를 카테고리별로 집계.
-
-    Returns: {
-        "by_category": [{"category": str, "label": str, "count": int, "examples": [str]}],
-        "uncategorized": [{"content": str, "count": int}],
-        "total": int,
-    }
-    """
+    """최근 N일간 mistake 신호를 카테고리별로 집계. v2: signals 테이블 우선."""
     since = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
     rows = conn.execute("""
         SELECT content, COUNT(*) as cnt
-        FROM behavioral_signals
+        FROM signals
         WHERE date >= ? AND date <= ? AND signal_type = 'mistake'
         GROUP BY content ORDER BY cnt DESC
     """, (since, date_str)).fetchall()
+    if not rows:
+        rows = conn.execute("""
+            SELECT content, COUNT(*) as cnt
+            FROM behavioral_signals
+            WHERE date >= ? AND date <= ? AND signal_type = 'mistake'
+            GROUP BY content ORDER BY cnt DESC
+        """, (since, date_str)).fetchall()
 
     # Load category definitions from life-coach skill (cross-module dependency)
     cat_path = Path(__file__).resolve().parent.parent / "life-coach" / "references" / "mistake-categories.json"
@@ -226,6 +243,143 @@ def get_mistake_trends(conn: sqlite3.Connection, date_str: str, days: int = 14) 
         })
 
     return {"by_category": result_cats, "uncategorized": uncategorized, "total": total}
+
+
+# ── Sessions v2 CRUD ──────────────────────────
+
+
+def upsert_session(conn: sqlite3.Connection, data: dict):
+    """sessions 테이블 upsert. scanner 컬럼별 우선순위 적용."""
+    conn.execute("""
+        INSERT INTO sessions (source, session_id, date, repo, branch, tag, summary,
+            summary_source, status, follow_up,
+            start_at, end_at, duration_min, file_count, error_count,
+            has_tests, has_commits, token_total)
+        VALUES (:source, :session_id, :date, :repo, :branch, :tag, :summary,
+            :summary_source, :status, :follow_up,
+            :start_at, :end_at, :duration_min, :file_count, :error_count,
+            :has_tests, :has_commits, :token_total)
+        ON CONFLICT(source, session_id, date) DO UPDATE SET
+            repo=excluded.repo,
+            branch=COALESCE(excluded.branch, branch),
+            tag=COALESCE(tag, excluded.tag),
+            summary=COALESCE(summary, excluded.summary),
+            summary_source=CASE
+                WHEN summary_source IN ('llm', 'manual') THEN summary_source
+                ELSE COALESCE(excluded.summary_source, summary_source)
+            END,
+            status=CASE
+                WHEN status IN ('completed', 'blocked', 'follow_up') THEN status
+                ELSE COALESCE(excluded.status, status)
+            END,
+            follow_up=COALESCE(excluded.follow_up, follow_up),
+            end_at=excluded.end_at,
+            duration_min=excluded.duration_min,
+            file_count=excluded.file_count,
+            error_count=excluded.error_count,
+            token_total=excluded.token_total,
+            has_tests=MAX(has_tests, excluded.has_tests),
+            has_commits=MAX(has_commits, excluded.has_commits)
+    """, data)
+
+
+def upsert_session_content(conn: sqlite3.Connection, data: dict):
+    """session_content upsert — 최신 상태로 교체."""
+    conn.execute("""
+        INSERT INTO session_content (source, session_id, date, topic,
+            user_messages, agent_messages, files_changed, commands, errors)
+        VALUES (:source, :session_id, :date, :topic,
+            :user_messages, :agent_messages, :files_changed, :commands, :errors)
+        ON CONFLICT(source, session_id, date) DO UPDATE SET
+            topic=excluded.topic,
+            user_messages=excluded.user_messages,
+            agent_messages=excluded.agent_messages,
+            files_changed=excluded.files_changed,
+            commands=excluded.commands,
+            errors=excluded.errors
+    """, data)
+
+
+def insert_signal(conn: sqlite3.Connection, signal: dict):
+    """signals 테이블 INSERT OR IGNORE."""
+    conn.execute("""
+        INSERT OR IGNORE INTO signals (session_id, date, signal_type, content, reasoning, repo)
+        VALUES (:session_id, :date, :signal_type, :content, :reasoning, :repo)
+    """, signal)
+
+
+def upsert_coaching_entry(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT INTO coaching_entries (date, period_type, content, sections, escalation_level)
+        VALUES (:date, :period_type, :content, :sections, :escalation_level)
+        ON CONFLICT(date, period_type) DO UPDATE SET
+            content=excluded.content, sections=excluded.sections,
+            escalation_level=excluded.escalation_level
+    """, data)
+
+
+def upsert_task_suggestion(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT INTO task_suggestions (suggested_date, description, estimated_min,
+            priority, source_type, origin_session_id, status)
+        VALUES (:suggested_date, :description, :estimated_min,
+            :priority, :source_type, :origin_session_id, :status)
+        ON CONFLICT(suggested_date, description) DO UPDATE SET
+            estimated_min=excluded.estimated_min, priority=excluded.priority,
+            source_type=excluded.source_type, origin_session_id=excluded.origin_session_id
+    """, data)
+
+
+def update_task_resolution(conn: sqlite3.Connection, task_id: int, status: str,
+                           resolved_date: str, resolved_session_id: str | None,
+                           method: str, notes: str | None = None):
+    conn.execute("""
+        UPDATE task_suggestions
+        SET status=?, resolved_date=?, resolved_session_id=?, resolution_method=?, notes=?
+        WHERE id=?
+    """, (status, resolved_date, resolved_session_id, method, notes, task_id))
+
+
+def upsert_followup_chain(conn: sqlite3.Connection, data: dict):
+    conn.execute("""
+        INSERT OR IGNORE INTO followup_chains
+            (origin_session_id, origin_date, origin_repo, description)
+        VALUES (:origin_session_id, :origin_date, :origin_repo, :description)
+    """, data)
+
+
+def update_followup_resolution(conn: sqlite3.Connection, chain_id: int, status: str,
+                               resolved_date: str, resolved_session_id: str | None,
+                               resolution_note: str | None = None):
+    conn.execute("""
+        UPDATE followup_chains
+        SET status=?, resolved_date=?, resolved_session_id=?, resolution_note=?
+        WHERE id=?
+    """, (status, resolved_date, resolved_session_id, resolution_note, chain_id))
+
+
+def get_coaching_entry(conn: sqlite3.Connection, date_str: str, period_type: str = "daily") -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM coaching_entries WHERE date = ? AND period_type = ?",
+        (date_str, period_type)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_pending_tasks(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM task_suggestions WHERE status = 'pending' ORDER BY priority, suggested_date"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_open_followups(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute("""
+        SELECT *, CAST(julianday('now', 'localtime') - julianday(origin_date) AS INTEGER) as days_open
+        FROM followup_chains WHERE status = 'open'
+        ORDER BY origin_date
+    """).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── Health ──────────────────────────────────
