@@ -129,6 +129,7 @@ def record_sessions(
     branch: str | None = None,
     summary: dict | None = None,
     behavioral_signals: dict | None = None,
+    is_session_end: bool = False,
 ) -> dict[str, str]:
     """v2: 날짜별 분할 데이터를 sessions + session_content에 기록."""
     if not by_date:
@@ -165,7 +166,8 @@ def record_sessions(
                     status = summary["status"]
                 follow_up_text = summary.get("follow_up")
             # SessionEnd: 닫힌 세션이 in_progress로 남지 않도록
-            if status == "in_progress":
+            # scanner(is_session_end=False)에서는 in_progress 유지
+            if is_session_end and status == "in_progress":
                 status = "completed"
 
             session_data = {

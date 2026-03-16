@@ -758,7 +758,8 @@ def main():
         if summary or signals:
             _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
             record_sessions("cc", session_id, by_date, repo, branch,
-                           summary=summary, behavioral_signals=signals)
+                           summary=summary, behavioral_signals=signals,
+                           is_session_end=True)
         else:
             # Layer 2 실패 → SessionEnd이므로 최소한 status를 completed로
             try:
