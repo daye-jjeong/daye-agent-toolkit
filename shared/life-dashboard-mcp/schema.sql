@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS session_topics (
     summary TEXT NOT NULL,
     repo TEXT,
     start_at TEXT,
+    end_at TEXT,
     duration_estimate_min INTEGER,
     status TEXT DEFAULT 'completed',
     follow_up TEXT,

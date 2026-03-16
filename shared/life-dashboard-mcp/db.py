@@ -60,7 +60,7 @@ def _migrate(conn: sqlite3.Connection):
     try:
         st_cols = {r[1] for r in conn.execute("PRAGMA table_info(session_topics)").fetchall()}
         if st_cols:
-            for col, default in [("start_at", None), ("status", "'completed'"), ("follow_up", None)]:
+            for col, default in [("start_at", None), ("end_at", None), ("status", "'completed'"), ("follow_up", None)]:
                 if col not in st_cols:
                     default_clause = f" DEFAULT {default}" if default else ""
                     conn.execute(f"ALTER TABLE session_topics ADD COLUMN {col} TEXT{default_clause}")
@@ -217,9 +217,9 @@ def upsert_session_topics(
     )
     for i, t in enumerate(valid):
         conn.execute("""
-            INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, repo, start_at, duration_estimate_min, status, follow_up)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (source, session_id, date, i, t["tag"], t["summary"], t.get("repo"), t.get("start_at"), t.get("duration_estimate_min"), t.get("status", "completed"), t.get("follow_up")))
+            INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, repo, start_at, end_at, duration_estimate_min, status, follow_up)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (source, session_id, date, i, t["tag"], t["summary"], t.get("repo"), t.get("start_at"), t.get("end_at"), t.get("duration_estimate_min"), t.get("status", "completed"), t.get("follow_up")))
 
     if sync_session_cache and valid:
         first = valid[0]

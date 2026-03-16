@@ -210,6 +210,8 @@ def record_sessions(
                             if matched:
                                 if not t.get("start_at"):
                                     t["start_at"] = matched["start_at"]
+                                if not t.get("end_at"):
+                                    t["end_at"] = matched.get("end_at")
                                 if not t.get("duration_estimate_min"):
                                     t["duration_estimate_min"] = matched["duration_min"]
                         upsert_session_topics(conn, source, session_id, date_str, topics)
@@ -229,6 +231,7 @@ def record_sessions(
                                     "summary": f"{seg_wu} 작업",
                                     "repo": seg_repo,
                                     "start_at": seg["start_at"],
+                                    "end_at": seg.get("end_at"),
                                     "duration_estimate_min": seg["duration_min"],
                                     "status": "in_progress",
                                 })
