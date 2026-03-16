@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import get_conn, update_daily_stats
-from _sync_common import auto_tag
+from activity_writer import auto_tag
 
 
 def main():
@@ -23,26 +23,49 @@ def main():
 
     conn = get_conn()
     try:
+        # v2 sessions 테이블 우선
         rows = conn.execute(
-            "SELECT id, source, session_id, repo, tag, summary, raw_json "
-            "FROM activities WHERE tag = '기타' OR tag = '' OR tag IS NULL"
+            "SELECT id, source, session_id, date, repo, tag, summary "
+            "FROM sessions WHERE tag = '기타' OR tag = '' OR tag IS NULL"
         ).fetchall()
-        print(f"Found {len(rows)} untagged/기타 activities", file=sys.stderr)
+
+        if not rows:
+            # fallback: v1 activities
+            rows = conn.execute(
+                "SELECT id, source, session_id, repo, tag, summary, raw_json "
+                "FROM activities WHERE tag = '기타' OR tag = '' OR tag IS NULL"
+            ).fetchall()
+            table = "activities"
+        else:
+            table = "sessions"
+
+        print(f"Found {len(rows)} untagged/기타 in {table}", file=sys.stderr)
 
         updated = 0
         for r in rows:
             try:
-                raw = json.loads(r["raw_json"] or "{}")
                 summary = r["summary"] or ""
-                topic = raw.get("topic", "")
-                commands = " ".join(raw.get("commands", [])[:5])
+                if table == "sessions":
+                    # session_content에서 topic, commands 조회
+                    sc = conn.execute(
+                        "SELECT topic, commands FROM session_content "
+                        "WHERE source = ? AND session_id = ? AND date = ?",
+                        (r["source"], r["session_id"], r["date"])
+                    ).fetchone()
+                    topic = sc["topic"] if sc else ""
+                    commands = " ".join(json.loads(sc["commands"] or "[]")[:5]) if sc else ""
+                else:
+                    raw = json.loads(r["raw_json"] or "{}")
+                    topic = raw.get("topic", "")
+                    commands = " ".join(raw.get("commands", [])[:5])
+
                 new_tag = auto_tag(summary, topic, commands)
                 if new_tag != "기타":
                     print(f"  [{r['source']}] {r['session_id'][:8]}.. "
                           f"{r['repo']}: {r['tag']!r} → {new_tag!r}  ({summary[:60]})")
                     if args.apply:
                         conn.execute(
-                            "UPDATE activities SET tag = ? WHERE id = ?",
+                            f"UPDATE {table} SET tag = ? WHERE id = ?",
                             (new_tag, r["id"]),
                         )
                     updated += 1
@@ -51,15 +74,14 @@ def main():
 
         if args.apply and updated > 0:
             conn.commit()
-            # daily_stats도 재계산
             dates = conn.execute(
-                "SELECT DISTINCT substr(start_at, 1, 10) as d FROM activities"
+                f"SELECT DISTINCT date as d FROM {table}"
             ).fetchall()
             for d in dates:
                 update_daily_stats(conn, d["d"])
             conn.commit()
 
-        print(f"\n{'Applied' if args.apply else 'Would update'}: {updated}/{len(rows)} activities",
+        print(f"\n{'Applied' if args.apply else 'Would update'}: {updated}/{len(rows)} {table}",
               file=sys.stderr)
     finally:
         conn.close()

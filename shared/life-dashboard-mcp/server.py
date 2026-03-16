@@ -58,12 +58,11 @@ def _build_date_summary(conn, date_str: str, coach_state: dict | None = None) ->
     if not stats:
         return {"date": date_str, "has_data": False}
 
-    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-    activities = conn.execute("""
-        SELECT repo, tag, summary, start_at, end_at, duration_min
-        FROM activities WHERE start_at >= ? AND start_at < ? AND source = 'cc'
+    rows = conn.execute("""
+        SELECT repo, tag, summary, start_at, end_at, duration_min, status
+        FROM sessions WHERE date = ?
         ORDER BY start_at
-    """, (date_str, next_date)).fetchall()
+    """, (date_str,)).fetchall()
 
     return {
         "date": date_str,
@@ -82,8 +81,9 @@ def _build_date_summary(conn, date_str: str, coach_state: dict | None = None) ->
                 "start": a["start_at"][11:16] if a["start_at"] else "",
                 "end": a["end_at"][11:16] if a["end_at"] else "",
                 "duration_min": a["duration_min"],
+                "status": a["status"],
             }
-            for a in activities
+            for a in rows
         ],
         "coach_state": coach_state if coach_state is not None else get_coach_state(conn),
     }
