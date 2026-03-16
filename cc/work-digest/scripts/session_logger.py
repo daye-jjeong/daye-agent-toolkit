@@ -179,21 +179,22 @@ def summarize_session(conversation: str, repo: str) -> list[dict] | None:
         f"레포: {repo}\n\n"
         f"다음은 Claude Code 세션의 대화 내용이다.\n\n"
         f"{conversation}\n\n"
-        "이 세션에서 수행한 작업을 토픽별로 분해하라.\n"
-        "하나의 작업만 했으면 1개, 여러 작업을 오갔으면 각각 분리.\n\n"
-        "토픽 분리 기준:\n"
-        "- 다른 레포로 전환 → 별도 토픽\n"
-        "- 다른 브랜치로 전환 → 별도 토픽\n"
-        "- 명확히 다른 목적의 작업 → 별도 토픽\n"
-        "- 같은 목적의 연속 작업 → 하나로 합침\n\n"
-        f"각 토픽의 태그 선택지: {tags_str}\n\n"
+        "이 세션에서 수행한 작업을 **기능/작업 단위**별로 분해하라.\n"
+        "하나의 기능만 작업했으면 1개, 여러 기능을 오갔으면 각각 분리.\n\n"
+        "토픽 = 기능 단위 (activity type이 아님):\n"
+        "- 같은 기능의 설계→구현→리뷰는 하나의 토픽으로 합침\n"
+        "- 다른 레포/worktree로 전환 → 별도 토픽\n"
+        "- 같은 레포에서 명확히 다른 기능 작업 → 별도 토픽\n"
+        "- 나쁜 분해: [설계] spec 작성 / [코딩] 구현 / [리뷰] PR review (활동 유형별 분해)\n"
+        "- 좋은 분해: pipeline-redesign — spec + 구현 + 리뷰 완료 (기능 단위)\n\n"
+        f"각 토픽의 태그 (가장 비중 큰 활동 기준): {tags_str}\n\n"
         "요약 기준:\n"
-        "- 무엇을(기능/모듈), 왜(문제/목적), 결과(산출물/변경)\n"
-        "- 브랜치명이 있으면 포함\n"
-        "- 나쁜 예: '설계 논의', 'PR 리뷰'\n"
-        "- 좋은 예: 'session logger 파이프라인 개편 — 열린 세션 누락 해결'\n\n"
+        "- 기능명 — 무엇을 왜 했고, 결과는 무엇인지\n"
+        "- worktree/브랜치명이 있으면 포함\n"
+        "- 나쁜 예: '설계 논의', 'PR 리뷰', '디버깅'\n"
+        "- 좋은 예: 'pipeline-redesign — 3계층 분리 아키텍처 설계 + 구현 + 리뷰 완료'\n\n"
         "JSON 배열로만 답하라. 다른 텍스트 금지:\n"
-        '[{"tag": "태그", "summary": "요약", "repo": "레포명"}]'
+        '[{"tag": "태그", "summary": "기능명 — 상세 요약", "repo": "레포명"}]'
     )
     try:
         result = subprocess.run(
@@ -527,37 +528,64 @@ def parse_transcript(transcript_path: str) -> dict:
     }
 
 
-def _extract_repo_from_path(file_path: str) -> str:
-    """파일 경로에서 레포명 추출. /Users/.../git_workplace/cube-backend/src/... → cube-backend"""
+def _extract_work_unit(file_path: str) -> tuple[str, str]:
+    """파일 경로에서 (repo, work_unit) 추출.
+
+    work_unit = worktree 이름이 있으면 "repo/worktree", 없으면 "repo".
+    예:
+      .claude/worktrees/pipeline-redesign/shared/... → ("daye-agent-toolkit", "pipeline-redesign")
+      /git_workplace/cube-backend/src/... → ("cube-backend", "cube-backend")
+    """
     parts = file_path.split("/")
+
+    # worktree 경로: .claude/worktrees/<name>/...
     for i, p in enumerate(parts):
-        if p in ("git_workplace", "worktrees") and i + 1 < len(parts):
-            return parts[i + 1]
-    return ""
+        if p == "worktrees" and i + 1 < len(parts):
+            wt_name = parts[i + 1]
+            # worktree의 상위에서 repo명 추출 시도
+            repo = ""
+            for j, q in enumerate(parts):
+                if q == "git_workplace" and j + 1 < len(parts):
+                    repo = parts[j + 1]
+                    break
+            return (repo or wt_name, wt_name)
+
+    # 일반 경로: git_workplace/<repo>/...
+    for i, p in enumerate(parts):
+        if p == "git_workplace" and i + 1 < len(parts):
+            return (parts[i + 1], parts[i + 1])
+
+    return ("", "")
 
 
-def _compute_repo_time_ranges(file_timeline: list[tuple]) -> dict[str, dict]:
-    """file_timeline [(timestamp, path), ...] → {repo: {start_at: str, end_at: str, duration_min: int}}"""
+def _compute_work_unit_time_ranges(file_timeline: list[tuple]) -> dict[str, dict]:
+    """file_timeline [(timestamp, path), ...] → {work_unit: {start_at, end_at, duration_min, repo}}
+
+    work_unit = worktree 이름 또는 repo 이름. 기능 단위별 실제 작업 시간.
+    """
     if not file_timeline:
         return {}
 
-    repo_events: dict[str, list] = {}
+    unit_events: dict[str, list] = {}
+    unit_repo: dict[str, str] = {}
     for ts, fp in sorted(file_timeline):
-        repo = _extract_repo_from_path(fp)
-        if repo:
-            repo_events.setdefault(repo, []).append(ts)
+        repo, work_unit = _extract_work_unit(fp)
+        if work_unit:
+            unit_events.setdefault(work_unit, []).append(ts)
+            unit_repo[work_unit] = repo
 
     result = {}
-    for repo, timestamps in repo_events.items():
+    for unit, timestamps in unit_events.items():
         if not timestamps:
             continue
         first = min(timestamps)
         last = max(timestamps)
         dur = max(1, int((last - first).total_seconds() / 60))
-        result[repo] = {
+        result[unit] = {
             "start_at": first.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
             "end_at": last.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
             "duration_min": dur,
+            "repo": unit_repo[unit],
         }
     return result
 
@@ -713,8 +741,8 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
         end_kst = max(timestamps) if timestamps else None
         end_time_str = end_kst.strftime("%H:%M") if end_kst else None
 
-        # file_timeline → repo_time_ranges (레포별 시간 범위)
-        repo_time_ranges = _compute_repo_time_ranges(acc.get("file_timeline", []))
+        # file_timeline → work_unit_time_ranges (기능 단위별 시간 범위)
+        work_unit_time_ranges = _compute_work_unit_time_ranges(acc.get("file_timeline", []))
 
         result[date_str] = {
             "files": sorted(acc["files"]),
@@ -727,7 +755,7 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
             "end_time": end_time_str,
             "start_kst": start_kst,
             "has_commits": acc["has_commits"],
-            "repo_time_ranges": repo_time_ranges,
+            "work_unit_time_ranges": work_unit_time_ranges,
             "tokens": {
                 "input": acc["token_input"],
                 "output": acc["token_output"],

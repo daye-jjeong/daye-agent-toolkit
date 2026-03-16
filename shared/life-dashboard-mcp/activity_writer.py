@@ -196,13 +196,20 @@ def record_sessions(
             # session_topics — 마지막 날짜에만 토픽 저장 (summary와 동일 패턴)
             if topics and date_str == dates[-1]:
                 try:
-                    # repo_time_ranges가 있으면 토픽에 실제 duration 주입
-                    repo_ranges = data.get("repo_time_ranges", {})
-                    if repo_ranges:
+                    # work_unit_time_ranges가 있으면 토픽에 실제 duration + start_at 주입
+                    wu_ranges = data.get("work_unit_time_ranges", {})
+                    if wu_ranges:
                         for t in topics:
-                            repo_short = (t.get("repo") or "").split("/")[-1]
-                            if repo_short in repo_ranges and not t.get("duration_estimate_min"):
-                                t["duration_estimate_min"] = repo_ranges[repo_short].get("duration_min")
+                            # 토픽의 summary나 repo에서 work_unit 매칭 시도
+                            matched = None
+                            topic_repo = (t.get("repo") or "").split("/")[-1]
+                            for wu_name, wu_data in wu_ranges.items():
+                                if wu_name == topic_repo or wu_name in t.get("summary", ""):
+                                    matched = wu_data
+                                    break
+                            if matched and not t.get("duration_estimate_min"):
+                                t["duration_estimate_min"] = matched.get("duration_min")
+                                t["_start_at"] = matched.get("start_at")
                     upsert_session_topics(conn, source, session_id, date_str, topics)
                 except Exception as e:
                     print(f"[activity_writer] upsert_session_topics failed: {e}", file=sys.stderr)

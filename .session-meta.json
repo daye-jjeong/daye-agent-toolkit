@@ -1,7 +1,7 @@
 {
-  "name": "work-digest-quality",
-  "description": "work-digest 데이터 품질 개선: has_commits 감지 + summary 정제",
-  "created": "2026-03-07T12:20:08+0000",
+  "name": "session-topics",
+  "description": "session_topics 테이블 + 토픽 분해 파이프라인",
+  "created": "2026-03-16T06:40:58+0000",
   "base_branch": "main",
-  "base_sha": "0d65e16"
+  "base_sha": "1f444e2"
 }
