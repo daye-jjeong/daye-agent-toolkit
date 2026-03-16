@@ -40,9 +40,16 @@ sessions (세션 = 측정 단위)
 ```
 
 **소비 규칙:**
-- 집계/리포트 → session_topics 기준
-- 시간/토큰 통계 → sessions 기준
+- 작업 내용 표시 (리포트, 코칭) → session_topics 기준
+- tag_breakdown 집계 → session_topics 기준 (토픽 없으면 sessions.tag 폴백)
+- 시간/토큰 통계 → **deduplicated sessions 기준** (토픽 행을 합산하면 중복 카운트됨)
 - session_topics가 없는 세션 → sessions.summary/tag 폴백
+
+**데이터 흐름 분리:**
+`get_today_data()`는 두 스트림을 반환:
+- `sessions`: deduplicated 세션 목록 (시간/토큰/커밋 통계용)
+- `topics`: session_topics JOIN 결과 (작업 내용 표시용, 부모 session의 source/status/has_commits 포함)
+토큰/시간 합산은 sessions에서만 수행. topics에서 token_total을 합산하면 안 된다.
 
 ### 스키마
 
@@ -117,10 +124,12 @@ LLM 판단에만 의존하지 않고, 코드 감지 가능한 신호를 1차로 
 
 ```json
 [
-  {"tag": "설계", "summary": "pipeline spec 작성 — 3계층 분리 아키텍처", "repo": "daye-agent-toolkit"},
-  {"tag": "코딩", "summary": "sessions 테이블 + CRUD 구현", "repo": "daye-agent-toolkit"}
+  {"tag": "설계", "summary": "pipeline spec 작성 — 3계층 분리 아키텍처", "repo": "daye-agent-toolkit", "date": "2026-03-16"},
+  {"tag": "코딩", "summary": "sessions 테이블 + CRUD 구현", "repo": "daye-agent-toolkit", "date": "2026-03-16"}
 ]
 ```
+
+멀티데이 세션의 경우 `date` 필드로 어느 date-slice에 귀속되는지 지정. 토픽 분해는 date-slice별로 수행하므로, 자정을 넘긴 세션은 각 날짜의 session_content를 기준으로 별도 분해.
 
 #### 3. 검증 로직
 
@@ -171,10 +180,11 @@ Step 3a(경로 B)는 해당 세션의 session_topics를 **전체 교체**한다:
 | 파일 | 변경 |
 |------|------|
 | `SKILL.md` Step 3a | 토픽 분해 기준 + update-topics CLI 사용법 추가 |
-| `daily_coach.py` | get_today_data()에서 session_topics JOIN. 토픽 데이터를 소비자에 전달 |
+| `daily_coach.py` | get_today_data()에서 sessions(dedup) + session_topics 두 스트림 반환. dedup_sessions()는 sessions 스트림에만 적용 (topics는 dedup 대상 아님) |
 | `db.py` `update_daily_stats()` | tag_breakdown을 session_topics 기준으로 집계 (토픽 없으면 sessions.tag 폴백) |
 | `daily_report.py` | _build_work_items() 토픽별 표시 (입력: topic dicts with tag, summary, repo, duration_estimate_min + 부모 session의 has_commits, status, source). _build_repos_detail() 토픽 기준 그룹핑 |
-| `timeline_html.py` | 토픽별 타임라인 바 표시 |
+| `timeline_html.py` | 토픽별 타임라인 바 표시. dedup_sessions() 제거 또는 토픽 스트림용 별도 처리 |
+| `_helpers.py` | dedup_sessions()가 session_id prefix 기반 → 토픽 스트림에서는 호출하지 않도록 분리 |
 
 ### 변경 없음
 
