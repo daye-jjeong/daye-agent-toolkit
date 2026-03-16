@@ -2,27 +2,43 @@
 """Activity Writer — shared SQLite recording for CC and Codex session loggers.
 
 Usage (library):
-    from activity_writer import record_activities
-    record_activities("cc", session_id, by_date, repo, branch)
+    from activity_writer import record_sessions   # v2 — sessions + session_content
+    from activity_writer import record_activities  # v1 — Codex compat (activities table)
 
 Usage (CLI):
-    python3 activity_writer.py unsummarized --date 2026-03-15
+    python3 activity_writer.py unsummarized --date 2026-03-16
+    python3 activity_writer.py unsummarized --before 2026-03-16
     python3 activity_writer.py update-summary --session-id X --date Y --tag "코딩" --summary "..."
+    python3 activity_writer.py save-coaching --date 2026-03-16 --period daily --content "..."
+    python3 activity_writer.py save-task --date 2026-03-16 --description "..." --priority 1
+    python3 activity_writer.py previous-coaching --date 2026-03-16
+    python3 activity_writer.py resolve-task --id 1 --status done --date 2026-03-16
+    python3 activity_writer.py resolve-followup --id 1 --status resolved --date 2026-03-16
 """
 
 import argparse
 import json
 import re
 import sys
-from datetime import timezone, timedelta
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from db import get_conn, upsert_activity, update_daily_stats, insert_behavioral_signal
+from db import (
+    get_conn,
+    # v1 (Codex compat)
+    upsert_activity, insert_behavioral_signal,
+    # v2
+    upsert_session, upsert_session_content, insert_signal,
+    upsert_followup_chain, update_daily_stats,
+    upsert_coaching_entry, upsert_task_suggestion,
+    update_task_resolution, update_followup_resolution,
+    get_coaching_entry, get_pending_tasks, get_open_followups,
+)
 
 KST = timezone(timedelta(hours=9))
 
-# ── auto_tag (moved from _sync_common.py) ─────────────────
+# ── auto_tag ─────────────────────────────────────
 
 TAG_KEYWORDS: list[tuple[str, list[str]]] = [
     ("디버깅", ["debug", "디버깅", "에러", "error", "fix", "버그", "traceback", "stack trace",
@@ -59,14 +75,16 @@ def auto_tag(*text_sources: str) -> str:
     return "기타"
 
 
-# ── record_activities ─────────────────────────────
+# ── Shared constants ─────────────────────────────
 
 _SIGNAL_TYPE_MAP = {"decisions": "decision", "mistakes": "mistake", "patterns": "pattern"}
 _TEST_KEYWORDS = frozenset({"pytest", "jest", "test", "vitest"})
 _TEST_PATTERNS = ("npm run test", "npx test", "npm test", "bun test")
 
 
-def record_activities(
+# ── record_sessions (v2) ─────────────────────────
+
+def record_sessions(
     source: str,
     session_id: str,
     by_date: dict[str, dict],
@@ -75,10 +93,7 @@ def record_activities(
     summary: dict | None = None,
     behavioral_signals: dict | None = None,
 ) -> dict[str, str]:
-    """날짜별 분할 데이터를 SQLite에 직접 기록.
-
-    Returns: {date_str: session_id} — 기록된 날짜별.
-    """
+    """v2: 날짜별 분할 데이터를 sessions + session_content에 기록."""
     if not by_date:
         return {}
 
@@ -86,7 +101,7 @@ def record_activities(
     conn.execute("PRAGMA busy_timeout=5000")
     recorded = {}
     dates = sorted(by_date.keys())
-    last_date = dates[-1]
+    primary_date = dates[0]
 
     try:
         for date_str in dates:
@@ -97,7 +112,6 @@ def record_activities(
 
             tokens = data.get("tokens", {})
             token_total = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
-            # Codex는 api_calls에 total tokens를 넣으므로 fallback
             if token_total == 0:
                 token_total = tokens.get("api_calls", 0)
 
@@ -114,7 +128,140 @@ def record_activities(
             end_time = data.get("end_time")
             end_at = f"{date_str}T{end_time}:00" if end_time else None
 
-            # summary/tag: 마지막 날짜에만 적용
+            # Layer 1: tag만 auto, summary는 NULL (pending)
+            tag = auto_tag(data.get("topic", ""), " ".join(data.get("commands", [])[:5]))
+
+            # summary는 마지막 날짜에만, LLM이 성공한 경우만
+            summary_text = None
+            summary_source = "pending"
+            status = "in_progress"
+            follow_up_text = None
+            if summary and date_str == dates[-1]:
+                if summary.get("text"):
+                    summary_text = summary["text"]
+                    summary_source = "llm"
+                if summary.get("tag"):
+                    tag = summary["tag"]
+                if summary.get("status"):
+                    status = summary["status"]
+                follow_up_text = summary.get("follow_up")
+            # SessionEnd: 닫힌 세션이 in_progress로 남지 않도록
+            if status == "in_progress":
+                status = "completed"
+
+            session_data = {
+                "source": source, "session_id": session_id, "date": date_str,
+                "repo": repo, "branch": branch, "tag": tag,
+                "summary": summary_text, "summary_source": summary_source,
+                "status": status, "follow_up": follow_up_text,
+                "start_at": start_at, "end_at": end_at,
+                "duration_min": data.get("duration_min"),
+                "file_count": len(data.get("files", [])),
+                "error_count": len(data.get("errors", [])),
+                "has_tests": has_tests, "has_commits": 1 if has_commits else 0,
+                "token_total": token_total,
+            }
+            upsert_session(conn, session_data)
+
+            # session_content — 원본 보존 (date-slice local)
+            content_data = {
+                "source": source, "session_id": session_id, "date": date_str,
+                "topic": data.get("topic", ""),
+                "user_messages": json.dumps(data.get("user_messages", []), ensure_ascii=False),
+                "agent_messages": json.dumps(data.get("agent_messages", []), ensure_ascii=False),
+                "files_changed": json.dumps(data.get("files", []), ensure_ascii=False),
+                "commands": json.dumps(data.get("commands", [])[:20], ensure_ascii=False),
+                "errors": json.dumps(data.get("errors", [])[:10], ensure_ascii=False),
+            }
+            upsert_session_content(conn, content_data)
+            recorded[date_str] = session_id
+
+            # followup_chains — status가 follow_up/blocked이면 자동 생성
+            if status in ("follow_up", "blocked") and follow_up_text:
+                upsert_followup_chain(conn, {
+                    "origin_session_id": session_id,
+                    "origin_date": date_str,
+                    "origin_repo": repo,
+                    "description": follow_up_text,
+                })
+
+        # signals — primary date에 1회 기록
+        if behavioral_signals:
+            for plural, singular in _SIGNAL_TYPE_MAP.items():
+                items = behavioral_signals.get(plural, [])
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            content_text = item.get("content", "")
+                            reasoning_text = item.get("reasoning")
+                        else:
+                            content_text = str(item)
+                            reasoning_text = None
+                        if content_text:
+                            insert_signal(conn, {
+                                "session_id": session_id,
+                                "date": primary_date,
+                                "signal_type": singular,
+                                "content": content_text,
+                                "reasoning": reasoning_text,
+                                "repo": repo,
+                            })
+
+        for date_str in recorded:
+            update_daily_stats(conn, date_str)
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return recorded
+
+
+# ── record_activities (v1 — Codex compat) ────────
+
+def record_activities(
+    source: str,
+    session_id: str,
+    by_date: dict[str, dict],
+    repo: str,
+    branch: str | None = None,
+    summary: dict | None = None,
+    behavioral_signals: dict | None = None,
+) -> dict[str, str]:
+    """v1: Codex 호환용 — activities 테이블에 기록."""
+    if not by_date:
+        return {}
+
+    conn = get_conn()
+    conn.execute("PRAGMA busy_timeout=5000")
+    recorded = {}
+    dates = sorted(by_date.keys())
+    last_date = dates[-1]
+
+    try:
+        for date_str in dates:
+            data = by_date[date_str]
+            if not data.get("files") and not data.get("commands") and not data.get("topic"):
+                continue
+
+            tokens = data.get("tokens", {})
+            token_total = sum(tokens.get(k, 0) for k in ("input", "output", "cache_read", "cache_create"))
+            if token_total == 0:
+                token_total = tokens.get("api_calls", 0)
+
+            has_tests = 0
+            has_commits = data.get("has_commits", False)
+            for cmd in data.get("commands", []):
+                cmd_lower = cmd.lower()
+                if any(kw in cmd_lower for kw in _TEST_KEYWORDS) or \
+                   any(pat in cmd_lower for pat in _TEST_PATTERNS):
+                    has_tests = 1
+
+            start_kst = data.get("start_kst")
+            start_at = start_kst.strftime("%Y-%m-%dT%H:%M:%S") if start_kst else f"{date_str}T00:00:00"
+            end_time = data.get("end_time")
+            end_at = f"{date_str}T{end_time}:00" if end_time else None
+
             tag = None
             summary_text = None
             if date_str == last_date and summary:
@@ -124,20 +271,13 @@ def record_activities(
                 tag = auto_tag(data.get("topic", ""), " ".join(data.get("commands", [])[:5]))
 
             activity = {
-                "source": source,
-                "session_id": session_id,
-                "repo": repo,
-                "branch": branch,
-                "tag": tag,
-                "summary": summary_text,
-                "start_at": start_at,
-                "end_at": end_at,
-                "date": date_str,
+                "source": source, "session_id": session_id, "repo": repo,
+                "branch": branch, "tag": tag, "summary": summary_text,
+                "start_at": start_at, "end_at": end_at, "date": date_str,
                 "duration_min": data.get("duration_min"),
                 "file_count": len(data.get("files", [])),
                 "error_count": len(data.get("errors", [])),
-                "has_tests": has_tests,
-                "has_commits": 1 if has_commits else 0,
+                "has_tests": has_tests, "has_commits": 1 if has_commits else 0,
                 "token_total": token_total,
                 "raw_json": json.dumps({
                     "topic": data.get("topic", ""),
@@ -175,21 +315,31 @@ def record_activities(
 def cmd_unsummarized(args):
     conn = get_conn()
     try:
-        rows = conn.execute("""
-            SELECT session_id, date, repo, source, raw_json
-            FROM activities
-            WHERE date = ? AND (tag IS NULL OR summary IS NULL)
-            ORDER BY start_at
-        """, (args.date,)).fetchall()
+        if hasattr(args, 'before') and args.before:
+            rows = conn.execute("""
+                SELECT s.session_id, s.date, s.repo, s.source,
+                       sc.topic, sc.user_messages
+                FROM sessions s
+                LEFT JOIN session_content sc USING (source, session_id, date)
+                WHERE s.date < ? AND s.summary_source = 'pending'
+                ORDER BY s.date, s.start_at
+            """, (args.before,)).fetchall()
+        else:
+            rows = conn.execute("""
+                SELECT s.session_id, s.date, s.repo, s.source,
+                       sc.topic, sc.user_messages
+                FROM sessions s
+                LEFT JOIN session_content sc USING (source, session_id, date)
+                WHERE s.date = ? AND s.summary_source = 'pending'
+                ORDER BY s.start_at
+            """, (args.date,)).fetchall()
         results = []
         for r in rows:
-            raw = json.loads(r["raw_json"] or "{}")
             results.append({
-                "session_id": r["session_id"],
-                "date": r["date"],
-                "repo": r["repo"],
-                "source": r["source"],
-                "topic": raw.get("topic", ""),
+                "session_id": r["session_id"], "date": r["date"],
+                "repo": r["repo"], "source": r["source"],
+                "topic": r["topic"] or "",
+                "user_messages": r["user_messages"],
             })
         print(json.dumps(results, ensure_ascii=False, indent=2))
     finally:
@@ -200,8 +350,9 @@ def cmd_update_summary(args):
     conn = get_conn()
     conn.execute("PRAGMA busy_timeout=5000")
     try:
-        sets = ["tag = ?", "summary = ?"]
-        params = [args.tag, args.summary]
+        summary_source = getattr(args, 'summary_source', None) or "llm"
+        sets = ["tag = ?", "summary = ?", "summary_source = ?"]
+        params = [args.tag, args.summary, summary_source]
         if args.status:
             sets.append("status = ?")
             params.append(args.status)
@@ -210,16 +361,106 @@ def cmd_update_summary(args):
             params.append(args.follow_up)
         params.extend([args.session_id, args.date])
         cursor = conn.execute(f"""
-            UPDATE activities
+            UPDATE sessions
             SET {', '.join(sets)}
             WHERE session_id = ? AND date = ?
         """, params)
         if cursor.rowcount == 0:
-            print(f"No activity found: {args.session_id} / {args.date}", file=sys.stderr)
+            print(f"No session found: {args.session_id} / {args.date}", file=sys.stderr)
             sys.exit(1)
+
+        # follow_up/blocked → followup_chains 자동 생성
+        if args.status in ("follow_up", "blocked") and args.follow_up:
+            upsert_followup_chain(conn, {
+                "origin_session_id": args.session_id,
+                "origin_date": args.date,
+                "origin_repo": None,
+                "description": args.follow_up,
+            })
+
         update_daily_stats(conn, args.date)
         conn.commit()
         print(f"Updated: {args.session_id} [{args.tag}] {args.summary[:50]}", file=sys.stderr)
+    finally:
+        conn.close()
+
+
+def cmd_save_coaching(args):
+    conn = get_conn()
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        content_path = Path(args.content)
+        content = content_path.read_text() if content_path.exists() else args.content
+        sections = json.loads(args.sections) if args.sections else {}
+        upsert_coaching_entry(conn, {
+            "date": args.date,
+            "period_type": args.period,
+            "content": content,
+            "sections": json.dumps(sections, ensure_ascii=False),
+            "escalation_level": args.escalation_level or 0,
+        })
+        conn.commit()
+        print(f"Coaching saved: {args.date} ({args.period})", file=sys.stderr)
+    finally:
+        conn.close()
+
+
+def cmd_save_task(args):
+    conn = get_conn()
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        upsert_task_suggestion(conn, {
+            "suggested_date": args.date,
+            "description": args.description,
+            "estimated_min": args.estimated_min,
+            "priority": args.priority or 99,
+            "source_type": args.source_type or "coaching",
+            "origin_session_id": args.origin_session_id,
+            "status": "pending",
+        })
+        conn.commit()
+        print(f"Task saved: {args.description[:50]}", file=sys.stderr)
+    finally:
+        conn.close()
+
+
+def cmd_previous_coaching(args):
+    conn = get_conn()
+    try:
+        yesterday = (datetime.strptime(args.date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        coaching = get_coaching_entry(conn, yesterday, "daily")
+        pending = get_pending_tasks(conn)
+        followups = get_open_followups(conn)
+        result = {
+            "yesterday_coaching": dict(coaching) if coaching else None,
+            "pending_tasks": pending,
+            "open_followups": followups,
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    finally:
+        conn.close()
+
+
+def cmd_resolve_task(args):
+    conn = get_conn()
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        update_task_resolution(conn, args.id, args.status, args.date,
+                              args.session_id, args.method, args.notes)
+        conn.commit()
+        print(f"Task {args.id} → {args.status}", file=sys.stderr)
+    finally:
+        conn.close()
+
+
+def cmd_resolve_followup(args):
+    conn = get_conn()
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        update_followup_resolution(conn, args.id, args.status, args.date,
+                                   args.session_id, args.note)
+        conn.commit()
+        print(f"Followup {args.id} → {args.status}", file=sys.stderr)
     finally:
         conn.close()
 
@@ -230,6 +471,7 @@ def main():
 
     p_unsummarized = sub.add_parser("unsummarized", help="List unsummarized sessions")
     p_unsummarized.add_argument("--date", required=True)
+    p_unsummarized.add_argument("--before", help="Catch-up: list pending sessions before this date")
 
     p_update = sub.add_parser("update-summary", help="Update session summary")
     p_update.add_argument("--session-id", required=True)
@@ -238,12 +480,55 @@ def main():
     p_update.add_argument("--summary", required=True)
     p_update.add_argument("--status", choices=["completed", "in_progress", "blocked", "follow_up"])
     p_update.add_argument("--follow-up", dest="follow_up", help="Next action description")
+    p_update.add_argument("--summary-source", dest="summary_source",
+                          choices=["llm", "manual"], default="llm")
+
+    p_coaching = sub.add_parser("save-coaching", help="Save coaching entry")
+    p_coaching.add_argument("--date", required=True)
+    p_coaching.add_argument("--period", required=True, choices=["daily", "weekly"])
+    p_coaching.add_argument("--content", required=True, help="Markdown content or file path")
+    p_coaching.add_argument("--sections", help="JSON sections")
+    p_coaching.add_argument("--escalation-level", type=int, dest="escalation_level")
+
+    p_task = sub.add_parser("save-task", help="Save task suggestion")
+    p_task.add_argument("--date", required=True)
+    p_task.add_argument("--description", required=True)
+    p_task.add_argument("--estimated-min", type=int, dest="estimated_min")
+    p_task.add_argument("--priority", type=int)
+    p_task.add_argument("--source-type", dest="source_type", default="coaching")
+    p_task.add_argument("--origin-session-id", dest="origin_session_id")
+
+    p_prev = sub.add_parser("previous-coaching", help="Get yesterday coaching + pending tasks")
+    p_prev.add_argument("--date", required=True)
+
+    p_resolve_task = sub.add_parser("resolve-task", help="Resolve a task suggestion")
+    p_resolve_task.add_argument("--id", required=True, type=int)
+    p_resolve_task.add_argument("--status", required=True, choices=["done", "skipped", "deferred"])
+    p_resolve_task.add_argument("--date", required=True)
+    p_resolve_task.add_argument("--session-id", dest="session_id")
+    p_resolve_task.add_argument("--method", default="user", choices=["auto", "user"])
+    p_resolve_task.add_argument("--notes")
+
+    p_resolve_followup = sub.add_parser("resolve-followup", help="Resolve a followup chain")
+    p_resolve_followup.add_argument("--id", required=True, type=int)
+    p_resolve_followup.add_argument("--status", required=True, choices=["resolved", "abandoned", "superseded"])
+    p_resolve_followup.add_argument("--date", required=True)
+    p_resolve_followup.add_argument("--session-id", dest="session_id")
+    p_resolve_followup.add_argument("--note")
 
     args = parser.parse_args()
-    if args.command == "unsummarized":
-        cmd_unsummarized(args)
-    elif args.command == "update-summary":
-        cmd_update_summary(args)
+    dispatch = {
+        "unsummarized": cmd_unsummarized,
+        "update-summary": cmd_update_summary,
+        "save-coaching": cmd_save_coaching,
+        "save-task": cmd_save_task,
+        "previous-coaching": cmd_previous_coaching,
+        "resolve-task": cmd_resolve_task,
+        "resolve-followup": cmd_resolve_followup,
+    }
+    handler = dispatch.get(args.command)
+    if handler:
+        handler(args)
     else:
         parser.print_help()
 
