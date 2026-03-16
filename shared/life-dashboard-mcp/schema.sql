@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS session_topics (
     repo TEXT,
     start_at TEXT,
     duration_estimate_min INTEGER,
+    status TEXT DEFAULT 'completed',
+    follow_up TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     UNIQUE(source, session_id, date, topic_order),
     FOREIGN KEY (source, session_id, date)

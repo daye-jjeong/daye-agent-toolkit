@@ -193,8 +193,13 @@ def summarize_session(conversation: str, repo: str) -> list[dict] | None:
         "- worktree/브랜치명이 있으면 포함\n"
         "- 나쁜 예: '설계 논의', 'PR 리뷰', '디버깅'\n"
         "- 좋은 예: 'pipeline-redesign — 3계층 분리 아키텍처 설계 + 구현 + 리뷰 완료'\n\n"
+        "각 토픽의 status:\n"
+        "- completed: 작업 완료 (커밋, 머지 등)\n"
+        "- in_progress: 아직 진행중\n"
+        "- follow_up: 후속 작업 필요 (follow_up 필드에 내용 기술)\n"
+        "- blocked: 외부 의존성으로 막힘\n\n"
         "JSON 배열로만 답하라. 다른 텍스트 금지:\n"
-        '[{"tag": "태그", "summary": "기능명 — 상세 요약", "repo": "레포명"}]'
+        '[{"tag": "태그", "summary": "기능명 — 상세 요약", "repo": "레포명", "status": "completed", "follow_up": "후속 작업 (없으면 null)"}]'
     )
     try:
         result = subprocess.run(
@@ -238,11 +243,16 @@ def _parse_topics_response(raw: str, fallback_repo: str) -> list[dict] | None:
         tag = t.get("tag", "기타")
         if tag not in WORK_TAGS:
             tag = "기타"
-        valid.append({
+        topic = {
             "tag": tag,
             "summary": t["summary"],
             "repo": t.get("repo", fallback_repo),
-        })
+        }
+        if t.get("status"):
+            topic["status"] = t["status"]
+        if t.get("follow_up"):
+            topic["follow_up"] = t["follow_up"]
+        valid.append(topic)
     skipped = len(topics[:10]) - len(valid)
     if skipped:
         print(f"[session_logger] _parse_topics_response: skipped {skipped} invalid topics", file=sys.stderr)

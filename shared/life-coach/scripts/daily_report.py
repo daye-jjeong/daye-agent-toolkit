@@ -113,12 +113,15 @@ def _build_topic_items(topics: list[dict]) -> str:
             f' <span class="work-meta">({", ".join(meta_parts)})</span>'
             if meta_parts else ""
         )
+        follow_up = t.get("follow_up", "")
+        follow_html = f' <span class="follow-up">→ {_esc(follow_up)}</span>' if follow_up else ""
+
         items.append(
             f'<div class="work-item">'
             f'{status_badge}'
             f'{src_html}'
             f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
-            f'<span class="work-summary">{summary}{meta_str}</span>'
+            f'<span class="work-summary">{summary}{meta_str}{follow_html}</span>'
             f'</div>'
         )
     return "".join(items)

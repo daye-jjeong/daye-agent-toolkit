@@ -64,10 +64,29 @@ escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션"
 
 한 작업만 한 세션은 토픽 1개. 무리하게 쪼개지 마라.
 
+**토픽 = 기능 단위** (활동 유형이 아님):
+- 같은 기능의 설계→구현→리뷰는 **하나의 토픽**으로 합침
+- 나쁜 분해: [설계] spec / [코딩] 구현 / [리뷰] PR review (활동 유형별)
+- 좋은 분해: pipeline-redesign — spec + 구현 + 리뷰 완료 (기능 단위)
+
+**토픽별 필수 필드:**
+- `tag`: 가장 비중 큰 활동 유형 (코딩, 설계, 디버깅 등)
+- `summary`: 무엇을/왜/결과/의사결정 포함. 코칭에서 태스크 관리/제안/우선순위 판단에 쓸 수 있는 수준
+- `repo`: 작업한 레포
+- `start_at`: 작업 시작 시각 (file_timeline에서 추출 가능하면 실제 시간, 아니면 추정)
+- `duration_estimate_min`: 소요 시간
+- `status`: completed / in_progress / blocked / follow_up
+- `follow_up`: 후속 작업이나 블로커 설명 (없으면 생략)
+
+**요약 품질 기준 (코칭 활용 수준):**
+- 이 요약만 읽고 "다음에 뭘 해야 하는지", "이 작업이 왜 중요한지" 판단할 수 있어야 함
+- 반복 패턴/문제는 명시적으로 기록 (예: "rule 추가했는데 계속 반복됨")
+- 토픽 간 인과관계가 있으면 언급 (예: "리포트 품질 문제 → pipeline-redesign 착수")
+
 ```bash
 python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-topics \
     --session-id <SID> --date <DATE> \
-    --topics '[{"tag":"설계","summary":"spec 작성 — 3계층 분리","repo":"daye-agent-toolkit"},{"tag":"코딩","summary":"DB CRUD 구현","repo":"daye-agent-toolkit"}]'
+    --topics '[{"tag":"코딩","summary":"pipeline-redesign — 3계층 분리 설계 + 6개 테이블 구현 + 소비자 전환 + 리뷰 후 머지 완료","repo":"daye-agent-toolkit","start_at":"2026-03-16T12:27:00+09:00","duration_estimate_min":118,"status":"completed"},{"tag":"설계","summary":"오케스트레이터 개편 — 태스크 분해/위임 재정의, AGENTS.md 수정","repo":"dy-minions-squad","start_at":"2026-03-16T14:00:00+09:00","duration_estimate_min":120,"status":"in_progress","follow_up":"워커 위임 테스트 필요"}]'
 ```
 
 **3a-2. 세션 요약 + 상태 업데이트**
