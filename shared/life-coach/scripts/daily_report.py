@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline_html import build, timeline_section_html
 from _helpers import (
     WEEKDAY, TAG_COLORS, esc_html as _esc, fmt_tokens as _fmt_tokens, md_to_html,
-    group_sessions_by_repo_branch, has_meaningful_branches,
+    group_sessions_by_repo_branch, has_meaningful_branches, group_topics_by_repo,
 )
 
 # ── Section builders ──────────────────────────────────────────────────────────
@@ -234,10 +234,7 @@ def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] |
 
     # topics가 있으면 토픽 기준 repo 그룹핑
     if topics:
-        repo_topics: dict[str, list[dict]] = {}
-        for t in topics:
-            r = (t.get("repo") or "unknown").split("/")[-1]
-            repo_topics.setdefault(r, []).append(t)
+        repo_topics = group_topics_by_repo(topics)
         rows = []
         for r, ts in sorted(repo_topics.items()):
             inner_html = _build_topic_items(ts)

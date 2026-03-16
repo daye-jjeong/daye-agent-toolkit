@@ -160,23 +160,45 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
     ))
 
 
+_VALID_TAGS = {"코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "설계", "리팩토링", "기타"}
+
+
 def upsert_session_topics(
     conn: sqlite3.Connection,
     source: str, session_id: str, date: str,
     topics: list[dict],
+    sync_session_cache: bool = True,
 ):
-    """session_topics 전체 교체 (DELETE + INSERT)."""
+    """session_topics 전체 교체 (DELETE + INSERT) + sessions.summary 캐시 동기화.
+
+    검증: summary 빈 값 skip, tag 유효성, 10개 상한.
+    sync_session_cache=True면 첫 번째 토픽으로 sessions.summary/tag 캐시 갱신.
+    """
+    valid = []
+    for t in topics[:10]:
+        if not t.get("summary"):
+            continue
+        tag = t.get("tag", "기타")
+        if tag not in _VALID_TAGS:
+            tag = "기타"
+        valid.append({**t, "tag": tag})
+
     conn.execute(
         "DELETE FROM session_topics WHERE source=? AND session_id=? AND date=?",
         (source, session_id, date),
     )
-    for i, t in enumerate(topics):
-        if not t.get("summary"):
-            continue
+    for i, t in enumerate(valid):
         conn.execute("""
             INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, repo, duration_estimate_min)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (source, session_id, date, i, t.get("tag"), t["summary"], t.get("repo"), t.get("duration_estimate_min")))
+        """, (source, session_id, date, i, t["tag"], t["summary"], t.get("repo"), t.get("duration_estimate_min")))
+
+    if sync_session_cache and valid:
+        first = valid[0]
+        conn.execute("""
+            UPDATE sessions SET summary = ?, tag = ?, summary_source = 'llm'
+            WHERE source = ? AND session_id = ? AND date = ?
+        """, (first["summary"], first["tag"], source, session_id, date))
 
 
 def get_session_topics(conn: sqlite3.Connection, date: str) -> list[dict]:

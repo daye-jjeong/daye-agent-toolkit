@@ -216,8 +216,7 @@ def summarize_session(conversation: str, repo: str) -> list[dict] | None:
 
 def _parse_topics_response(raw: str, fallback_repo: str) -> list[dict] | None:
     """JSON 토픽 배열 파싱 + 검증. 실패 시 기존 형식 폴백."""
-    import re as _re
-    json_match = _re.search(r'\[.*\]', raw, _re.DOTALL)
+    json_match = re.search(r'\[.*\]', raw, re.DOTALL)
     if not json_match:
         old = _parse_summary_response(raw)
         if old:
@@ -782,12 +781,14 @@ def main():
 
         if summary or signals:
             _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
-            # summary가 list면 새 토픽 형식, dict면 기존 형식
+            # summarize_session()은 항상 list[dict] 리턴 (새 토픽 형식)
             topics = summary if isinstance(summary, list) else None
-            legacy_summary = summary if isinstance(summary, dict) else None
-            if topics and not legacy_summary:
+            # topics가 있으면 legacy summary dict 파생 (텔레그램 등 하위 호환)
+            if topics:
                 first = topics[0]
                 legacy_summary = {"tag": first["tag"], "text": first["summary"]}
+            else:
+                legacy_summary = summary if isinstance(summary, dict) else None
             record_sessions("cc", session_id, by_date, repo, branch,
                            summary=legacy_summary, topics=topics,
                            behavioral_signals=signals,

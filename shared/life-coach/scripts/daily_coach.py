@@ -27,7 +27,7 @@ from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGR
 KST = timezone(timedelta(hours=9))
 OVERWORK_THRESHOLD_HOURS = 8
 
-from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work, dedup_sessions
+from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work, dedup_sessions, group_topics_by_repo
 
 
 def get_today_data(conn, date_str: str) -> dict:
@@ -196,10 +196,7 @@ def _build_repos_detail(data: dict) -> str | None:
     lines = ["📂 레포별:"]
 
     if topics:
-        repo_topics: dict[str, list[dict]] = {}
-        for t in topics:
-            r = (t.get("repo") or "unknown").split("/")[-1]
-            repo_topics.setdefault(r, []).append(t)
+        repo_topics = group_topics_by_repo(topics)
         for repo, ts in sorted(repo_topics.items()):
             lines.append(f"  ▸ {repo}")
             for t in ts[:5]:

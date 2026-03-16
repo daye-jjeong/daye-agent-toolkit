@@ -200,11 +200,6 @@ def record_sessions(
                     date_topics = topics
                 if date_topics:
                     upsert_session_topics(conn, source, session_id, date_str, date_topics)
-                    first = date_topics[0]
-                    conn.execute("""
-                        UPDATE sessions SET summary = ?, tag = ?, summary_source = 'llm'
-                        WHERE source = ? AND session_id = ? AND date = ?
-                    """, (first["summary"], first.get("tag"), source, session_id, date_str))
 
             # followup_chains — status가 follow_up/blocked이면 자동 생성
             if status in ("follow_up", "blocked") and follow_up_text:
@@ -408,22 +403,15 @@ def cmd_update_topics(args):
         if not isinstance(topics, list) or not topics:
             print("Error: --topics must be a non-empty JSON array", file=sys.stderr)
             sys.exit(1)
-        valid = [t for t in topics if t.get("summary")]
-        if not valid:
-            print("Error: no valid topics (summary required)", file=sys.stderr)
-            sys.exit(1)
-        if len(valid) > 10:
-            print(f"Warning: {len(valid)} topics, capping at 10", file=sys.stderr)
-            valid = valid[:10]
-        upsert_session_topics(conn, "cc", args.session_id, args.date, valid)
-        first = valid[0]
-        conn.execute("""
-            UPDATE sessions SET summary = ?, tag = ?, summary_source = 'llm'
-            WHERE source = 'cc' AND session_id = ? AND date = ?
-        """, (first["summary"], first.get("tag"), args.session_id, args.date))
+        # 검증 + 캐시 동기화는 upsert_session_topics 내부에서 수행
+        upsert_session_topics(conn, "cc", args.session_id, args.date, topics)
         update_daily_stats(conn, args.date)
         conn.commit()
-        print(f"Updated {len(valid)} topics for {args.session_id}", file=sys.stderr)
+        count = conn.execute(
+            "SELECT COUNT(*) FROM session_topics WHERE source='cc' AND session_id=? AND date=?",
+            (args.session_id, args.date),
+        ).fetchone()[0]
+        print(f"Updated {count} topics for {args.session_id}", file=sys.stderr)
     finally:
         conn.close()
 
