@@ -107,9 +107,10 @@ CREATE INDEX idx_sessions_summary_source ON sessions(summary_source);
 
 ```sql
 CREATE TABLE session_content (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
     session_id TEXT NOT NULL,
     date TEXT NOT NULL,
-    source TEXT NOT NULL,
     topic TEXT,                        -- 첫 사용자 메시지 (raw)
     user_messages TEXT,                -- JSON array
     agent_messages TEXT,               -- JSON array (첫 N개)
@@ -117,14 +118,18 @@ CREATE TABLE session_content (
     commands TEXT,                     -- JSON array
     errors TEXT,                       -- JSON array
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
-    UNIQUE(source, session_id, date)
+    UNIQUE(source, session_id, date),
+    FOREIGN KEY (source, session_id, date)
+        REFERENCES sessions(source, session_id, date)
+        ON DELETE CASCADE
 );
 ```
 
-sessions와 1:1 관계. 분리 이유:
+sessions와 1:1 관계. FK로 참조 무결성 보장. 분리 이유:
 - sessions 테이블을 가볍게 유지 (쿼리 성능)
 - 원본 데이터는 분석/재처리용으로 별도 보관
 - LLM 요약 재생성 시 session_content에서 원본 읽기
+- sessions 삭제 시 session_content도 CASCADE 삭제
 
 ### signals (behavioral_signals 대체)
 
@@ -132,13 +137,13 @@ sessions와 1:1 관계. 분리 이유:
 CREATE TABLE signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
-    date TEXT NOT NULL,
+    date TEXT NOT NULL,                -- 세션의 primary date (date-slice 기준)
     signal_type TEXT NOT NULL,         -- 'decision', 'mistake', 'pattern'
     content TEXT NOT NULL,
     reasoning TEXT,                    -- 의사결정 맥락 (WHY)
     repo TEXT,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
-    UNIQUE(session_id, date, signal_type, content)
+    UNIQUE(session_id, signal_type, content)
 );
 
 CREATE INDEX idx_signals_date ON signals(date);
@@ -147,7 +152,8 @@ CREATE INDEX idx_signals_type ON signals(signal_type);
 
 변경점:
 - `reasoning` 컬럼 추가 — 의사결정의 "왜"를 별도 저장
-- multi-day 세션이면 각 날짜별로 기록 (last_date 집중 문제 해결)
+- UNIQUE에서 date 제외 — 신호는 세션 전체에서 추출되므로 세션당 1건. date는 세션의 primary date를 기록 (기존 last_date 문제 해결: 세션이 시작된 날짜 사용)
+- multi-day 세션: 신호를 날짜별로 쪼개지 않음 (전체 대화 맥락에서 추출하므로 쪼개면 중복)
 
 ### coaching_entries (NEW)
 
@@ -204,7 +210,8 @@ CREATE TABLE task_suggestions (
     resolved_session_id TEXT,
     resolution_method TEXT,            -- 'auto', 'user'
     notes TEXT,
-    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(suggested_date, description)
 );
 
 CREATE INDEX idx_tasks_status ON task_suggestions(status);
@@ -246,7 +253,7 @@ CREATE INDEX idx_followup_status ON followup_chains(status);
 CREATE INDEX idx_followup_origin_date ON followup_chains(origin_date);
 ```
 
-생성: sessions에서 `status IN ('follow_up', 'blocked')` INSERT 시 자동 생성.
+생성: Python 코드에서 sessions upsert 시 status가 'follow_up' 또는 'blocked'이면 `record_sessions()` 함수 내에서 followup_chains도 INSERT. SQLite trigger가 아닌 Python 로직.
 해소: 코칭 시점에 LLM이 판단 — "같은 repo 작업 여부"가 아니라 세션 내용을 보고 실제로 해소됐는지 확인.
 
 ### daily_stats (유지)
@@ -319,28 +326,40 @@ Cron 호출:
 
 ### Layer 2: Enrichment
 
-두 가지 실행 경로:
-1. **SessionEnd hook에서 best-effort** (즉시 사용 가능하면 좋으니까)
-2. **코칭 시작 시** (미처리 세션 일괄 보강)
+두 가지 실행 경로, LLM 호출 방식이 다르다:
 
-```python
-def enrich_pending_sessions(conn, date: str):
-    """summary_source='pending'인 세션을 LLM으로 보강."""
-    pending = conn.execute("""
-        SELECT s.*, sc.topic, sc.user_messages, sc.agent_messages,
-               sc.files_changed, sc.commands
-        FROM sessions s
-        JOIN session_content sc USING (source, session_id, date)
-        WHERE s.date = ? AND s.summary_source = 'pending'
-    """, (date,)).fetchall()
+**경로 A: SessionEnd hook (session_logger.py)**
+- LLM 호출: `claude -p` subprocess (hook 스크립트 예외 규칙 적용)
+- 타이밍: 세션 종료 직후, best-effort
+- 실패 시: summary_source='pending' 유지, Layer 1 데이터는 온전
 
-    for session in pending:
-        # LLM 요약 생성 (session_content의 원본 데이터 사용)
-        result = summarize_session(session)
-        if result:
-            update_session_summary(conn, session, result)
-            extract_and_store_signals(conn, session)
+**경로 B: 코칭 시작 시 (SKILL.md Step 3a)**
+- LLM 호출: CC 세션의 LLM이 직접 수행 (subprocess 아님)
+- 타이밍: /coach 온디맨드 호출 시
+- 동작: summary_source='pending'인 세션의 session_content를 읽고 LLM이 직접 요약 생성
+
 ```
+경로 B의 SKILL.md 절차:
+
+Step 3a. 미처리 세션 보강
+  1. pending 세션 조회:
+     python3 {baseDir}/../life-dashboard-mcp/activity_writer.py unsummarized --date <DATE>
+  2. 각 세션의 session_content(topic, user_messages)를 보고 태그+요약 생성
+  3. update-summary CLI로 DB 업데이트 (기존과 동일한 인터페이스)
+```
+
+이 구조는 `no-subprocess-llm` 규칙과 호환:
+- hook(경로 A): 세션 외부 실행, subprocess 허용
+- 스킬(경로 B): CC 세션 LLM이 직접 수행, subprocess 아님
+
+### Enrichment 함수 위치
+
+| 함수 | 파일 | 용도 |
+|------|------|------|
+| `summarize_session()` | `session_logger.py` | hook에서 subprocess LLM 호출 |
+| `extract_behavioral_signals()` | `session_logger.py` | hook에서 subprocess LLM 호출 |
+| `unsummarized` CLI | `activity_writer.py` | pending 세션 조회 (SKILL.md에서 호출) |
+| `update-summary` CLI | `activity_writer.py` | 요약 업데이트 (SKILL.md에서 호출) |
 
 ### Layer 3: Coaching (SKILL.md 변경)
 
@@ -411,30 +430,38 @@ Step 3: LLM 코칭
 | 파일 | 변경 |
 |------|------|
 | `schema.sql` | 새 스키마 (sessions, session_content, signals, coaching_entries, task_suggestions, followup_chains) |
-| `db.py` | 새 CRUD 함수, _migrate() 업데이트 |
-| `activity_writer.py` | `record_sessions()`로 리네이밍, 새 테이블 기록 |
+| `db.py` | 새 CRUD 함수 (upsert_session, insert_session_content, insert_signal, insert_coaching_entry, insert_task_suggestion, upsert_followup_chain), update_daily_stats()를 sessions 테이블 참조로 전환, get_repeated_signals/get_mistake_trends를 signals 테이블 참조로 전환, _migrate() 업데이트 |
+| `activity_writer.py` | `record_sessions()`로 리네이밍 — sessions + session_content + followup_chains 기록. CLI 커맨드(unsummarized, update-summary)를 sessions/session_content 테이블 참조로 전환. `record_activities()`는 codex 호환용 thin wrapper로 유지 |
 
 ### work-digest (CC hooks)
 
 | 파일 | 변경 |
 |------|------|
-| `session_logger.py` | Layer 1/2 분리, user/agent messages 추출, summary=NULL 시작 |
-| `active_session_scanner.py` | 기존 summary 보호 로직 강화 |
+| `session_logger.py` | Layer 1/2 분리: parse에서 user/agent messages 추출 → session_content 저장, summary=NULL로 시작 (topic을 summary에 넣지 않음), Layer 2는 best-effort |
+| `active_session_scanner.py` | sessions 테이블 참조, 기존 summary 보호 (summary_source가 'llm'/'manual'이면 덮어쓰지 않음) |
 
 ### life-coach (코칭)
 
 | 파일 | 변경 |
 |------|------|
-| `SKILL.md` | Step 3에 이전 코칭 참조 + 저장 절차 추가 |
+| `SKILL.md` | Step 3에 이전 코칭 참조 + 저장 절차 추가, Step 3a에 session_content 기반 enrichment |
 | `references/coaching-prompts.md` | 태스크 점검, follow-up 체인 점검 섹션 추가 |
-| `scripts/daily_coach.py` | coaching_entries/task_suggestions 쿼리, follow_up 개선 |
-| `scripts/weekly_coach.py` | coaching_entries 주간 집계 |
-| `scripts/daily_report.py` | 날짜 기반 파일명 |
-| `scripts/weekly_report.py` | 날짜 기반 파일명 |
+| `scripts/daily_coach.py` | activities→sessions 테이블 전환, behavioral_signals→signals 전환, coaching_entries/task_suggestions/followup_chains 쿼리 추가, follow_up 해소 로직 followup_chains 기반으로 변경, session_content JOIN으로 user_messages 등 접근 |
+| `scripts/weekly_coach.py` | activities→sessions 전환, behavioral_signals→signals 전환, coaching_entries 주간 집계, followup_chains blocked resolution 전환 |
+| `scripts/daily_report.py` | 날짜 기반 파일명 (`/tmp/daily_report_<DATE>.html`), `--output` 플래그 |
+| `scripts/weekly_report.py` | 날짜 기반 파일명, `--output` 플래그 |
+| `scripts/_helpers.py` | dedup_sessions() 실제 호출되도록 연결, sessions 테이블 기준으로 수정 |
+
+## 구 테이블 전환 전략
+
+- `_migrate()`에서 구 테이블(activities, behavioral_signals)을 DROP하지 않음
+- 새 코드는 sessions/signals만 참조
+- 구 테이블은 자연스럽게 orphan이 됨 (새 데이터가 안 들어감)
+- Codex logger 호환: `activity_writer.py`에 `record_activities()` thin wrapper 유지. 내부적으로 activities 테이블에 기록 (Codex는 아직 구 스키마 사용). Codex 전환은 별도 작업.
 
 ## 비변경 사항
 
 - 건강 테이블 (health_exercises, health_symptoms, health_check_ins, health_meals, health_pt_homework) — 변경 없음
 - 재무 테이블 (finance_*) — 변경 없음
 - 식재료 테이블 (pantry_items) — 변경 없음
-- Codex logger — 이번 범위에서 제외. CC 파이프라인 안정화 후 별도 작업.
+- Codex logger — 이번 범위에서 제외. `record_activities()` wrapper로 호환 유지. CC 파이프라인 안정화 후 별도 전환.
