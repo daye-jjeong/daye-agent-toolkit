@@ -231,7 +231,15 @@ def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] |
             f'{inner_html}'
             f'</div>'
         )
-    return f'<div class="section"><h3>레포별 작업</h3>{"".join(rows)}</div>'
+    legend = (
+        '<div class="status-legend">'
+        '<span style="color:#7ABD7E">✓</span> 완료 '
+        '<span style="color:#888">◦</span> 진행중 '
+        '<span style="color:#E07B5A">✕</span> 블로커 '
+        '<span style="color:#F0C040">→</span> 후속필요'
+        '</div>'
+    )
+    return f'<div class="section"><h3>레포별 작업</h3>{legend}{"".join(rows)}</div>'
 
 
 
@@ -403,6 +411,7 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 .work-item{display:flex;gap:6px;font-size:12px;padding:3px 0;color:#B0B0B0;line-height:1.5}
 .work-summary{flex:1}
 .status-badge{font-weight:700;font-size:13px;flex-shrink:0}
+.status-legend{font-size:11px;color:#888;margin-bottom:8px;display:flex;gap:12px}
 .follow-up{color:#F0C040;font-size:11px;font-style:italic}
 .work-meta{font-size:10px;color:var(--mu);font-weight:400}
 .src-tag{flex-shrink:0;font-weight:600;font-size:10px;opacity:0.8}
