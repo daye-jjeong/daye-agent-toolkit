@@ -98,10 +98,11 @@ CREATE INDEX idx_sessions_summary_source ON sessions(summary_source);
 ```
 
 `summary_source` 값:
-- `pending` — Layer 1에서 저장 직후. LLM 처리 대기.
-- `auto` — auto_tag 키워드 매칭으로 tag만 설정. summary는 topic 기반.
-- `llm` — LLM이 생성한 요약.
+- `pending` — Layer 1에서 저장 직후. LLM 처리 대기. summary는 NULL.
+- `llm` — LLM이 생성한 요약 (hook 또는 코칭에서).
 - `manual` — 사용자 또는 코칭 시 LLM이 수정.
+
+**`auto` 제거**: topic 기반 summary를 만드는 것은 없애려는 문제를 다시 도입하므로, `pending`(summary=NULL) 상태를 유지하고 LLM 또는 수동 요약만 허용.
 
 ### session_content (NEW — 원본 보존)
 
@@ -112,8 +113,8 @@ CREATE TABLE session_content (
     session_id TEXT NOT NULL,
     date TEXT NOT NULL,
     topic TEXT,                        -- 첫 사용자 메시지 (raw)
-    user_messages TEXT,                -- JSON array
-    agent_messages TEXT,               -- JSON array (첫 N개)
+    user_messages TEXT,                -- JSON array (해당 date-slice의 메시지만, 전체 복제 아님)
+    agent_messages TEXT,               -- JSON array (해당 date-slice의 첫 N개)
     files_changed TEXT,                -- JSON array
     commands TEXT,                     -- JSON array
     errors TEXT,                       -- JSON array
@@ -172,7 +173,11 @@ CREATE TABLE coaching_entries (
 CREATE INDEX idx_coaching_date ON coaching_entries(date);
 ```
 
-`sections` JSON 구조:
+`date` 규칙:
+- `period_type='daily'`: 해당 일자 (YYYY-MM-DD)
+- `period_type='weekly'`: 해당 주의 월요일 (week anchor). 같은 주에 여러 번 실행해도 UNIQUE로 upsert.
+
+`sections` JSON 구조 (키는 coaching-prompts.md 섹션에 따라 유동적, 아래는 대표 예시):
 
 ```json
 {
@@ -245,16 +250,24 @@ CREATE TABLE followup_chains (
     resolved_date TEXT,
     resolved_session_id TEXT,
     resolution_note TEXT,
-    days_open INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(origin_session_id, origin_date, description)
 );
 
 CREATE INDEX idx_followup_status ON followup_chains(status);
 CREATE INDEX idx_followup_origin_date ON followup_chains(origin_date);
 ```
 
-생성: Python 코드에서 sessions upsert 시 status가 'follow_up' 또는 'blocked'이면 `record_sessions()` 함수 내에서 followup_chains도 INSERT. SQLite trigger가 아닌 Python 로직.
-해소: 코칭 시점에 LLM이 판단 — "같은 repo 작업 여부"가 아니라 세션 내용을 보고 실제로 해소됐는지 확인.
+`days_open` 제거: 파생값이므로 저장하지 않고 `julianday('now') - julianday(origin_date)`로 쿼리 시 계산.
+
+**생성 규칙 (idempotent upsert)**:
+- `INSERT OR IGNORE` — UNIQUE(origin_session_id, origin_date, description)으로 중복 방지.
+- scanner와 SessionEnd가 같은 세션을 여러 번 기록해도 체인은 1건만 생성.
+- **생성 시점 2곳**:
+  1. `record_sessions()` — Layer 2에서 status=follow_up/blocked 판정 시
+  2. **코칭 Step 3c** — 코칭에서 처음 follow_up/blocked로 판정된 세션도 체인 생성 (record_sessions()에서 못 만든 건 여기서 catch)
+
+**해소**: 코칭 시점에 LLM이 판단 — "같은 repo 작업 여부"가 아니라 세션 내용을 보고 실제로 해소됐는지 확인. 에스컬레이션 기준은 `julianday(date) - julianday(origin_date) >= 3`.
 
 ### daily_stats (유지)
 
@@ -301,8 +314,11 @@ SessionEnd hook:
 
   3. Layer 2 시도 (best-effort, 실패해도 OK)
      - summarize_session() → sessions.summary UPDATE, summary_source='llm'
-     - extract_behavioral_signals() → signals INSERT (각 date별)
-     - status=follow_up/blocked → followup_chains INSERT
+     - extract_behavioral_signals() → signals INSERT (세션당 1회, primary date 사용)
+     - status=follow_up/blocked → followup_chains INSERT OR IGNORE
+     - SessionEnd이므로 세션은 끝남 → has_commits 기반으로 status 판정:
+       has_commits=1 → 'completed', LLM이 blocked/follow_up 판정하면 해당 값, 그 외 'completed'
+       (닫힌 세션이 'in_progress'로 영구 남는 것 방지)
 
   4. daily_stats 갱신
 ```
@@ -317,11 +333,14 @@ SessionEnd hook:
 ```
 Cron 호출:
   1. 열린 세션 탐색 (기존과 동일)
-  2. parse_transcript_by_date() → sessions + session_content INSERT
-  3. 기존 데이터가 있으면:
-     - summary가 NULL이 아닌 경우 → 건드리지 않음
-     - summary_source='llm' 또는 'manual' → 절대 덮어쓰지 않음
-     - session_content는 REPLACE (최신 상태 반영)
+  2. parse_transcript_by_date() → sessions + session_content UPSERT
+  3. Upsert 컬럼별 우선순위:
+     - summary: COALESCE(기존값, NULL) — 기존 summary가 있으면 유지
+     - summary_source: 기존값이 'llm'/'manual'이면 유지, 'pending'이면 업데이트 가능
+     - tag: COALESCE(기존값, 새값) — 기존 tag 유지
+     - status: 기존값이 'completed'/'blocked'/'follow_up'이면 유지 (scanner가 'in_progress'로 되돌리지 않음)
+     - end_at, duration_min, token_total, file_count: 항상 최신값으로 업데이트 (열린 세션은 계속 변함)
+     - session_content: REPLACE (최신 상태 반영)
 ```
 
 ### Layer 2: Enrichment
@@ -341,9 +360,10 @@ Cron 호출:
 ```
 경로 B의 SKILL.md 절차:
 
-Step 3a. 미처리 세션 보강
-  1. pending 세션 조회:
+Step 3a. 미처리 세션 보강 (catch-up 포함)
+  1. pending 세션 조회 (오늘 + 과거 미처리):
      python3 {baseDir}/../life-dashboard-mcp/activity_writer.py unsummarized --date <DATE>
+     python3 {baseDir}/../life-dashboard-mcp/activity_writer.py unsummarized --before <DATE>  ← 과거 pending catch-up
   2. 각 세션의 session_content(topic, user_messages)를 보고 태그+요약 생성
   3. update-summary CLI로 DB 업데이트 (기존과 동일한 인터페이스)
 ```
@@ -377,11 +397,12 @@ Step 3: LLM 코칭
       - coaching-prompts.md 프레임 적용
       - 어제 코칭 대비 변화 분석
       - 어제 태스크 제안 이행 여부 판단
-  3e. 코칭 저장
-      - coaching_entries INSERT (content + sections JSON)
-      - task_suggestions INSERT (새 제안)
+  3e. 코칭 저장 (idempotent — 같은 날짜에 재실행해도 안전)
+      - coaching_entries UPSERT (ON CONFLICT(date, period_type) DO UPDATE — 재실행 시 덮어쓰기)
+      - task_suggestions UPSERT (ON CONFLICT(suggested_date, description) DO UPDATE — 중복 방지)
       - task_suggestions UPDATE (이행 판단 — auto/user)
-      - followup_chains UPDATE (해소 판단)
+      - followup_chains INSERT OR IGNORE (중복 방지) + UPDATE (해소 판단)
+      - status 변경된 세션 → followup_chains 생성 (코칭에서 처음 판정된 건도 catch)
 ```
 
 ### coaching-prompts.md 변경
@@ -401,7 +422,7 @@ Step 3: LLM 코칭
 - 오늘 세션의 session_content를 보고 실제 해소 여부 판단.
   (단순히 "같은 repo 작업"이 아니라 내용 기반 판단)
 - 해소된 건: resolution_note와 함께 resolved로 업데이트.
-- 미해소 + days_open >= 3: 에스컬레이션.
+- 미해소 + `julianday('now') - julianday(origin_date) >= 3`: 에스컬레이션.
 ```
 
 ## 리포트 변경
@@ -431,7 +452,10 @@ Step 3: LLM 코칭
 |------|------|
 | `schema.sql` | 새 스키마 (sessions, session_content, signals, coaching_entries, task_suggestions, followup_chains) |
 | `db.py` | 새 CRUD 함수 (upsert_session, insert_session_content, insert_signal, insert_coaching_entry, insert_task_suggestion, upsert_followup_chain), update_daily_stats()를 sessions 테이블 참조로 전환, get_repeated_signals/get_mistake_trends를 signals 테이블 참조로 전환, _migrate() 업데이트 |
-| `activity_writer.py` | `record_sessions()`로 리네이밍 — sessions + session_content + followup_chains 기록. CLI 커맨드(unsummarized, update-summary)를 sessions/session_content 테이블 참조로 전환. `record_activities()`는 codex 호환용 thin wrapper로 유지 |
+| `activity_writer.py` | `record_sessions()`로 리네이밍 — sessions + session_content + followup_chains 기록. CLI 커맨드(unsummarized, update-summary)를 sessions/session_content 테이블 참조로 전환. `unsummarized --before` 플래그 추가 (과거 pending catch-up). `record_activities()`는 codex 호환용 thin wrapper로 유지 |
+| `server.py` | MCP 쿼리를 activities → sessions 테이블 참조로 전환 |
+| `sync_calendar.py` | `upsert_activity()` → `upsert_session()` 호출로 변경 (source='calendar') |
+| `backfill_tags.py` | activities → sessions 참조 전환 |
 
 ### work-digest (CC hooks)
 
@@ -454,14 +478,27 @@ Step 3: LLM 코칭
 
 ## 구 테이블 전환 전략
 
+**이번 전환은 CC-only cutover이다.** Codex 데이터는 전환 기간 동안 코칭/리포트에서 제외됨을 명시적으로 수용한다.
+
 - `_migrate()`에서 구 테이블(activities, behavioral_signals)을 DROP하지 않음
 - 새 코드는 sessions/signals만 참조
 - 구 테이블은 자연스럽게 orphan이 됨 (새 데이터가 안 들어감)
-- Codex logger 호환: `activity_writer.py`에 `record_activities()` thin wrapper 유지. 내부적으로 activities 테이블에 기록 (Codex는 아직 구 스키마 사용). Codex 전환은 별도 작업.
+- Codex logger 호환: `activity_writer.py`에 `record_activities()` thin wrapper 유지. 내부적으로 activities 테이블에 기록 (Codex는 아직 구 스키마 사용)
+- **Codex 데이터 가시성**: 전환 기간 동안 daily_coach/weekly_coach는 sessions만 읽으므로 Codex 세션은 리포트에 안 나옴. 이전에도 Codex 세션은 전체의 10-20%였고, 핵심 코칭 대상은 CC 세션이므로 수용 가능. Codex 전환은 CC 파이프라인 안정화 후 별도 작업.
+
+### 추가 전환 대상 파일
+
+spec 변경 파일 외에 activities를 직접 참조하는 파일:
+
+| 파일 | 현재 참조 | 전환 방법 |
+|------|-----------|-----------|
+| `server.py` (MCP) | `FROM activities` | `FROM sessions`로 변경 |
+| `sync_calendar.py` | `upsert_activity()` | `upsert_session()`으로 변경 (source='calendar') |
+| `backfill_tags.py` | `FROM activities` | `FROM sessions`로 변경 (1회성 스크립트) |
 
 ## 비변경 사항
 
 - 건강 테이블 (health_exercises, health_symptoms, health_check_ins, health_meals, health_pt_homework) — 변경 없음
 - 재무 테이블 (finance_*) — 변경 없음
 - 식재료 테이블 (pantry_items) — 변경 없음
-- Codex logger — 이번 범위에서 제외. `record_activities()` wrapper로 호환 유지. CC 파이프라인 안정화 후 별도 전환.
+- Codex logger — 이번 범위에서 제외. CC-only cutover. `record_activities()` wrapper로 호환 유지.
