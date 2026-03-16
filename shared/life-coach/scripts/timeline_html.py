@@ -51,28 +51,24 @@ def prep(sessions, topics=None):
             base_start = (s.get("start_at") or "00:00")[11:16]
             cursor_min = _hhmm_to_min(base_start)
 
-            # 진행중 세션: end_at(wall clock)까지, 완료 세션: active time까지
-            status = s.get("status", "in_progress")
-            if status == "in_progress":
-                end_at_str = (s.get("end_at") or "")[11:16]
-                session_limit = _hhmm_to_min(end_at_str) if end_at_str else cursor_min + (s.get("duration_min") or 30)
-            else:
-                session_limit = cursor_min + (s.get("duration_min") or 30)
-
             sorted_topics = sorted(ts, key=lambda x: x.get("topic_order", 0))
-            for i, t in enumerate(sorted_topics):
+            for t in sorted_topics:
+                # start_at이 있으면 실제 시간, 없으면 순차 배치
+                topic_start_at = t.get("start_at", "")
+                if topic_start_at and len(topic_start_at) >= 16:
+                    start_min = _hhmm_to_min(topic_start_at[11:16])
+                else:
+                    start_min = cursor_min
+
                 dur = t.get("duration_estimate_min") or 30
-                # 마지막 토픽: 세션 한계까지 늘림
-                if i == len(sorted_topics) - 1 and session_limit > cursor_min + dur:
-                    dur = session_limit - cursor_min
                 items.append({
                     "repo":     (t.get("repo") or "?").split("/")[-1],
                     "tag":      t.get("tag") or "기타",
-                    "start":    _min_to_hhmm(cursor_min),
+                    "start":    _min_to_hhmm(start_min),
                     "duration": dur,
                     "summary":  (t.get("summary") or "")[:100],
                 })
-                cursor_min += dur
+                cursor_min = start_min + dur
 
         # 토픽 없는 세션 추가
         topiced_sids = set(topic_by_sess.keys())

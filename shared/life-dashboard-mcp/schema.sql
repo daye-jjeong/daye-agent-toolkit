@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS session_topics (
     tag TEXT,
     summary TEXT NOT NULL,
     repo TEXT,
+    start_at TEXT,
     duration_estimate_min INTEGER,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     UNIQUE(source, session_id, date, topic_order),

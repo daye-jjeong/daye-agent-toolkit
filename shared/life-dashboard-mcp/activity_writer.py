@@ -207,9 +207,11 @@ def record_sessions(
                                 if wu_name == topic_repo or wu_name in t.get("summary", ""):
                                     matched = wu_data
                                     break
-                            if matched and not t.get("duration_estimate_min"):
-                                t["duration_estimate_min"] = matched.get("duration_min")
-                                t["_start_at"] = matched.get("start_at")
+                            if matched:
+                                if not t.get("duration_estimate_min"):
+                                    t["duration_estimate_min"] = matched.get("duration_min")
+                                if not t.get("start_at"):
+                                    t["start_at"] = matched.get("start_at")
                     upsert_session_topics(conn, source, session_id, date_str, topics)
                 except Exception as e:
                     print(f"[activity_writer] upsert_session_topics failed: {e}", file=sys.stderr)

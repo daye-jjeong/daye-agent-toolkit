@@ -56,6 +56,15 @@ def _migrate(conn: sqlite3.Connection):
             conn.execute("CREATE UNIQUE INDEX idx_activities_session ON activities(source, session_id, date)")
             conn.commit()
 
+    # session_topics: start_at column migration
+    try:
+        st_cols = {r[1] for r in conn.execute("PRAGMA table_info(session_topics)").fetchall()}
+        if st_cols and "start_at" not in st_cols:
+            conn.execute("ALTER TABLE session_topics ADD COLUMN start_at TEXT")
+            conn.commit()
+    except Exception:
+        pass  # table doesn't exist yet (will be created by schema.sql)
+
 
 @contextmanager
 def open_conn(auto_commit=True):
@@ -205,9 +214,9 @@ def upsert_session_topics(
     )
     for i, t in enumerate(valid):
         conn.execute("""
-            INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, repo, duration_estimate_min)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (source, session_id, date, i, t["tag"], t["summary"], t.get("repo"), t.get("duration_estimate_min")))
+            INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, repo, start_at, duration_estimate_min)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (source, session_id, date, i, t["tag"], t["summary"], t.get("repo"), t.get("start_at"), t.get("duration_estimate_min")))
 
     if sync_session_cache and valid:
         first = valid[0]
