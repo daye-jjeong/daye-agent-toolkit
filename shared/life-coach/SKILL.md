@@ -209,7 +209,7 @@ coach_state의 escalation_level에 따라 톤 변경:
 
 주간 코칭에서 `review_items` 데이터를 확인하고 다음을 교정한다:
 
-1. **미분류 태그 (untagged_sessions)**: "기타"로 분류된 세션의 raw_json을 보고 올바른 태그로 수정. 반복되는 패턴이면 `_sync_common.py`의 TAG_KEYWORDS에 키워드 추가.
+1. **미분류 태그 (untagged_sessions)**: "기타"로 분류된 세션의 session_content를 보고 올바른 태그로 수정. 반복되는 패턴이면 `activity_writer.py`의 TAG_KEYWORDS에 키워드 추가.
 2. **미분류 mistake (uncategorized_mistakes)**: 분류되지 않은 mistake 신호를 확인하고 `references/mistake-categories.json`에 새 키워드 추가.
 3. **빈 summary (empty_summaries)**: summary가 비어있는 세션을 확인. sync 로직 개선이 필요한지 판단.
 4. **stale worktree (stale_worktrees)**: 오래된 worktree가 있으면 머지 또는 정리 여부를 사용자에게 제안.

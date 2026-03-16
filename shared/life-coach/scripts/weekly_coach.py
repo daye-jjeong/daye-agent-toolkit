@@ -107,7 +107,8 @@ def get_week_data(conn, dates: list[str]) -> dict:
         symptoms = query_symptoms(conn, mon, sun)
         meals = query_meals(conn, mon, sun)
         checkins = query_check_ins(conn, mon, sun)
-    except Exception:
+    except Exception as e:
+        print(f"[weekly_coach] health query failed: {e}", file=sys.stderr)
         exercises, symptoms, meals, checkins = [], [], [], []
 
     # behavioral signals (weekly aggregate)
@@ -121,7 +122,8 @@ def get_week_data(conn, dates: list[str]) -> dict:
         weekly_signals = [{"signal_type": r["signal_type"], "content": r["content"], "count": r["cnt"]}
                           for r in all_signals]
         repeated = get_repeated_signals(conn, sun, days=7, min_count=2)
-    except Exception:
+    except Exception as e:
+        print(f"[weekly_coach] signals query failed: {e}", file=sys.stderr)
         weekly_signals, repeated = [], []
 
     # ── 주간 점검 4종 ──

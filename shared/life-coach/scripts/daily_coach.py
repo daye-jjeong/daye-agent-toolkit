@@ -92,7 +92,8 @@ def get_today_data(conn, date_str: str) -> dict:
         symptoms = query_symptoms(conn, date_str, date_str)
         meals = query_meals(conn, date_str, date_str)
         checkins = query_check_ins(conn, date_str, date_str)
-    except Exception:
+    except Exception as e:
+        print(f"[daily_coach] health query failed: {e}", file=sys.stderr)
         exercises, symptoms, meals, checkins = [], [], [], []
 
     try:

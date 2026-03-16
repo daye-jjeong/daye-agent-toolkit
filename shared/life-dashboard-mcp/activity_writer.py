@@ -137,6 +137,7 @@ def record_sessions(
     conn = get_conn()
     recorded = {}
     dates = sorted(by_date.keys())
+    import sys as _sys
     primary_date = dates[0]
 
     try:
@@ -224,6 +225,10 @@ def record_sessions(
             update_daily_stats(conn, date_str)
 
         conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"[record_sessions] DB error: {e}", file=_sys.stderr)
+        return recorded
     finally:
         conn.close()
 
@@ -304,9 +309,12 @@ def record_activities(
 # ── CLI ───────────────────────────────────────────
 
 def cmd_unsummarized(args):
+    if not args.date and not args.before:
+        print("Error: --date or --before required", file=sys.stderr)
+        sys.exit(1)
     conn = get_conn()
     try:
-        if hasattr(args, 'before') and args.before:
+        if args.before:
             rows = conn.execute("""
                 SELECT s.session_id, s.date, s.repo, s.source,
                        sc.topic, sc.user_messages
@@ -330,7 +338,7 @@ def cmd_unsummarized(args):
                 "session_id": r["session_id"], "date": r["date"],
                 "repo": r["repo"], "source": r["source"],
                 "topic": r["topic"] or "",
-                "user_messages": r["user_messages"],
+                "user_messages": json.loads(r["user_messages"] or "[]"),
             })
         print(json.dumps(results, ensure_ascii=False, indent=2))
     finally:
@@ -434,10 +442,12 @@ def cmd_previous_coaching(args):
 
 def cmd_resolve_task(args):
     conn = get_conn()
-
     try:
-        update_task_resolution(conn, args.id, args.status, args.date,
-                              args.session_id, args.method, args.notes)
+        found = update_task_resolution(conn, args.id, args.status, args.date,
+                                       args.session_id, args.method, args.notes)
+        if not found:
+            print(f"No task found with id={args.id}", file=sys.stderr)
+            sys.exit(1)
         conn.commit()
         print(f"Task {args.id} → {args.status}", file=sys.stderr)
     finally:
@@ -446,10 +456,12 @@ def cmd_resolve_task(args):
 
 def cmd_resolve_followup(args):
     conn = get_conn()
-
     try:
-        update_followup_resolution(conn, args.id, args.status, args.date,
-                                   args.session_id, args.note)
+        found = update_followup_resolution(conn, args.id, args.status, args.date,
+                                            args.session_id, args.note)
+        if not found:
+            print(f"No followup found with id={args.id}", file=sys.stderr)
+            sys.exit(1)
         conn.commit()
         print(f"Followup {args.id} → {args.status}", file=sys.stderr)
     finally:
@@ -461,7 +473,7 @@ def main():
     sub = parser.add_subparsers(dest="command")
 
     p_unsummarized = sub.add_parser("unsummarized", help="List unsummarized sessions")
-    p_unsummarized.add_argument("--date", required=True)
+    p_unsummarized.add_argument("--date", help="List pending sessions for this date")
     p_unsummarized.add_argument("--before", help="Catch-up: list pending sessions before this date")
 
     p_update = sub.add_parser("update-summary", help="Update session summary")

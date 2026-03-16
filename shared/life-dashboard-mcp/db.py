@@ -263,13 +263,21 @@ def upsert_session(conn: sqlite3.Connection, data: dict):
         ON CONFLICT(source, session_id, date) DO UPDATE SET
             repo=excluded.repo,
             branch=COALESCE(excluded.branch, branch),
-            tag=COALESCE(tag, excluded.tag),
-            summary=COALESCE(summary, excluded.summary),
+            tag=CASE
+                WHEN excluded.summary_source IN ('llm', 'manual') THEN COALESCE(excluded.tag, tag)
+                ELSE COALESCE(tag, excluded.tag)
+            END,
+            summary=CASE
+                WHEN excluded.summary_source IN ('llm', 'manual') THEN excluded.summary
+                ELSE COALESCE(summary, excluded.summary)
+            END,
             summary_source=CASE
+                WHEN excluded.summary_source IN ('llm', 'manual') THEN excluded.summary_source
                 WHEN summary_source IN ('llm', 'manual') THEN summary_source
                 ELSE COALESCE(excluded.summary_source, summary_source)
             END,
             status=CASE
+                WHEN excluded.summary_source IN ('llm', 'manual') THEN excluded.status
                 WHEN status IN ('completed', 'blocked', 'follow_up') THEN status
                 ELSE COALESCE(excluded.status, status)
             END,
@@ -333,12 +341,13 @@ def upsert_task_suggestion(conn: sqlite3.Connection, data: dict):
 
 def update_task_resolution(conn: sqlite3.Connection, task_id: int, status: str,
                            resolved_date: str, resolved_session_id: str | None,
-                           method: str, notes: str | None = None):
-    conn.execute("""
+                           method: str, notes: str | None = None) -> bool:
+    cursor = conn.execute("""
         UPDATE task_suggestions
         SET status=?, resolved_date=?, resolved_session_id=?, resolution_method=?, notes=?
         WHERE id=?
     """, (status, resolved_date, resolved_session_id, method, notes, task_id))
+    return cursor.rowcount > 0
 
 
 def upsert_followup_chain(conn: sqlite3.Connection, data: dict):
@@ -351,12 +360,13 @@ def upsert_followup_chain(conn: sqlite3.Connection, data: dict):
 
 def update_followup_resolution(conn: sqlite3.Connection, chain_id: int, status: str,
                                resolved_date: str, resolved_session_id: str | None,
-                               resolution_note: str | None = None):
-    conn.execute("""
+                               resolution_note: str | None = None) -> bool:
+    cursor = conn.execute("""
         UPDATE followup_chains
         SET status=?, resolved_date=?, resolved_session_id=?, resolution_note=?
         WHERE id=?
     """, (status, resolved_date, resolved_session_id, resolution_note, chain_id))
+    return cursor.rowcount > 0
 
 
 def get_coaching_entry(conn: sqlite3.Connection, date_str: str, period_type: str = "daily") -> dict | None:

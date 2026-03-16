@@ -678,7 +678,10 @@ def scan_and_record(session_id: str, transcript_path: str, cwd: str) -> dict[str
     by_date = parse_transcript_by_date(transcript_path)
     if not by_date:
         return {}
-    record_sessions("cc", session_id, by_date, repo, branch)
+    try:
+        record_sessions("cc", session_id, by_date, repo, branch)
+    except Exception as e:
+        print(f"[session_logger] record_sessions failed: {e}", file=sys.stderr)
     return by_date
 
 
@@ -758,16 +761,21 @@ def main():
                            summary=summary, behavioral_signals=signals)
         else:
             # Layer 2 실패 → SessionEnd이므로 최소한 status를 completed로
-            from db import get_conn as _get_conn
-            _conn = _get_conn()
-            for _d in by_date:
-                _conn.execute("""
-                    UPDATE sessions SET status = 'completed'
-                    WHERE source = 'cc' AND session_id = ? AND date = ?
-                      AND status = 'in_progress'
-                """, (session_id, _d))
-            _conn.commit()
-            _conn.close()
+            try:
+                from db import get_conn as _get_conn
+                _conn = _get_conn()
+                try:
+                    for _d in by_date:
+                        _conn.execute("""
+                            UPDATE sessions SET status = 'completed'
+                            WHERE source = 'cc' AND session_id = ? AND date = ?
+                              AND status = 'in_progress'
+                        """, (session_id, _d))
+                    _conn.commit()
+                finally:
+                    _conn.close()
+            except Exception as e:
+                print(f"[session_logger] status update failed: {e}", file=sys.stderr)
 
         # 텔레그램 전송
         last_data = by_date[max(by_date.keys())]
