@@ -17,19 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _helpers import WEEKDAY, dedup_sessions as dedup, to_h
 
-def prep(sessions, topics=None):
-    """토픽(우선) 또는 세션에서 타임라인 데이터 생성."""
-    if topics:
-        return [
-            {
-                "repo":     (t.get("repo") or "?").split("/")[-1],
-                "tag":      t.get("tag") or "기타",
-                "start":    (t.get("start_at") or "00:00")[11:16],
-                "duration": t.get("duration_estimate_min") or 30,
-                "summary":  (t.get("summary") or "")[:100],
-            }
-            for t in topics
-        ]
+def prep(sessions):
+    """세션에서 타임라인 데이터 생성. 타임라인은 시간 기반이므로 항상 세션 사용 (토픽은 시간 정보 없음)."""
     return [
         {
             "repo":     (s.get("repo") or "?").split("/")[-1],
@@ -65,12 +54,12 @@ def build(data: dict, weekly: bool) -> tuple[str, list]:
         date_str = data.get("date", "")
         dt = datetime.strptime(date_str, "%Y-%m-%d")
         title = f'{dt.month}/{dt.day}({WEEKDAY[dt.weekday()]}) 작업 타임라인'
-        # daily 모드 — topics 우선. weekly 모드는 기존 세션 기반 유지.
+        # 타임라인은 항상 세션 기반 (시간 정보 필요). 토픽은 레포별 작업 섹션에서만 사용.
         return title, [{
             "date":       date_str,
             "label":      f'{dt.month}/{dt.day}({WEEKDAY[dt.weekday()]})',
             "work_hours": data.get("work_hours", 0),
-            "sessions":   prep(data.get("sessions", []), topics=data.get("topics")),
+            "sessions":   prep(data.get("sessions", [])),
         }]
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
