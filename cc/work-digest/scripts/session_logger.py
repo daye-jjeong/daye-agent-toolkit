@@ -218,13 +218,15 @@ def _parse_topics_response(raw: str, fallback_repo: str) -> list[dict] | None:
     """JSON 토픽 배열 파싱 + 검증. 실패 시 기존 형식 폴백."""
     json_match = re.search(r'\[.*\]', raw, re.DOTALL)
     if not json_match:
+        print("[session_logger] _parse_topics_response: no JSON array, trying legacy format", file=sys.stderr)
         old = _parse_summary_response(raw)
         if old:
             return [{"tag": old.get("tag", "기타"), "summary": old["text"], "repo": fallback_repo}]
         return None
     try:
         topics = json.loads(json_match.group())
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f"[session_logger] _parse_topics_response JSON parse failed: {e}", file=sys.stderr)
         return None
     if not isinstance(topics, list) or not topics:
         return None
@@ -240,6 +242,9 @@ def _parse_topics_response(raw: str, fallback_repo: str) -> list[dict] | None:
             "summary": t["summary"],
             "repo": t.get("repo", fallback_repo),
         })
+    skipped = len(topics[:10]) - len(valid)
+    if skipped:
+        print(f"[session_logger] _parse_topics_response: skipped {skipped} invalid topics", file=sys.stderr)
     return valid if valid else None
 
 

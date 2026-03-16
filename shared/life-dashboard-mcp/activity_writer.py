@@ -193,13 +193,12 @@ def record_sessions(
             upsert_session_content(conn, content_data)
             recorded[date_str] = session_id
 
-            # session_topics — topics가 있으면 해당 date의 토픽 저장
-            if topics:
-                date_topics = [t for t in topics if t.get("date", date_str) == date_str]
-                if not date_topics:
-                    date_topics = topics
-                if date_topics:
-                    upsert_session_topics(conn, source, session_id, date_str, date_topics)
+            # session_topics — 마지막 날짜에만 토픽 저장 (summary와 동일 패턴)
+            if topics and date_str == dates[-1]:
+                try:
+                    upsert_session_topics(conn, source, session_id, date_str, topics)
+                except Exception as e:
+                    print(f"[activity_writer] upsert_session_topics failed: {e}", file=sys.stderr)
 
             # followup_chains — status가 follow_up/blocked이면 자동 생성
             if status in ("follow_up", "blocked") and follow_up_text:
@@ -397,13 +396,17 @@ def cmd_update_summary(args):
 
 def cmd_update_topics(args):
     """Step 3a용: 세션의 토픽을 전체 교체."""
-    conn = get_conn()
     try:
         topics = json.loads(args.topics)
-        if not isinstance(topics, list) or not topics:
-            print("Error: --topics must be a non-empty JSON array", file=sys.stderr)
-            sys.exit(1)
-        # 검증 + 캐시 동기화는 upsert_session_topics 내부에서 수행
+    except json.JSONDecodeError as e:
+        print(f"Error: --topics is not valid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(topics, list) or not topics:
+        print("Error: --topics must be a non-empty JSON array", file=sys.stderr)
+        sys.exit(1)
+
+    conn = get_conn()
+    try:
         upsert_session_topics(conn, "cc", args.session_id, args.date, topics)
         update_daily_stats(conn, args.date)
         conn.commit()
@@ -412,6 +415,10 @@ def cmd_update_topics(args):
             (args.session_id, args.date),
         ).fetchone()[0]
         print(f"Updated {count} topics for {args.session_id}", file=sys.stderr)
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: DB operation failed: {e}", file=sys.stderr)
+        sys.exit(1)
     finally:
         conn.close()
 

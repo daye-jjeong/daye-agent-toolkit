@@ -104,6 +104,57 @@ def test_update_daily_stats_fallback_no_topics():
     assert tags["코딩"] == 1
 
 
+def test_invalid_tag_normalized():
+    """유효하지 않은 tag는 기타로 정규화."""
+    conn = _setup_db()
+    _insert_session(conn)
+    upsert_session_topics(conn, "cc", "test-123", "2026-03-16",
+        [{"tag": "INVALID_TAG", "summary": "test", "repo": "r"}])
+    result = get_session_topics(conn, "2026-03-16")
+    assert result[0]["tag"] == "기타"
+
+
+def test_empty_summary_skipped():
+    """빈 summary 토픽은 스킵."""
+    conn = _setup_db()
+    _insert_session(conn)
+    upsert_session_topics(conn, "cc", "test-123", "2026-03-16", [
+        {"tag": "코딩", "summary": "", "repo": "r"},
+        {"tag": "코딩", "summary": None, "repo": "r"},
+        {"tag": "설계", "summary": "valid", "repo": "r"},
+    ])
+    result = get_session_topics(conn, "2026-03-16")
+    assert len(result) == 1
+    assert result[0]["summary"] == "valid"
+
+
+def test_all_invalid_no_delete():
+    """모든 토픽이 무효하면 기존 데이터 유지 (DELETE 안 함)."""
+    conn = _setup_db()
+    _insert_session(conn)
+    upsert_session_topics(conn, "cc", "test-123", "2026-03-16",
+        [{"tag": "코딩", "summary": "existing", "repo": "r"}])
+    upsert_session_topics(conn, "cc", "test-123", "2026-03-16",
+        [{"tag": "코딩", "summary": "", "repo": "r"}])
+    result = get_session_topics(conn, "2026-03-16")
+    assert len(result) == 1
+    assert result[0]["summary"] == "existing"
+
+
+def test_sync_session_cache():
+    """토픽 저장 시 sessions.summary/tag 캐시 갱신."""
+    conn = _setup_db()
+    _insert_session(conn)
+    upsert_session_topics(conn, "cc", "test-123", "2026-03-16",
+        [{"tag": "설계", "summary": "new summary", "repo": "r"}])
+    row = conn.execute(
+        "SELECT tag, summary, summary_source FROM sessions WHERE session_id='test-123'"
+    ).fetchone()
+    assert row["tag"] == "설계"
+    assert row["summary"] == "new summary"
+    assert row["summary_source"] == "llm"
+
+
 if __name__ == "__main__":
     passed = failed = 0
     for name, func in list(globals().items()):
@@ -116,3 +167,4 @@ if __name__ == "__main__":
                 print(f"  FAIL {name}: {e}")
                 failed += 1
     print(f"\n{passed} passed, {failed} failed")
+    sys.exit(failed)

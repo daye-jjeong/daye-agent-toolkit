@@ -183,6 +183,9 @@ def upsert_session_topics(
             tag = "기타"
         valid.append({**t, "tag": tag})
 
+    if not valid:
+        return
+
     conn.execute(
         "DELETE FROM session_topics WHERE source=? AND session_id=? AND date=?",
         (source, session_id, date),
