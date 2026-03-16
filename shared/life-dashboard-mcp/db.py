@@ -109,15 +109,27 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
         conn.execute("DELETE FROM daily_stats WHERE date = ?", (date_str,))
         return
 
+    # tag_breakdown: 토픽 기준 우선, 없으면 sessions.tag 폴백
+    topic_rows = conn.execute(
+        "SELECT tag FROM session_topics WHERE date = ?", (date_str,)
+    ).fetchall()
+
     tags: dict[str, int] = {}
+    if topic_rows:
+        for r in topic_rows:
+            tag = r["tag"] or "기타"
+            tags[tag] = tags.get(tag, 0) + 1
+    else:
+        for r in rows:
+            tag = r["tag"] or "기타"
+            tags[tag] = tags.get(tag, 0) + 1
+
     repos: dict[str, int] = {}
     total_min = 0
     first_session = "99:99"
     last_end = "00:00"
 
     for r in rows:
-        tag = r["tag"] or "기타"
-        tags[tag] = tags.get(tag, 0) + 1
         repo = r["repo"] or "unknown"
         repos[repo] = repos.get(repo, 0) + 1
         total_min += r["duration_min"] or 0
@@ -146,6 +158,38 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
         first_session,
         last_end,
     ))
+
+
+def upsert_session_topics(
+    conn: sqlite3.Connection,
+    source: str, session_id: str, date: str,
+    topics: list[dict],
+):
+    """session_topics 전체 교체 (DELETE + INSERT)."""
+    conn.execute(
+        "DELETE FROM session_topics WHERE source=? AND session_id=? AND date=?",
+        (source, session_id, date),
+    )
+    for i, t in enumerate(topics):
+        if not t.get("summary"):
+            continue
+        conn.execute("""
+            INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, repo, duration_estimate_min)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (source, session_id, date, i, t.get("tag"), t["summary"], t.get("repo"), t.get("duration_estimate_min")))
+
+
+def get_session_topics(conn: sqlite3.Connection, date: str) -> list[dict]:
+    """해당 날짜의 모든 session_topics 조회 (부모 session 메타 포함)."""
+    rows = conn.execute("""
+        SELECT st.*, s.source as s_source, s.status, s.has_commits, s.has_tests,
+               s.start_at, s.duration_min, s.token_total
+        FROM session_topics st
+        JOIN sessions s USING (source, session_id, date)
+        WHERE st.date = ?
+        ORDER BY s.start_at, st.topic_order
+    """, (date,)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_coach_state(conn: sqlite3.Connection) -> dict:
