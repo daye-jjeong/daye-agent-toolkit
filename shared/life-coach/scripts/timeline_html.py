@@ -49,16 +49,22 @@ def prep(sessions, topics=None):
         for sid, ts in topic_by_sess.items():
             s = sess_map.get(sid, {})
             base_start = (s.get("start_at") or "00:00")[11:16]
-            session_active_min = s.get("duration_min") or 30
             cursor_min = _hhmm_to_min(base_start)
-            session_active_end = cursor_min + session_active_min
+
+            # 진행중 세션: end_at(wall clock)까지, 완료 세션: active time까지
+            status = s.get("status", "in_progress")
+            if status == "in_progress":
+                end_at_str = (s.get("end_at") or "")[11:16]
+                session_limit = _hhmm_to_min(end_at_str) if end_at_str else cursor_min + (s.get("duration_min") or 30)
+            else:
+                session_limit = cursor_min + (s.get("duration_min") or 30)
 
             sorted_topics = sorted(ts, key=lambda x: x.get("topic_order", 0))
             for i, t in enumerate(sorted_topics):
                 dur = t.get("duration_estimate_min") or 30
-                # 마지막 토픽: 세션 active time 끝까지 늘림 (idle 제외)
-                if i == len(sorted_topics) - 1 and session_active_end > cursor_min + dur:
-                    dur = session_active_end - cursor_min
+                # 마지막 토픽: 세션 한계까지 늘림
+                if i == len(sorted_topics) - 1 and session_limit > cursor_min + dur:
+                    dur = session_limit - cursor_min
                 items.append({
                     "repo":     (t.get("repo") or "?").split("/")[-1],
                     "tag":      t.get("tag") or "기타",
