@@ -4,7 +4,7 @@
 		"schedule": "0 8 * * *",
 		"target": "daily-newspaper",
 		"reason": "cron: daily-newspaper",
-		"instructions": "news-brief 스킬의 'Quick Usage' 절차를 따르세요. enrich 단계를 절대 생략하지 마세요 — 영어 헤드라인이 남으면 안 됩니다."
+		"instructions": "news-brief 스킬의 'Quick Usage' 절차를 따르세요. enrich 단계를 절대 생략하지 마세요 — 영어 헤드라인이 남으면 안 됩니다. 완성된 HTML은 daye에게 --media로 전달하세요."
 	},
 	{
 		"name": "breaking-alert",
