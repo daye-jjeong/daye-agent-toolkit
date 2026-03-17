@@ -1,7 +1,6 @@
 ---
 name: life-coach
 description: 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석
-version: 0.8.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
@@ -23,110 +22,29 @@ CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 통
 
 ## 온디맨드 코칭 (/coach)
 
+CLI 명령어 상세는 `references/cli-reference.md` 참조.
+
 ### Phase 1: 데이터 준비
 
-#### 1-1. 열린 세션 스캔
-
-```bash
-python3 {baseDir}/../../cc/work-digest/scripts/active_session_scanner.py
-```
-
-#### 1-2. 미요약 세션 확인 + 요약
-
-```bash
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py unsummarized --date <DATE>
-```
-
-미요약 세션이 있으면 태그+요약을 생성하여 업데이트:
-
-```bash
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
-    --session-id <SID> --date <DATE> --tag "태그" --summary "요약" \
-    --status completed --follow-up "다음 액션 (없으면 생략)"
-```
-
-**요약 작성 기준은 work-digest SKILL.md "Step 2: 토픽 생성 (LLM)" 참조.** 여기서 중복 정의하지 않는다.
-
-`--status` 값: `completed`, `in_progress`, `blocked`, `follow_up`
-
-#### 1-3. 토픽이 없으면 분해
-
-session_topics가 없으면 work-digest 스킬의 "정리해줘" 절차를 실행한다. 상세: work-digest SKILL.md.
-
-#### 1-4. JSON 데이터 추출
-
-```bash
-# 일일
-python3 {baseDir}/scripts/daily_coach.py --json --date <DATE> > /tmp/_coach_data_<DATE>.json
-# 주간
-python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly_<DATE>.json
-```
-
-`has_data: false`이면 Phase 1을 다시 확인.
+1. **열린 세션 스캔** — `active_session_scanner.py` 실행
+2. **미요약 세션 확인** — `activity_writer.py unsummarized`로 확인 후, 태그+요약 생성하여 `update-summary`
+   - 요약 작성 기준은 work-digest SKILL.md "Step 2: 토픽 생성 (LLM)" 참조
+   - `--status`: `completed`, `in_progress`, `blocked`, `follow_up`
+3. **토픽 없으면 분해** — work-digest 스킬의 "정리해줘" 절차 실행
+4. **JSON 데이터 추출** — `daily_coach.py --json` (일일) / `weekly_coach.py --json` (주간)
+   - `has_data: false`이면 Phase 1을 다시 확인
 
 ### Phase 2: 코칭 생성
 
-#### 2-1. 이전 코칭 참조
-
-```bash
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py previous-coaching --date <DATE>
-```
-
-출력(yesterday_coaching, pending_tasks, open_followups)을 참조하여:
-- 어제 태스크 제안 이행 여부 판단
-- follow-up 에스컬레이션 결정
-- 연속 패턴 분석
-
-#### 2-2. 코칭 마크다운 생성
-
-`references/coaching-prompts.md` 프레임으로 데이터를 해석하고 `/tmp/coaching_<DATE>.md` 생성.
-섹션 헤더 사용: `## 오늘의 정리`, `## 코칭`, `## 내일 이어할 것` 등.
-
-**"오늘의 정리" 필수 항목:**
-- CC 세션 수/시간/토큰, Codex 세션 수/시간/토큰 (source별 분리)
-- 각 세션이 어떤 레포에서 무슨 작업이었는지 한줄 요약
-- 태그 분포
+1. **이전 코칭 참조** — `activity_writer.py previous-coaching`로 어제 코칭/pending 태스크/open follow-up 확인
+2. **코칭 마크다운 생성** — `references/coaching-prompts.md` 프레임으로 `/tmp/coaching_<DATE>.md` 생성
+   - **"오늘의 정리" 필수 항목:** CC/Codex 세션 수·시간·토큰, 레포별 한줄 요약, 태그 분포
 
 ### Phase 3: 저장 + 리포트
 
-#### 3-1. 코칭 저장
-
-```bash
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-coaching \
-    --date <DATE> --period daily \
-    --content /tmp/coaching_<DATE>.md \
-    --sections '{"summary":"...","structure_review":"...","coaching":"...","question":"..."}'
-```
-
-#### 3-2. 태스크 + follow-up 관리
-
-```bash
-# 태스크 제안 저장
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-task \
-    --date <DATE> --description "태스크 설명" --estimated-min 30 --priority 1 --source-type coaching
-
-# 태스크 해소
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py resolve-task \
-    --id <TASK_ID> --status done --date <DATE> --method auto
-
-# Follow-up 해소
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py resolve-followup \
-    --id <CHAIN_ID> --status resolved --date <DATE> --note "해소 사유"
-```
-
-#### 3-3. HTML 리포트
-
-```bash
-# 일일
-python3 {baseDir}/scripts/daily_report.py \
-  --input /tmp/_coach_data_<DATE>.json --coaching /tmp/coaching_<DATE>.md
-open /tmp/daily_report_<DATE>.html
-
-# 주간
-python3 {baseDir}/scripts/weekly_report.py \
-  --input /tmp/_coach_data_weekly_<DATE>.json --coaching /tmp/coaching_weekly_<DATE>.md
-open /tmp/weekly_report_<DATE>.html
-```
+1. **코칭 저장** — `activity_writer.py save-coaching`으로 섹션별 분해하여 DB 저장
+2. **태스크 + follow-up 관리** — `save-task`, `resolve-task`, `resolve-followup`
+3. **HTML 리포트** — `daily_report.py` / `weekly_report.py` → `/tmp/` → `open`
 
 ## 의도 확인
 
@@ -173,17 +91,12 @@ coach_state의 escalation_level에 따라 톤 변경:
 | `timeline_html.py` | 인터랙티브 타임라인 HTML |
 | `timeline_chart.py` | PNG 타임라인 차트 → /tmp/work_timeline.png |
 
-### 스크립트 플래그
-
-| 플래그 | 동작 |
-|--------|------|
-| (없음) | 템플릿 리포트 → 텔레그램 전송 (cron 기본) |
-| `--dry-run` | 템플릿 리포트 → stdout |
-| `--json` | 구조화 JSON 데이터 → stdout (온디맨드 LLM 코칭용) |
+플래그: (없음)=텔레그램, `--dry-run`=stdout, `--json`=JSON stdout
 
 ## References
 
 | File | 내용 |
 |------|------|
 | `references/coaching-prompts.md` | LLM 코칭 프레임 (온디맨드에서 LLM이 직접 적용) |
+| `references/cli-reference.md` | Phase 1-3 CLI 명령어 상세 |
 | `references/mistake-categories.json` | mistake 키워드 → 카테고리 매핑 |

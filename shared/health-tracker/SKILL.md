@@ -1,7 +1,6 @@
 ---
 name: health-tracker
 description: 운동/증상/PT/건강체크인 트래킹 + 루틴 추천 + 분석 — SQLite 기록
-version: 1.1.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 

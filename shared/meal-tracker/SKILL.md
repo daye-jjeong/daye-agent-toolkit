@@ -1,7 +1,6 @@
 ---
 name: meal-tracker
 description: 식사 기록 + 영양 모니터링 — SQLite 기록
-version: 1.1.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 

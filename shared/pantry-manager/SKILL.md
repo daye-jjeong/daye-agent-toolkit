@@ -1,7 +1,6 @@
 ---
 name: pantry-manager
 description: 식재료 관리 자동화 — 재고, 쇼핑리스트, 레시피 추천
-version: 1.0.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
