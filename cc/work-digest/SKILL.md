@@ -30,7 +30,7 @@ work-digest/
   → sessions INSERT (start_at, end_at, duration_min, tokens, repo)
   → session_content INSERT (user_messages, files_changed, commands)
   → daily_stats 갱신
-  → behavioral_signals 추출 (LLM subprocess — 결정/실수/패턴)
+  → signals 추출 (LLM subprocess — decision/mistake/pattern)
   → 텔레그램 알림
 ```
 
