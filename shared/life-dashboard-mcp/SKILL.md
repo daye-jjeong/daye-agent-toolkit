@@ -5,12 +5,6 @@ user-invocable: false
 disable-model-invocation: true
 ---
 
-> **내부 공유 라이브러리** — 독립 스킬 아님.
-> 이 디렉터리는 여러 스킬이 공동으로 의존하는 MCP 서버 + DB 레이어다.
-> 에이전트가 직접 이 스킬을 "사용"하는 게 아니라, 다른 스킬들이 내부적으로 참조한다.
-
----
-
 ## 역할
 
 `~/life-dashboard/data.db` (SQLite) 를 공유 저장소로 제공하며, 다음 두 가지 인터페이스를 노출한다.
@@ -89,65 +83,22 @@ Output: {
 **스키마 초기화:** `get_conn()` 호출 시 `schema.sql` 자동 적용 (멱등)
 **WAL 모드** 활성화, 동시 쓰기 충돌 방지.
 
-### 주요 함수
-
-```python
-from db import get_conn, open_conn
-
-# 단순 조회
-conn = get_conn()
-
-# 트랜잭션 컨텍스트 (권장)
-with open_conn() as conn:
-    ...
-```
-
----
-
-## activity_writer.py
-
-세션 기록·요약·코칭 저장을 담당하는 CLI + 라이브러리.
-
-### CLI 사용 (life-coach에서 호출)
-
-```bash
-# 미요약 세션 목록
-python3 activity_writer.py unsummarized --date 2026-03-16
-
-# 요약 업데이트
-python3 activity_writer.py update-summary \
-  --session-id <ID> --date 2026-03-16 --tag "코딩" --summary "..."
-
-# 코칭 저장
-python3 activity_writer.py save-coaching \
-  --date 2026-03-16 --period daily --content "..."
-
-# 태스크 제안 저장
-python3 activity_writer.py save-task \
-  --date 2026-03-16 --description "..." --priority 1
-
-# 이전 코칭 조회
-python3 activity_writer.py previous-coaching --date 2026-03-16
-
-# 태스크 해결
-python3 activity_writer.py resolve-task --id 1 --status done --date 2026-03-16
-
-# follow-up 해결
-python3 activity_writer.py resolve-followup --id 1 --status resolved --date 2026-03-16
-```
+import 패턴 및 activity_writer.py CLI 사용법은 `references/api-reference.md` 참조.
 
 ---
 
 ## DB 스키마 개요
 
-4개 도메인, 총 17개 테이블. 상세 컬럼 정의는 `references/schema-detail.md` 참조.
+4개 도메인, 총 21개 테이블. 상세 컬럼 정의는 `references/schema-detail.md` 참조.
 
 | 도메인 | 테이블 | 역할 |
 |--------|--------|------|
 | **작업** | `sessions` | v2 세션 (source, session_id, date 복합 PK) |
+| | `activities` | v1 호환 (Codex 세션 로거, 레거시) |
 | | `session_content` | 세션 원문 (messages, files, commands, errors) |
 | | `daily_stats` | 일별 집계 캐시 |
-| | `signals` | 행동 신호 (mistake, pattern, decision) |
+| | `signals` | v2 행동 신호 (mistake, pattern, decision) |
+| | `behavioral_signals` | v1 행동 신호 (레거시) |
 | | `coaching_entries` | 코칭 내용 (daily/weekly/monthly) |
 | | `task_suggestions` | 코칭에서 추출한 태스크 제안 |
 | | `followup_chains` | follow-up 추적 |
