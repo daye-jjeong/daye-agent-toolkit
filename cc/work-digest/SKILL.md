@@ -80,19 +80,49 @@ extract_day.py 출력의 segments를 보고 각 구간에 대해:
 
 5. **하나의 segment에 여러 작업이 섞여있으면**:
    - segment 시간 내에서 분리하지 않는다 (시간 추정 금지)
-   - 대신 summary에 (1)(2)(3)으로 순서 표기
+   - summary에 (1)(2)(3)으로 순서 표기
+   - **각 작업의 대략적 시간 비중도 표기**: "(1) 멘션 처리 (~20분). (2) retry 진단 (~30분). (3) cron 구조 검토 (~70분)"
 
-6. **각 토픽에 채울 것**:
+6. **다른 세션에서 이어진 작업은 연결 표기**:
+   - 같은 기능을 다른 세션에서 이어했으면 `[세션ID에서 이어짐]` 또는 `[세션ID로 이어짐]` 추가
+   - 예: "[f9524da1에서 cron 구조 검토 시작됨]", "[f9524da1→5a45a36d로 cron 수정 이어짐]"
+
+7. **summary에 결과/산출물 명시**:
+   - completed이면 반드시 결과를 적어라: "커밋", "머지", "spec 작성 완료", "설정 완료"
+   - 나쁜: "리포트 개선" (뭘 개선했는지 모름)
+   - 좋은: "리포트 개선 — UTC→KST 변환, 조리시간 KPI 추가, 방치 주문 기준 명시"
+
+8. **각 토픽에 채울 것**:
    - `tag`: 실제 활동과 일치
    - `summary`: 무엇을/왜/결과/의사결정. "다음에 뭘 해야 하는지" 판단 가능한 수준
    - `status`: completed / in_progress / blocked / follow_up
-   - `follow_up`: 후속 작업 (없으면 생략)
+   - `follow_up`: 후속 작업 (없으면 생략). **"모델 제한 대응"처럼 모호하게 적지 마라** → "haiku 모델 응답 품질 저하 — sonnet 전환 검토 또는 프롬프트 강화"
    - `start_at`, `end_at`: segment에서 온 값 그대로
    - `duration_estimate_min`: segment의 duration_min 그대로
 
-7. **반복 패턴/문제는 명시적 기록** (예: "rule 있는데 에이전트가 반복 위반 — 3번째")
+9. **반복 패턴/문제는 명시적 기록** (예: "rule 있는데 에이전트가 반복 위반 — 3번째")
 
-8. **signals 동시 생성**: 각 토픽을 만들면서 해당 구간의 의사결정, 실수, 패턴도 같이 추출.
+10. **signals 동시 생성**:
+    각 토픽을 만들면서 해당 구간의 의사결정, 실수, 패턴을 같이 추출.
+    - `decision`: 왜 그렇게 결정했는지 reasoning 포함. "A 대신 B를 선택 — 이유: ..."
+    - `mistake`: 뭘 잘못했고 왜 문제인지. "X를 안 해서 Y가 발생"
+    - `pattern`: 반복되는 것. 몇 번째인지, 이전에 언제 발생했는지 포함
+
+    ```bash
+    # signals 저장 (DB 직접 또는 activity_writer CLI)
+    python3 -c "
+    from db import get_conn, insert_signal
+    conn = get_conn()
+    insert_signal(conn, {
+        'session_id': '<SID>', 'date': '<DATE>',
+        'signal_type': 'decision|mistake|pattern',
+        'content': '내용',
+        'reasoning': '이유',
+        'repo': 'repo-name'
+    })
+    conn.commit(); conn.close()
+    "
+    ```
 
 ### Step 3: 저장
 
