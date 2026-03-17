@@ -34,13 +34,23 @@ def _build_stats_card(data: dict) -> str:
     first = data.get("first_session", "")
     last = data.get("last_session_end", "")
 
+    # wall clock span 계산
+    span_str = ""
+    if first and last:
+        try:
+            fh, fm = int(first.split(":")[0]), int(first.split(":")[1])
+            lh, lm = int(last.split(":")[0]), int(last.split(":")[1])
+            span_h = (lh * 60 + lm - fh * 60 - fm) / 60
+            span_str = f"{span_h:.1f}h"
+        except (ValueError, IndexError):
+            span_str = ""
+
     items = [
         ("세션", str(sc)),
-        ("작업시간", f"{wh}h"),
+        ("총 시간", f"{first}~{last} ({span_str})" if span_str else f"{wh}h"),
+        ("활동", f"{wh}h"),
         ("토큰", f"{_fmt_tokens(tok)}"),
     ]
-    if first and last:
-        items.append(("활동 시간대", f"{first} ~ {last}"))
 
     cards = "\n".join(
         f'<div class="stat-item"><div class="stat-val">{v}</div><div class="stat-lbl">{k}</div></div>'

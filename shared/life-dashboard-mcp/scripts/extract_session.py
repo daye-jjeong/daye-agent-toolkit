@@ -104,10 +104,43 @@ def extract(jsonl_path: str, target_date: str | None = None) -> dict:
 
     wall_sec = (sorted_ts[-1] - sorted_ts[0]).total_seconds()
 
+    # idle gap 기준으로 활동 구간(segments) 자동 분리
+    # 각 segment에 해당 구간의 messages + file_edits 포함
+    segments = []
+    seg_start = sorted_ts[0]
+    seg_end = sorted_ts[0]
+    boundary_times = []  # idle gap 시작 시각 목록
+
+    for i in range(1, len(sorted_ts)):
+        gap = (sorted_ts[i] - sorted_ts[i - 1]).total_seconds()
+        if gap > IDLE_THRESHOLD_SEC:
+            boundary_times.append((seg_start, seg_end))
+            seg_start = sorted_ts[i]
+        seg_end = sorted_ts[i]
+    boundary_times.append((seg_start, seg_end))
+
+    for seg_s, seg_e in boundary_times:
+        s_hhmm = seg_s.strftime("%H:%M")
+        e_hhmm = seg_e.strftime("%H:%M")
+        dur = max(1, int((seg_e - seg_s).total_seconds() / 60))
+
+        seg_msgs = [m for m in messages if s_hhmm <= m["ts"] <= e_hhmm]
+        seg_files = [f for f in file_edits if s_hhmm <= f["ts"] <= e_hhmm]
+
+        if seg_msgs or seg_files:  # 빈 구간 제거
+            segments.append({
+                "start": s_hhmm,
+                "end": e_hhmm,
+                "duration_min": dur,
+                "messages": seg_msgs,
+                "file_edits": seg_files,
+            })
+
     return {
         "messages": messages,
         "file_edits": file_edits,
         "idle_gaps": idle_gaps,
+        "segments": segments,
         "active_minutes": max(1, int(active_sec / 60)),
         "wall_minutes": max(1, int(wall_sec / 60)),
         "start": sorted_ts[0].strftime("%H:%M"),
