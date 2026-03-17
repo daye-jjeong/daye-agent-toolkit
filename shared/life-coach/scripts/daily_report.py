@@ -321,36 +321,66 @@ def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] |
 
 
 def _build_followup_section(data: dict) -> str:
-    """v2: open followup_chains + pending task_suggestions 표시."""
-    followups = data.get("open_followups", [])
-    tasks = data.get("pending_tasks", [])
-    if not followups and not tasks:
+    """미해소 항목 — session_topics의 follow_up 기반 (맥락 포함)."""
+    topics = data.get("topics", [])
+
+    # session_topics에서 follow_up이 있는 항목
+    topic_followups = [t for t in topics if t.get("follow_up")]
+
+    # 기존 followup_chains + task_suggestions (보조)
+    chain_followups = data.get("open_followups", [])
+    pending_tasks = data.get("pending_tasks", [])
+
+    if not topic_followups and not chain_followups and not pending_tasks:
         return ""
 
     items = []
-    for f in followups:
+
+    # 토픽 기반 후속 (맥락 있음)
+    for t in topic_followups:
+        repo = _esc((t.get("repo") or "?").split("/")[-1])
+        tag = t.get("tag") or "기타"
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        summary = _esc((t.get("summary") or "")[:60])
+        follow = _esc(t.get("follow_up", ""))
+        status = t.get("status", "in_progress")
+        status_icon, status_color = STATUS_STYLES.get(status, ("◦", "#888"))
+        items.append(
+            f'<div class="work-item">'
+            f'<span class="status-badge" style="color:{status_color}">{status_icon}</span> '
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'<span class="work-summary">{repo}: {summary}…'
+            f' <span class="follow-up">→ {follow}</span></span>'
+            f'</div>'
+        )
+
+    # 기존 followup_chains (토픽에 없는 것만)
+    for f in chain_followups:
+        desc = _esc(f.get("description", ""))
         days = f.get("days_open", 0)
         repo = _esc(f.get("origin_repo") or "?")
-        desc = _esc(f.get("description", ""))
         cls = "color:#E07B5A" if days >= 3 else "color:#F0C040"
         items.append(
             f'<div class="work-item">'
-            f'<span class="status-badge" style="{cls}" title="{days}일">🔗</span> '
+            f'<span class="status-badge" style="{cls}">🔗</span> '
             f'<span class="work-summary">[{days}일] {repo} — {desc}</span>'
             f'</div>'
         )
-    for t in tasks:
+
+    # pending task_suggestions
+    for t in pending_tasks:
         desc = _esc(t.get("description", ""))
         est = t.get("estimated_min", "?")
         items.append(
             f'<div class="work-item">'
-            f'<span class="status-badge" style="color:#5AC8D9" title="task">📋</span> '
+            f'<span class="status-badge" style="color:#5AC8D9">📋</span> '
             f'<span class="work-summary">{desc} ({est}분)</span>'
             f'</div>'
         )
 
+    total = len(topic_followups) + len(chain_followups) + len(pending_tasks)
     return (
-        f'<div class="section"><h3>미해소 항목 ({len(followups)}건 follow-up, {len(tasks)}건 태스크)</h3>'
+        f'<div class="section"><h3>미해소 항목 ({total}건)</h3>'
         f'{"".join(items)}</div>'
     )
 
