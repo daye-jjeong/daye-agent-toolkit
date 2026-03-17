@@ -121,9 +121,21 @@ def get_active_sessions() -> list[dict]:
         for project_dir in PROJECTS_DIR.iterdir():
             if not project_dir.is_dir():
                 continue
-            # project hash에서 cwd 복원: -Users-dayejeong-git-workplace-repo → /Users/dayejeong/git_workplace/repo
+            # project hash에서 cwd 복원
+            # -Users-dayejeong-git-workplace-cube-backend → /Users/dayejeong/git_workplace/cube-backend
+            # -Users-dayejeong-dy-minions-squad → /Users/dayejeong/dy-minions-squad
             project_hash = project_dir.name
-            cwd = "/" + project_hash.lstrip("-").replace("-", "/")
+            # 알려진 사용자 prefix 제거 후 경로 복원
+            known_prefix = "-Users-dayejeong-"
+            if project_hash.startswith(known_prefix):
+                remainder = project_hash[len(known_prefix):]
+                if remainder.startswith("git-workplace-"):
+                    repo_name = remainder[len("git-workplace-"):]
+                    cwd = f"/Users/dayejeong/git_workplace/{repo_name}"
+                else:
+                    cwd = f"/Users/dayejeong/{remainder}"
+            else:
+                cwd = "/" + project_hash.lstrip("-").replace("-", "/")
 
             for jsonl in project_dir.glob("*.jsonl"):
                 sid = jsonl.stem
