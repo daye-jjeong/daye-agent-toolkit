@@ -66,6 +66,15 @@ session_logger(CC)가 v2 `record_sessions`로 전환되었지만, 소비자(self
 - signals 실패 시에도 `record_sessions(is_session_end=True)` 호출하도록 변경
 - 현재: 실패 시 직접 SQL UPDATE만 → record_sessions 내부 로직 우회
 
+## 구현 순서 (의존성 기반)
+
+1. CC session_logger 버그 수정 (signals 실패 시 record_sessions 호출)
+2. Codex 로거 전환 (record_activities → record_sessions) — v2 writer 완성
+3. self-profile collect.py + 테스트 전환 (v2 reader 완성)
+4. v1 코드 제거 (db.py, activity_writer.py, backfill_tags.py, schema.sql)
+
+순서 근거: writer(1,2)가 먼저 v2로 통일되어야 reader(3) 전환 시 데이터가 존재한다. v1 코드 제거(4)는 모든 소비자 전환 후 마지막.
+
 ## 안 바꾸는 것
 
 - collect.py 함수 구조/시그니처
