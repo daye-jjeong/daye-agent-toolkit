@@ -45,7 +45,7 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-summary \
     --status completed --follow-up "다음 액션 (없으면 생략)"
 ```
 
-**요약 작성 기준은 work-digest SKILL.md "Step 2: 토픽 생성" 참조.** 여기서 중복 정의하지 않는다.
+**요약 작성 기준은 work-digest SKILL.md "Step 2: 토픽 생성 (LLM)" 참조.** 여기서 중복 정의하지 않는다.
 
 `--status` 값: `completed`, `in_progress`, `blocked`, `follow_up`
 

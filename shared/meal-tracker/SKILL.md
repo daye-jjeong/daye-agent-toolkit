@@ -74,6 +74,7 @@ python3 {baseDir}/scripts/daily_summary.py
 | `scripts/log_meal.py` | 식사 기록 CLI |
 | `scripts/daily_summary.py` | 일일 영양 요약 |
 | `scripts/meal_reminder.py` | 식사 시간 알림 |
+| `scripts/setup_cron.sh` | 크론 자동 설정 |
 
 ## 팁
 
