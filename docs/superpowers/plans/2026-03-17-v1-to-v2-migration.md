@@ -120,8 +120,8 @@ git commit -m "feat: Codex 로거 record_activities→record_sessions 전환"
 ### Task 3: self-profile collect.py v2 전환
 
 **Files:**
-- Modify: `shared/self-profile/scripts/collect.py:32-39,165-200`
-- Modify: `shared/self-profile/tests/test_collect.py:10-26`
+- Modify: `shared/self-profile/scripts/collect.py:32-39,165-200,238` (쿼리 + 호출부)
+- Modify: `shared/self-profile/tests/test_collect.py:10-26,39,49-50,60,65,75` (fixture + 모든 호출부)
 - Modify: `shared/self-profile/tests/conftest.py` (변경 없을 수 있음 — schema.sql이 v2 포함하므로)
 
 - [ ] **Step 1: 테스트 fixture를 v2 테이블로 변경**
@@ -150,6 +150,20 @@ def _insert_signal(conn, *, session_id="s1", date="2026-03-01",
 ```
 
 테스트 본문에서 `_insert_activity` 호출을 모두 `_insert_session`으로 변경. `date` 파라미터 추가 필요 (sessions는 date NOT NULL).
+
+reasoning 필드 검증 테스트 추가:
+```python
+def test_reasoning_field_included(self, collect_with_db):
+    """v2 signals의 reasoning 필드가 포함되어야 한다."""
+    _insert_signal(collect_with_db.conn, session_id="s1",
+                   signal_type="decision",
+                   content="A를 선택",
+                   reasoning="B보다 간단해서")
+    result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
+    decisions = result["behavioral_signals"]["top_decisions"]
+    assert len(decisions) == 1
+    assert decisions[0]["reasoning"] == "B보다 간단해서"
+```
 
 - [ ] **Step 2: 테스트 실행 — 실패 확인**
 
@@ -282,10 +296,11 @@ from db import (
 - [ ] **Step 2: db.py — v1 함수 삭제**
 
 삭제:
-- Lines 32-57: `_migrate()` 함수 전체 (activities 컬럼 마이그레이션)
-- Line 27: `_migrate(conn)` 호출 제거
-- Lines 87-102: `upsert_activity()` 함수
-- Lines 258-262: `insert_behavioral_signal()` 함수
+- Lines 32-57: `_migrate()` 내 activities 마이그레이션 블록만 삭제 (session_topics 마이그레이션 59-69행은 유지!)
+- `_migrate()` 함수 시그니처는 유지하고 activities 관련 코드만 제거. session_topics 블록이 남으므로 함수 자체는 존속.
+- Line 27: `_migrate(conn)` 호출 유지 (session_topics 마이그레이션이 아직 필요)
+- Lines 87-102: `upsert_activity()` 함수 삭제
+- Lines 258-262: `insert_behavioral_signal()` 함수 삭제
 
 - [ ] **Step 3: db.py — fallback 분기 제거**
 
@@ -382,12 +397,18 @@ cd shared/life-dashboard-mcp && python3 -m pytest tests/ -v
 cd shared/self-profile && python3 -m pytest tests/ -v
 ```
 
-- [ ] **Step 2: v1 잔존 참조 검색**
+- [ ] **Step 2: Codex 로거 테스트 실행**
 
 ```bash
-grep -rn "activities\|behavioral_signals\|record_activities\|upsert_activity\|insert_behavioral_signal" \
-  shared/life-dashboard-mcp/ shared/self-profile/ cc/work-digest/ codex/work-digest/ \
-  --include="*.py" --include="*.sql" | grep -v "test_" | grep -v "__pycache__"
+cd codex/work-digest && python3 -m pytest tests/ -v
 ```
 
-Expected: 0 matches (테스트 파일 제외)
+- [ ] **Step 3: v1 SQL/함수 잔존 참조 검색**
+
+```bash
+grep -rn "FROM activities\|INTO activities\|record_activities(\|upsert_activity(\|insert_behavioral_signal(\|FROM behavioral_signals\|INTO behavioral_signals" \
+  shared/life-dashboard-mcp/ shared/self-profile/ cc/work-digest/ codex/work-digest/ \
+  --include="*.py" --include="*.sql" | grep -v "__pycache__"
+```
+
+Expected: 0 matches
