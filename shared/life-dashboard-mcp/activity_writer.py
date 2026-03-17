@@ -131,12 +131,12 @@ def record_sessions(
     if not by_date:
         return {}
 
-    conn = get_conn()
     recorded = {}
     dates = sorted(by_date.keys())
     import sys as _sys
     primary_date = dates[0]
 
+    conn = get_conn()
     try:
         for date_str in dates:
             data = by_date[date_str]
@@ -226,14 +226,12 @@ def record_sessions(
     except Exception as e:
         conn.rollback()
         print(f"[record_sessions] DB error: {e}", file=_sys.stderr)
-        return recorded
+        return {}
     finally:
         conn.close()
 
     return recorded
 
-
-# ── record_activities (v1 — Codex compat) ────────
 
 # ── CLI ───────────────────────────────────────────
 

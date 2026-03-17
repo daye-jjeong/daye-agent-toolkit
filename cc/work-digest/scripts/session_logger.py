@@ -687,9 +687,12 @@ def main():
             print(f"[session_logger] signals failed: {e}", file=sys.stderr)
 
         _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
-        record_sessions("cc", session_id, by_date, repo, branch,
-                       behavioral_signals=signals,
-                       is_session_end=True)
+        try:
+            record_sessions("cc", session_id, by_date, repo, branch,
+                           behavioral_signals=signals,
+                           is_session_end=True)
+        except Exception as e:
+            print(f"[session_logger] record_sessions failed: {e}", file=sys.stderr)
 
         # 텔레그램 전송
         last_data = by_date[max(by_date.keys())]
