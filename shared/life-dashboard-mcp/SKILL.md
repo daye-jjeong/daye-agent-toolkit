@@ -18,7 +18,8 @@ disable-model-invocation: true
 
 | 스킬 | 참조 방식 | 주요 테이블 |
 |------|-----------|-------------|
-| `life-coach` | activity_writer.py CLI + MCP 도구 | `sessions`, `session_content`, `coaching_entries`, `task_suggestions`, `signals` |
+| `work-digest` | activity_writer.py CLI + db.py import | `sessions`, `session_content`, `session_topics`, `daily_stats`, `signals` |
+| `life-coach` | activity_writer.py CLI + MCP 도구 | `sessions`, `coaching_entries`, `task_suggestions`, `followup_chains` |
 | `health-tracker` | db.py 직접 import | `health_exercises`, `health_symptoms`, `health_pt_homework`, `health_check_ins` |
 | `meal-tracker` | db.py 직접 import | `health_meals` |
 | `pantry-manager` | db.py 직접 import | `pantry_items` |
@@ -89,16 +90,16 @@ import 패턴 및 activity_writer.py CLI 사용법은 `references/api-reference.
 
 ## DB 스키마 개요
 
-4개 도메인, 총 21개 테이블. 상세 컬럼 정의는 `references/schema-detail.md` 참조.
+4개 도메인. 상세 컬럼 정의는 `references/schema-detail.md` 참조.
+v1 레거시 테이블(`activities`, `behavioral_signals`)은 스키마에 존재하나 사용하지 않는다.
 
 | 도메인 | 테이블 | 역할 |
 |--------|--------|------|
-| **작업** | `sessions` | v2 세션 (source, session_id, date 복합 UNIQUE) |
-| | `activities` | v1 호환 (Codex 세션 로거, 레거시) |
+| **작업** | `sessions` | 세션 (source, session_id, date 복합 UNIQUE) |
 | | `session_content` | 세션 원문 (messages, files, commands, errors) |
+| | `session_topics` | 세션별 토픽 분해 (session_id, date, topic_order UNIQUE) |
 | | `daily_stats` | 일별 집계 캐시 |
-| | `signals` | v2 행동 신호 (mistake, pattern, decision) |
-| | `behavioral_signals` | v1 행동 신호 (레거시) |
+| | `signals` | 행동 신호 (mistake, pattern, decision) |
 | | `coaching_entries` | 코칭 내용 (daily/weekly) |
 | | `task_suggestions` | 코칭에서 추출한 태스크 제안 |
 | | `followup_chains` | follow-up 추적 |
@@ -120,5 +121,5 @@ import 패턴 및 activity_writer.py CLI 사용법은 `references/api-reference.
 ## 주의 사항
 
 - `get_conn()` 은 `_schema_initialized` 전역 플래그를 사용하므로 **프로세스당 한 번만 초기화**된다. 다중 프로세스 환경에서는 각자 초기화.
-- `sessions` v2 테이블이 있으면 `activities` v1보다 우선 사용 (`daily_stats` 집계, `get_repeated_signals` 등).
+- v1 레거시 테이블(`activities`, `behavioral_signals`)은 하위 호환용으로 스키마에 남아 있으나 읽기/쓰기 대상이 아니다.
 - `upsert_pantry_item`은 같은 `(name, location)` 충돌 시 **수량을 누적(+)** 한다 — 덮어쓰지 않음.

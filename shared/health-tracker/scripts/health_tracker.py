@@ -153,9 +153,7 @@ def main():
         elif choice == "4":
             run(["python3", str(SCRIPT_DIR / "check_pt_attendance.py")])
         elif choice == "5":
-            print("\n[INFO] 건강 패턴 분석은 life-coach의 health-cmds를 사용하세요:")
-            print("  python3 health_cmds.py analyze-symptoms --period 7days")
-            print("  python3 health_cmds.py health-checkup")
+            run(["python3", str(SCRIPT_DIR / "health_cmds.py"), "health-checkup"])
         elif choice == "6":
             run(["python3", str(SCRIPT_DIR / "log_pt_homework.py"), "list"])
         elif choice == "0":
