@@ -89,24 +89,77 @@ def _is_pid_alive(pid: int) -> bool:
 
 
 def get_active_sessions() -> list[dict]:
-    """~/.claude/sessions/*.json에서 활성 세션 목록 수집."""
-    sessions = []
-    if not SESSIONS_DIR.exists():
-        return sessions
+    """활성 세션 목록 수집.
 
-    for session_file in SESSIONS_DIR.glob("*.json"):
-        try:
-            data = json.loads(session_file.read_text())
-            sessions.append({
-                "pid": data["pid"],
-                "session_id": data["sessionId"],
-                "cwd": data["cwd"],
-                "started_at": data.get("startedAt", 0),
-                "alive": _is_pid_alive(data["pid"]),
-                "file": session_file,
-            })
-        except (json.JSONDecodeError, KeyError, OSError) as e:
-            print(f"[scanner] failed to read {session_file}: {e}", file=sys.stderr)
+    1차: ~/.claude/sessions/*.json (PID 기반 활성 세션)
+    2차: ~/.claude/projects/*/*.jsonl (최근 수정된 트랜스크립트 — sessions에 없는 세션 보완)
+    """
+    sessions = []
+    seen_ids: set[str] = set()
+
+    # 1차: sessions 디렉토리
+    if SESSIONS_DIR.exists():
+        for session_file in SESSIONS_DIR.glob("*.json"):
+            try:
+                data = json.loads(session_file.read_text())
+                sid = data["sessionId"]
+                sessions.append({
+                    "pid": data["pid"],
+                    "session_id": sid,
+                    "cwd": data["cwd"],
+                    "started_at": data.get("startedAt", 0),
+                    "alive": _is_pid_alive(data["pid"]),
+                    "file": session_file,
+                })
+                seen_ids.add(sid)
+            except (json.JSONDecodeError, KeyError, OSError) as e:
+                print(f"[scanner] failed to read {session_file}: {e}", file=sys.stderr)
+
+    # 2차: projects 디렉토리 — 오늘 수정된 .jsonl 파일에서 미등록 세션 보완
+    if PROJECTS_DIR.exists():
+        today = datetime.now(KST).strftime("%Y-%m-%d")
+        for project_dir in PROJECTS_DIR.iterdir():
+            if not project_dir.is_dir():
+                continue
+            # project hash에서 cwd 복원
+            # -Users-dayejeong-git-workplace-cube-backend → /Users/dayejeong/git_workplace/cube-backend
+            # -Users-dayejeong-dy-minions-squad → /Users/dayejeong/dy-minions-squad
+            project_hash = project_dir.name
+            # 알려진 사용자 prefix 제거 후 경로 복원
+            home = str(Path.home())
+            home_prefix = "-" + home.lstrip("/").replace("/", "-") + "-"
+            if project_hash.startswith(home_prefix):
+                remainder = project_hash[len(home_prefix):]
+                if remainder.startswith("git-workplace-") or remainder.startswith("git_workplace-"):
+                    repo_name = remainder.split("-", 1)[1] if "-" in remainder[len("git-workplace"):] else remainder
+                    repo_name = remainder[len("git-workplace-"):] if remainder.startswith("git-workplace-") else remainder[len("git_workplace-"):]
+                    cwd = f"{home}/git_workplace/{repo_name}"
+                else:
+                    cwd = f"{home}/{remainder}"
+            else:
+                cwd = "/" + project_hash.lstrip("-").replace("-", "/")
+
+            for jsonl in project_dir.glob("*.jsonl"):
+                sid = jsonl.stem
+                if sid in seen_ids:
+                    continue
+                try:
+                    stat = jsonl.stat()
+                    mtime = datetime.fromtimestamp(stat.st_mtime, KST)
+                    # 오늘 수정 + 10KB 이상 (잡음 제거)
+                    if mtime.strftime("%Y-%m-%d") != today or stat.st_size < 10000:
+                        continue
+                except OSError:
+                    continue
+                sessions.append({
+                    "pid": 0,
+                    "session_id": sid,
+                    "cwd": cwd,
+                    "started_at": 0,
+                    "alive": False,
+                    "file": jsonl,
+                })
+                seen_ids.add(sid)
 
     return sessions
 

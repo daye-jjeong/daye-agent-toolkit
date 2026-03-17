@@ -167,59 +167,6 @@ def extract_user_messages(transcript_path: str) -> str:
     return _truncate_text("\n---\n".join(parts))
 
 
-def summarize_session(conversation: str, repo: str) -> dict | None:
-    """claude CLI로 세션 요약 + 태그 생성. 실패 시 None.
-
-    Returns: {"tag": "코딩", "text": "요약 내용"} or None
-    """
-    if not conversation.strip():
-        return None
-    tags_str = ", ".join(WORK_TAGS)
-    prompt = (
-        f"레포: {repo}\n\n"
-        f"다음은 Claude Code 세션의 대화 내용이다.\n\n"
-        f"{conversation}\n\n"
-        "1줄째: 작업 유형 태그 하나를 골라라. "
-        f"선택지: {tags_str}\n"
-        "태그 선택 기준 (가장 비중이 큰 작업 기준으로 1개만):\n"
-        "- 코딩: 새 기능 구현, 파일 생성, 스크립트 작성\n"
-        "- 디버깅: 버그 수정, 에러 해결, 원인 분석\n"
-        "- 리서치: 조사, 탐색, 문서 읽기, 영상 정리, 비교 분석\n"
-        "- 리뷰: 코드 리뷰, PR 리뷰, 감사(audit)\n"
-        "- ops: 배포, 인프라, 서버 운영, 에이전트 레지스트리, 큐 관리\n"
-        "- 설정: 환경 설정, 설치, 구성 변경, alias 추가\n"
-        "- 문서: README, 문서 작성, SKILL.md 작성\n"
-        "- 설계: 브레인스토밍, plan 작성, 아키텍처 설계, 스킬 설계\n"
-        "- 리팩토링: 기존 코드 구조 변경, 정리, 통합, 마이그레이션\n"
-        "- 기타: 위 9개 중 어느 것도 맞지 않을 때만. "
-        "복합 작업이면 가장 비중이 큰 것을 골라라. 기타를 쓰지 마라.\n\n"
-        "2줄째부터: 이 세션에서 한 작업을 한국어 2-3줄로 요약해라.\n"
-        "반드시 포함: 무엇을(어떤 기능/모듈), 왜(어떤 문제/목적), 결과(어떤 산출물/변경).\n"
-        "브랜치명이 대화에 나오면 포함.\n"
-        "나쁜 예: '설계 논의', 'PR 리뷰', '디버깅' — 뭘 했는지 모름.\n"
-        "좋은 예: 'session logger 파이프라인 개편 — 열린 세션 누락 문제 해결 위해 "
-        "active_session_scanner + date-split 구현, work-log markdown 제거하고 SQLite 직접 기록으로 전환.'\n\n"
-        "형식:\n[태그]\n요약 내용"
-    )
-    try:
-        result = subprocess.run(
-            ["claude", "-p", "--model", "sonnet", "--no-session-persistence"],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=SUMMARY_TIMEOUT_SEC,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return _parse_summary_response(result.stdout.strip())
-    except subprocess.TimeoutExpired:
-        print(f"[session_logger] summarize_session timed out ({SUMMARY_TIMEOUT_SEC}s)", file=sys.stderr)
-    except FileNotFoundError:
-        print("[session_logger] 'claude' CLI not found on PATH", file=sys.stderr)
-    except Exception as e:
-        print(f"[session_logger] summarize_session failed: {type(e).__name__}: {e}", file=sys.stderr)
-    return None
-
-
 _TAG_KEYWORDS = {
     "디버깅": ["디버깅", "버그", "에러", "fix", "debug", "원인 파악", "원인 분석"],
     "코딩": ["구현", "생성", "추가", "작성", "신규", "feat", "implement"],
@@ -729,39 +676,23 @@ def main():
 
     repo, _ = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
 
-    # SessionEnd: LLM 요약 + 행동 추출 (세션 전체 대상, 1회)
+    # SessionEnd: 행동 추출 + DB 갱신 + 텔레그램 (세션 전체 대상, 1회)
     if event == "SessionEnd":
-        from concurrent.futures import ThreadPoolExecutor
-
-        conversation = extract_conversation(transcript_path)
         user_msgs = extract_user_messages(transcript_path)
-        summary = None
         signals = None
 
         try:
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                summary_future = pool.submit(summarize_session, conversation, repo)
-                signals_future = pool.submit(extract_behavioral_signals, user_msgs, repo)
-
-                try:
-                    summary = summary_future.result(timeout=SUMMARY_TIMEOUT_SEC + 10)
-                except Exception as e:
-                    print(f"[session_logger] summary failed: {e}", file=sys.stderr)
-
-                try:
-                    signals = signals_future.result(timeout=BEHAVIOR_TIMEOUT_SEC + 10)
-                except Exception as e:
-                    print(f"[session_logger] signals failed: {e}", file=sys.stderr)
+            signals = extract_behavioral_signals(user_msgs, repo)
         except Exception as e:
-            print(f"[session_logger] ThreadPool failed: {e}", file=sys.stderr)
+            print(f"[session_logger] signals failed: {e}", file=sys.stderr)
 
-        if summary or signals:
+        if signals:
             _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
             record_sessions("cc", session_id, by_date, repo, branch,
-                           summary=summary, behavioral_signals=signals,
+                           behavioral_signals=signals,
                            is_session_end=True)
         else:
-            # Layer 2 실패 → SessionEnd이므로 최소한 status를 completed로
+            # 행동 추출 실패 → SessionEnd이므로 최소한 status를 completed로
             try:
                 from db import get_conn as _get_conn
                 _conn = _get_conn()
@@ -781,7 +712,7 @@ def main():
         # 텔레그램 전송
         last_data = by_date[max(by_date.keys())]
         total_duration = sum(d.get("duration_min") or 0 for d in by_date.values())
-        send_session_telegram(last_data, repo, total_duration or None, summary)
+        send_session_telegram(last_data, repo, total_duration or None)
 
 
 if __name__ == "__main__":

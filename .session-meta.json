@@ -1,7 +1,7 @@
 {
-  "name": "life-dashboard-skill",
-  "description": "life-dashboard-mcp SKILL.md 구조화",
-  "created": "2026-03-17T03:41:19+0000",
+  "name": "session-topics",
+  "description": "session_topics 테이블 + 토픽 분해 파이프라인",
+  "created": "2026-03-16T06:40:58+0000",
   "base_branch": "main",
   "base_sha": "1f444e2"
 }

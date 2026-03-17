@@ -29,7 +29,7 @@ from db import (
     # v1 (Codex compat)
     upsert_activity, insert_behavioral_signal,
     # v2
-    upsert_session, upsert_session_content, insert_signal,
+    upsert_session, upsert_session_content, upsert_session_topics, insert_signal,
     upsert_followup_chain, update_daily_stats,
     upsert_coaching_entry, upsert_task_suggestion,
     update_task_resolution, update_followup_resolution,
@@ -386,6 +386,35 @@ def cmd_update_summary(args):
         conn.close()
 
 
+def cmd_update_topics(args):
+    """Step 3a용: 세션의 토픽을 전체 교체."""
+    try:
+        topics = json.loads(args.topics)
+    except json.JSONDecodeError as e:
+        print(f"Error: --topics is not valid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(topics, list) or not topics:
+        print("Error: --topics must be a non-empty JSON array", file=sys.stderr)
+        sys.exit(1)
+
+    conn = get_conn()
+    try:
+        upsert_session_topics(conn, "cc", args.session_id, args.date, topics)
+        update_daily_stats(conn, args.date)
+        conn.commit()
+        count = conn.execute(
+            "SELECT COUNT(*) FROM session_topics WHERE source='cc' AND session_id=? AND date=?",
+            (args.session_id, args.date),
+        ).fetchone()[0]
+        print(f"Updated {count} topics for {args.session_id}", file=sys.stderr)
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: DB operation failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        conn.close()
+
+
 def cmd_save_coaching(args):
     conn = get_conn()
 
@@ -488,6 +517,11 @@ def main():
     p_update.add_argument("--summary-source", dest="summary_source",
                           choices=["llm", "manual"], default="llm")
 
+    p_topics = sub.add_parser("update-topics", help="Replace session topics")
+    p_topics.add_argument("--session-id", required=True)
+    p_topics.add_argument("--date", required=True)
+    p_topics.add_argument("--topics", required=True, help='JSON array: [{"tag":"..","summary":"..","repo":".."}]')
+
     p_coaching = sub.add_parser("save-coaching", help="Save coaching entry")
     p_coaching.add_argument("--date", required=True)
     p_coaching.add_argument("--period", required=True, choices=["daily", "weekly"])
@@ -525,6 +559,7 @@ def main():
     dispatch = {
         "unsummarized": cmd_unsummarized,
         "update-summary": cmd_update_summary,
+        "update-topics": cmd_update_topics,
         "save-coaching": cmd_save_coaching,
         "save-task": cmd_save_task,
         "previous-coaching": cmd_previous_coaching,

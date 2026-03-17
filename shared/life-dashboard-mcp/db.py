@@ -56,6 +56,18 @@ def _migrate(conn: sqlite3.Connection):
             conn.execute("CREATE UNIQUE INDEX idx_activities_session ON activities(source, session_id, date)")
             conn.commit()
 
+    # session_topics: additive column migrations
+    try:
+        st_cols = {r[1] for r in conn.execute("PRAGMA table_info(session_topics)").fetchall()}
+        if st_cols:
+            for col, default in [("start_at", None), ("end_at", None), ("status", "'completed'"), ("follow_up", None)]:
+                if col not in st_cols:
+                    default_clause = f" DEFAULT {default}" if default else ""
+                    conn.execute(f"ALTER TABLE session_topics ADD COLUMN {col} TEXT{default_clause}")
+            conn.commit()
+    except Exception:
+        pass
+
 
 @contextmanager
 def open_conn(auto_commit=True):
@@ -109,15 +121,27 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
         conn.execute("DELETE FROM daily_stats WHERE date = ?", (date_str,))
         return
 
+    # tag_breakdown: 토픽 기준 우선, 없으면 sessions.tag 폴백
+    topic_rows = conn.execute(
+        "SELECT tag FROM session_topics WHERE date = ?", (date_str,)
+    ).fetchall()
+
     tags: dict[str, int] = {}
+    if topic_rows:
+        for r in topic_rows:
+            tag = r["tag"] or "기타"
+            tags[tag] = tags.get(tag, 0) + 1
+    else:
+        for r in rows:
+            tag = r["tag"] or "기타"
+            tags[tag] = tags.get(tag, 0) + 1
+
     repos: dict[str, int] = {}
     total_min = 0
     first_session = "99:99"
     last_end = "00:00"
 
     for r in rows:
-        tag = r["tag"] or "기타"
-        tags[tag] = tags.get(tag, 0) + 1
         repo = r["repo"] or "unknown"
         repos[repo] = repos.get(repo, 0) + 1
         total_min += r["duration_min"] or 0
@@ -146,6 +170,76 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
         first_session,
         last_end,
     ))
+
+
+_VALID_TAGS = {"코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "설계", "리팩토링", "기타"}
+
+
+def upsert_session_topics(
+    conn: sqlite3.Connection,
+    source: str, session_id: str, date: str,
+    topics: list[dict],
+    sync_session_cache: bool = True,
+):
+    """session_topics 전체 교체 (DELETE + INSERT) + sessions.summary 캐시 동기화.
+
+    검증: summary 빈 값 skip, tag 유효성, 10개 상한.
+    sync_session_cache=True면 첫 번째 토픽으로 sessions.summary/tag 캐시 갱신.
+    """
+    valid = []
+    for t in topics[:10]:
+        if not t.get("summary"):
+            continue
+        tag = t.get("tag", "기타")
+        if tag not in _VALID_TAGS:
+            tag = "기타"
+        valid.append({**t, "tag": tag})
+
+    if not valid:
+        return
+
+    # duration_estimate_min 자동 채우기 — 명시 안 된 토픽은 세션 시간 균등 분배
+    any_missing = any(not t.get("duration_estimate_min") for t in valid)
+    if any_missing:
+        row = conn.execute(
+            "SELECT duration_min FROM sessions WHERE source=? AND session_id=? AND date=?",
+            (source, session_id, date),
+        ).fetchone()
+        session_dur = row["duration_min"] if row and row["duration_min"] else 30
+        per_topic = max(1, session_dur // len(valid))
+        for t in valid:
+            if not t.get("duration_estimate_min"):
+                t["duration_estimate_min"] = per_topic
+
+    conn.execute(
+        "DELETE FROM session_topics WHERE source=? AND session_id=? AND date=?",
+        (source, session_id, date),
+    )
+    for i, t in enumerate(valid):
+        conn.execute("""
+            INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, repo, start_at, end_at, duration_estimate_min, status, follow_up)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (source, session_id, date, i, t["tag"], t["summary"], t.get("repo"), t.get("start_at"), t.get("end_at"), t.get("duration_estimate_min"), t.get("status", "completed"), t.get("follow_up")))
+
+    if sync_session_cache and valid:
+        first = valid[0]
+        conn.execute("""
+            UPDATE sessions SET summary = ?, tag = ?, summary_source = 'llm'
+            WHERE source = ? AND session_id = ? AND date = ?
+        """, (first["summary"], first["tag"], source, session_id, date))
+
+
+def get_session_topics(conn: sqlite3.Connection, date: str) -> list[dict]:
+    """해당 날짜의 모든 session_topics 조회 (부모 session 메타 포함)."""
+    rows = conn.execute("""
+        SELECT st.*, s.source as s_source, s.status, s.has_commits, s.has_tests,
+               s.start_at, s.duration_min, s.token_total
+        FROM session_topics st
+        JOIN sessions s USING (source, session_id, date)
+        WHERE st.date = ?
+        ORDER BY s.start_at, st.topic_order
+    """, (date,)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_coach_state(conn: sqlite3.Connection) -> dict:

@@ -17,7 +17,75 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _helpers import WEEKDAY, dedup_sessions as dedup, to_h
 
-def prep(sessions):
+def _hhmm_to_min(t: str) -> int:
+    """'HH:MM' → 분. '13:30' → 810."""
+    try:
+        h, m = int(t[:2]), int(t[3:5])
+        return h * 60 + m
+    except (ValueError, IndexError):
+        return 0
+
+
+def _min_to_hhmm(m: int) -> str:
+    """분 → 'HH:MM'. 810 → '13:30'."""
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def prep(sessions, topics=None):
+    """타임라인 데이터 생성. topics 있으면 세션별로 토픽을 순차 배치."""
+    if topics:
+        # 세션별로 토픽 그룹핑 → 각 세션 시간 범위 안에서 순차 배치
+        from collections import defaultdict
+        sess_map = {}
+        for s in sessions:
+            sid = s.get("session_id", "")
+            sess_map[sid] = s
+
+        topic_by_sess = defaultdict(list)
+        for t in topics:
+            topic_by_sess[t.get("session_id", "")].append(t)
+
+        items = []
+        for sid, ts in topic_by_sess.items():
+            s = sess_map.get(sid, {})
+            base_start = (s.get("start_at") or "00:00")[11:16]
+            cursor_min = _hhmm_to_min(base_start)
+
+            sorted_topics = sorted(ts, key=lambda x: x.get("topic_order", 0))
+            for t in sorted_topics:
+                # start_at이 있으면 실제 시간, 없으면 순차 배치
+                topic_start_at = t.get("start_at", "")
+                if topic_start_at and len(topic_start_at) >= 16:
+                    start_min = _hhmm_to_min(topic_start_at[11:16])
+                else:
+                    start_min = cursor_min
+
+                # duration: active time (idle 제외). wall clock은 start_at~end_at으로 별도 보존.
+                dur = t.get("duration_estimate_min") or 30
+
+                items.append({
+                    "repo":     (t.get("repo") or "?").split("/")[-1],
+                    "tag":      t.get("tag") or "기타",
+                    "start":    _min_to_hhmm(start_min),
+                    "duration": dur,
+                    "summary":  (t.get("summary") or "")[:100],
+                })
+                cursor_min = start_min + dur
+
+        # 토픽 없는 세션 추가
+        topiced_sids = set(topic_by_sess.keys())
+        for s in dedup(sessions):
+            if s.get("session_id", "") not in topiced_sids:
+                items.append({
+                    "repo":     (s.get("repo") or "?").split("/")[-1],
+                    "tag":      s.get("tag") or "기타",
+                    "start":    (s.get("start_at") or "00:00")[11:16],
+                    "duration": s.get("duration_min") or 30,
+                    "summary":  (s.get("summary") or "")[:100],
+                })
+
+        return sorted(items, key=lambda x: x["start"])
+
     return [
         {
             "repo":     (s.get("repo") or "?").split("/")[-1],
@@ -57,7 +125,7 @@ def build(data: dict, weekly: bool) -> tuple[str, list]:
             "date":       date_str,
             "label":      f'{dt.month}/{dt.day}({WEEKDAY[dt.weekday()]})',
             "work_hours": data.get("work_hours", 0),
-            "sessions":   prep(data.get("sessions", [])),
+            "sessions":   prep(data.get("sessions", []), topics=data.get("topics")),
         }]
 
 # ── CSS ───────────────────────────────────────────────────────────────────────

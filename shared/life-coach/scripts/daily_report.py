@@ -22,25 +22,65 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline_html import build, timeline_section_html
 from _helpers import (
     WEEKDAY, TAG_COLORS, esc_html as _esc, fmt_tokens as _fmt_tokens, md_to_html,
-    group_sessions_by_repo_branch, has_meaningful_branches,
+    group_sessions_by_repo_branch, has_meaningful_branches, group_topics_by_repo,
 )
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
+def _calc_actual_work_hours(topics: list[dict], sessions: list[dict]) -> float:
+    """토픽/세션의 시간 구간을 합쳐서 겹치지 않는 실제 작업 시간(h) 계산."""
+    intervals = []
+    for t in topics:
+        sa, ea = t.get("start_at", ""), t.get("end_at", "")
+        if sa and ea and len(sa) >= 16 and len(ea) >= 16:
+            try:
+                s = int(sa[11:13]) * 60 + int(sa[14:16])
+                e = int(ea[11:13]) * 60 + int(ea[14:16])
+                if e > s:
+                    intervals.append((s, e))
+            except (ValueError, IndexError):
+                pass
+    if not intervals:
+        # 폴백: sessions 기반
+        for s in sessions:
+            sa, ea = s.get("start_at", ""), s.get("end_at", "")
+            dur = s.get("duration_min", 0) or 0
+            if sa and len(sa) >= 16 and dur > 0:
+                try:
+                    start = int(sa[11:13]) * 60 + int(sa[14:16])
+                    intervals.append((start, start + dur))
+                except (ValueError, IndexError):
+                    pass
+    if not intervals:
+        return 0.0
+    # 겹치는 구간 병합
+    intervals.sort()
+    merged = [intervals[0]]
+    for s, e in intervals[1:]:
+        if s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+    total_min = sum(e - s for s, e in merged)
+    return round(total_min / 60, 1)
+
+
 def _build_stats_card(data: dict) -> str:
     sc = data.get("session_count", 0)
-    wh = data.get("work_hours", 0)
     tok = data.get("token_total", 0)
     first = data.get("first_session", "")
     last = data.get("last_session_end", "")
+    topics = data.get("topics", [])
+    sessions = data.get("sessions", [])
+
+    actual_hours = _calc_actual_work_hours(topics, sessions)
 
     items = [
         ("세션", str(sc)),
-        ("작업시간", f"{wh}h"),
+        ("작업시간", f"{first}~{last}" if first and last else "—"),
+        ("활동", f"{actual_hours}h"),
         ("토큰", f"{_fmt_tokens(tok)}"),
     ]
-    if first and last:
-        items.append(("활동 시간대", f"{first} ~ {last}"))
 
     cards = "\n".join(
         f'<div class="stat-item"><div class="stat-val">{v}</div><div class="stat-lbl">{k}</div></div>'
@@ -89,8 +129,51 @@ def _status_badge(status: str) -> str:
     return f'<span class="status-badge" style="color:{color}" title="{status}">{icon}</span> '
 
 
-def _build_work_items(sessions: list[dict]) -> str:
-    """세션을 태그별로 그룹핑, 대표 요약 + 메타 표시."""
+def _build_topic_items(topics: list[dict]) -> str:
+    """session_topics 기준 작업 표시."""
+    items = []
+    for t in topics:
+        tag = t.get("tag") or "기타"
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        summary = _esc(t.get("summary") or "(요약 없음)")
+        status = t.get("status", "in_progress")
+        status_badge = _status_badge(status)
+        source = t.get("s_source") or t.get("source", "")
+        src_html = ""
+        if source:
+            src_color = SOURCE_COLORS.get(source, "#888")
+            src_html = f'<span class="src-tag" style="color:{src_color}">[{source}]</span> '
+        dur = t.get("duration_estimate_min")
+        meta_parts = []
+        if dur:
+            prefix = "" if t.get("start_at") else "~"
+            meta_parts.append(f"{prefix}{dur}m")
+        if t.get("has_commits"):
+            meta_parts.append("커밋")
+        meta_str = (
+            f' <span class="work-meta">({", ".join(meta_parts)})</span>'
+            if meta_parts else ""
+        )
+        follow_up = t.get("follow_up", "")
+        follow_html = f' <span class="follow-up">→ {_esc(follow_up)}</span>' if follow_up else ""
+
+        items.append(
+            f'<div class="work-item">'
+            f'{status_badge}'
+            f'{src_html}'
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'<span class="work-summary">{summary}{meta_str}{follow_html}</span>'
+            f'</div>'
+        )
+    return "".join(items)
+
+
+def _build_work_items(sessions: list[dict], topics: list[dict] | None = None) -> str:
+    """토픽별(우선) 또는 세션별 작업 표시."""
+    if topics:
+        return _build_topic_items(topics)
+
+    # 기존 세션별 로직 (폴백)
     tag_groups: dict[str, list[dict]] = {}
     for s in sessions:
         tag = s.get("tag") or "기타"
@@ -187,50 +270,74 @@ def _match_repo_summary(repo: str, summaries: dict[str, str | list[str]]) -> str
 
 
 def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] | None = None) -> str:
-    """레포별 작업. repo_summaries가 있으면 LLM 요약을 표시, 없으면 세션 원문."""
+    """레포별 작업. topics 있으면 토픽 기준, 없으면 세션 원문."""
     sessions = data.get("sessions", [])
-    if not sessions:
+    topics = data.get("topics", [])
+    if not sessions and not topics:
         return ""
 
+    # 토픽이 있는 레포 + 토픽 없는 세션 모두 표시
+    topic_repos = group_topics_by_repo(topics) if topics else {}
+    # 토픽이 커버하는 session_id 집합
+    topic_session_ids = {t.get("session_id") for t in topics} if topics else set()
+    # 토픽이 없는 세션만 필터
+    untopiced_sessions = [s for s in sessions if s.get("session_id") not in topic_session_ids]
+
     rows = []
-    for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(sessions, short_repo=True):
-        sess_count = sum(len(bs) for bs in branch_groups.values())
-        h, m = divmod(total_dur, 60)
-        dur_str = f"{h}h {m}m" if h else f"{m}m"
-        meta = f'{sess_count}세션 · {dur_str}'
-        if total_tok > 0:
-            meta += f' · {_fmt_tokens(total_tok)} tokens'
 
-        # LLM 요약이 있으면 사용, 없으면 세션 원문 fallback
-        summary = _match_repo_summary(repo, repo_summaries) if repo_summaries else None
-        if summary is not None:
-            if isinstance(summary, list):
-                items = "".join(_render_summary_item(s) for s in summary)
-                inner_html = f'<div class="repo-summary-list">{items}</div>'
-            else:
-                inner_html = f'<div class="repo-summary">{_esc(summary)}</div>'
-        elif has_meaningful_branches(branch_groups):
-            inner_html = ""
-            for branch, bsess in branch_groups.items():
-                if branch:
-                    inner_html += (
-                        f'<div class="branch-group">'
-                        f'<div class="branch-name">{_esc(branch)}</div>'
-                        f'{_build_work_items(bsess)}'
-                        f'</div>'
-                    )
-                else:
-                    inner_html += _build_work_items(bsess)
-        else:
-            all_sess = [s for bs in branch_groups.values() for s in bs]
-            inner_html = _build_work_items(all_sess)
-
+    # 1) 토픽 기준 레포 표시
+    for r, ts in sorted(topic_repos.items()):
+        inner_html = _build_topic_items(ts)
         rows.append(
             f'<div class="repo-group">'
-            f'<div class="repo-name">{_esc(repo)} <span class="repo-meta">{meta}</span></div>'
+            f'<div class="repo-name">{_esc(r)}</div>'
             f'{inner_html}'
             f'</div>'
         )
+
+    # 2) 토픽 없는 세션 — 기존 방식으로 표시
+    if untopiced_sessions:
+        for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(untopiced_sessions, short_repo=True):
+            if repo in topic_repos:
+                continue  # 이미 토픽으로 표시된 레포는 skip
+            sess_count = sum(len(bs) for bs in branch_groups.values())
+            h, m = divmod(total_dur, 60)
+            dur_str = f"{h}h {m}m" if h else f"{m}m"
+            meta = f'{sess_count}세션 · {dur_str}'
+            if total_tok > 0:
+                meta += f' · {_fmt_tokens(total_tok)} tokens'
+            summary = _match_repo_summary(repo, repo_summaries) if repo_summaries else None
+            if summary is not None:
+                if isinstance(summary, list):
+                    items = "".join(_render_summary_item(s) for s in summary)
+                    inner_html = f'<div class="repo-summary-list">{items}</div>'
+                else:
+                    inner_html = f'<div class="repo-summary">{_esc(summary)}</div>'
+            elif has_meaningful_branches(branch_groups):
+                inner_html = ""
+                for branch, bsess in branch_groups.items():
+                    if branch:
+                        inner_html += (
+                            f'<div class="branch-group">'
+                            f'<div class="branch-name">{_esc(branch)}</div>'
+                            f'{_build_work_items(bsess)}'
+                            f'</div>'
+                        )
+                    else:
+                        inner_html += _build_work_items(bsess)
+            else:
+                all_sess = [s for bs in branch_groups.values() for s in bs]
+                inner_html = _build_work_items(all_sess)
+            rows.append(
+                f'<div class="repo-group">'
+                f'<div class="repo-name">{_esc(repo)} <span class="repo-meta">{meta}</span></div>'
+                f'{inner_html}'
+                f'</div>'
+            )
+
+    if not rows:
+        return ""
+
     legend = (
         '<div class="status-legend">'
         '<span style="color:#7ABD7E">✓</span> 완료 '
@@ -244,37 +351,61 @@ def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] |
 
 
 def _build_followup_section(data: dict) -> str:
-    """v2: open followup_chains + pending task_suggestions 표시."""
-    followups = data.get("open_followups", [])
-    tasks = data.get("pending_tasks", [])
-    if not followups and not tasks:
+    """미해소 항목 — 진행중/후속작업/긴급 분류."""
+    topics = data.get("topics", [])
+    topic_followups = [t for t in topics if t.get("follow_up")]
+    chain_followups = data.get("open_followups", [])
+    pending_tasks = data.get("pending_tasks", [])
+
+    if not topic_followups and not chain_followups and not pending_tasks:
         return ""
 
-    items = []
-    for f in followups:
-        days = f.get("days_open", 0)
-        repo = _esc(f.get("origin_repo") or "?")
-        desc = _esc(f.get("description", ""))
-        cls = "color:#E07B5A" if days >= 3 else "color:#F0C040"
-        items.append(
+    def _render_topic_item(t):
+        repo = _esc((t.get("repo") or "?").split("/")[-1])
+        tag = t.get("tag") or "기타"
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        follow = _esc(t.get("follow_up", ""))
+        return (
             f'<div class="work-item">'
-            f'<span class="status-badge" style="{cls}" title="{days}일">🔗</span> '
-            f'<span class="work-summary">[{days}일] {repo} — {desc}</span>'
-            f'</div>'
-        )
-    for t in tasks:
-        desc = _esc(t.get("description", ""))
-        est = t.get("estimated_min", "?")
-        items.append(
-            f'<div class="work-item">'
-            f'<span class="status-badge" style="color:#5AC8D9" title="task">📋</span> '
-            f'<span class="work-summary">{desc} ({est}분)</span>'
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'<span class="work-summary">{repo}: {follow}</span>'
             f'</div>'
         )
 
+    # 분류: in_progress → 내일 이어할 작업, completed+follow_up → 후속 작업
+    continuing = [t for t in topic_followups if t.get("status") == "in_progress"]
+    action_needed = [t for t in topic_followups if t.get("status") != "in_progress"]
+
+    sections = []
+
+    if continuing:
+        items = "".join(_render_topic_item(t) for t in continuing)
+        sections.append(f'<div class="followup-group"><div class="followup-label">◦ 진행중 ({len(continuing)}건) — 내일 이어서</div>{items}</div>')
+
+    if action_needed:
+        items = "".join(_render_topic_item(t) for t in action_needed)
+        sections.append(f'<div class="followup-group"><div class="followup-label">→ 후속 작업 ({len(action_needed)}건)</div>{items}</div>')
+
+    if chain_followups:
+        items = ""
+        for f in chain_followups:
+            desc = _esc(f.get("description", ""))
+            days = f.get("days_open", 0)
+            repo = _esc(f.get("origin_repo") or "?")
+            items += f'<div class="work-item"><span class="work-summary">[{days}일] {repo} — {desc}</span></div>'
+        sections.append(f'<div class="followup-group"><div class="followup-label">🔗 미해소 체인 ({len(chain_followups)}건)</div>{items}</div>')
+
+    if pending_tasks:
+        items = ""
+        for t in pending_tasks:
+            desc = _esc(t.get("description", ""))
+            items += f'<div class="work-item"><span class="work-summary">{desc}</span></div>'
+        sections.append(f'<div class="followup-group"><div class="followup-label">📋 제안 태스크 ({len(pending_tasks)}건)</div>{items}</div>')
+
+    total = len(topic_followups) + len(chain_followups) + len(pending_tasks)
     return (
-        f'<div class="section"><h3>미해소 항목 ({len(followups)}건 follow-up, {len(tasks)}건 태스크)</h3>'
-        f'{"".join(items)}</div>'
+        f'<div class="section"><h3>미해소 항목 ({total}건)</h3>'
+        f'{"".join(sections)}</div>'
     )
 
 
@@ -413,6 +544,8 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 .status-badge{font-weight:700;font-size:13px;flex-shrink:0}
 .status-legend{font-size:11px;color:#888;margin-bottom:8px;display:flex;gap:12px}
 .follow-up{color:#F0C040;font-size:11px;font-style:italic}
+.followup-group{margin-bottom:10px}
+.followup-label{font-size:12px;font-weight:600;color:#AAA;margin-bottom:4px}
 .work-meta{font-size:10px;color:var(--mu);font-weight:400}
 .src-tag{flex-shrink:0;font-weight:600;font-size:10px;opacity:0.8}
 .sess-tag{flex-shrink:0;font-weight:600;font-size:11px}

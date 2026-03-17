@@ -17,7 +17,8 @@ _MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals, \
     query_exercises, query_symptoms, query_meals, query_check_ins, query_expiring_pantry, \
-    get_mistake_trends, get_coaching_entry, get_pending_tasks, get_open_followups
+    get_mistake_trends, get_coaching_entry, get_pending_tasks, get_open_followups, \
+    get_session_topics
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -26,7 +27,7 @@ from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGR
 KST = timezone(timedelta(hours=9))
 OVERWORK_THRESHOLD_HOURS = 8
 
-from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work, dedup_sessions
+from _helpers import find_project_memory, group_sessions_by_repo_branch, has_meaningful_branches, get_pending_work, dedup_sessions, group_topics_by_repo
 
 
 def get_today_data(conn, date_str: str) -> dict:
@@ -144,6 +145,7 @@ def get_today_data(conn, date_str: str) -> dict:
         "tag_breakdown": json.loads(stats["tag_breakdown"]) if stats["tag_breakdown"] else {},
         "repos": json.loads(stats["repos"]) if stats["repos"] else {},
         "sessions": sessions,
+        "topics": get_session_topics(conn, date_str),
         "token_total": sum(s.get("token_total") or 0 for s in sessions),
         "behavioral_signals": today_signals,
         "repeated_patterns": repeated,
@@ -185,33 +187,50 @@ def _fmt_session_line(s: dict, indent: str = "    ") -> str:
 
 
 def _build_repos_detail(data: dict) -> str | None:
-    """레포별 (> 브랜치별) 세션 상세."""
+    """레포별 (> 브랜치별) 세션 상세. topics 있으면 토픽 기준 표시."""
     sessions = data.get("sessions", [])
+    topics = data.get("topics", [])
     if not sessions:
         return None
 
     lines = ["📂 레포별:"]
-    for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(sessions):
-        sess_count = sum(len(bs) for bs in branch_groups.values())
-        parts = [f"{sess_count}세션"]
-        if total_dur > 0:
-            h, m = divmod(total_dur, 60)
-            parts.append(f"{h}시간 {m}분" if h else f"{m}분")
-        if total_tok > 0:
-            parts.append(f"{format_tokens(total_tok)} tokens")
-        lines.append(f"  ▸ {repo} ({', '.join(parts)})")
 
-        if has_meaningful_branches(branch_groups):
-            for branch, bsess in branch_groups.items():
-                if branch:
-                    lines.append(f"    📌 {branch}")
-                indent = "      " if branch else "    "
-                for s in bsess[:3]:
-                    lines.append(_fmt_session_line(s, indent))
-        else:
-            all_sess = list(branch_groups.values())[0] if branch_groups else []
-            for s in all_sess[:3]:
-                lines.append(_fmt_session_line(s))
+    # 토픽 있는 레포 + 토픽 없는 세션 모두 표시
+    topic_repos = group_topics_by_repo(topics) if topics else {}
+    topic_session_ids = {t.get("session_id") for t in topics} if topics else set()
+    untopiced = [s for s in sessions if s.get("session_id") not in topic_session_ids]
+
+    for repo, ts in sorted(topic_repos.items()):
+        lines.append(f"  ▸ {repo}")
+        for t in ts[:5]:
+            tag = t.get("tag", "")
+            summary = (t.get("summary") or "")[:80]
+            lines.append(f"    - [{tag}] {summary}")
+
+    if untopiced:
+        for repo, total_dur, total_tok, branch_groups in group_sessions_by_repo_branch(untopiced):
+            if repo in topic_repos:
+                continue
+            sess_count = sum(len(bs) for bs in branch_groups.values())
+            parts = [f"{sess_count}세션"]
+            if total_dur > 0:
+                h, m = divmod(total_dur, 60)
+                parts.append(f"{h}시간 {m}분" if h else f"{m}분")
+            if total_tok > 0:
+                parts.append(f"{format_tokens(total_tok)} tokens")
+            lines.append(f"  ▸ {repo} ({', '.join(parts)})")
+
+            if has_meaningful_branches(branch_groups):
+                for branch, bsess in branch_groups.items():
+                    if branch:
+                        lines.append(f"    📌 {branch}")
+                    indent = "      " if branch else "    "
+                    for s in bsess[:3]:
+                        lines.append(_fmt_session_line(s, indent))
+            else:
+                all_sess = list(branch_groups.values())[0] if branch_groups else []
+                for s in all_sess[:3]:
+                    lines.append(_fmt_session_line(s))
     return "\n".join(lines)
 
 

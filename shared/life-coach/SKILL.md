@@ -52,9 +52,23 @@ python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly_<DATE
 `references/coaching-prompts.md` 프레임으로 데이터를 해석하고 **두 가지 파일**을 생성한다.
 escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
 
-**3a. 세션 요약을 DB에 업데이트**
+**3a. 작업 정리**
 
-JSON 데이터의 각 세션을 확인하고, summary가 부정확하거나 topic 수준이면 `commands`, `user_messages`, `agent_messages`, `files_changed`, `branch`를 종합해서 구체적인 요약으로 업데이트한다.
+session_topics가 없으면 `work-digest` 스킬의 "정리해줘" 절차를 먼저 실행한다.
+상세 절차는 `work-digest` SKILL.md 참조.
+
+```bash
+# 1. segments 추출
+python3 {baseDir}/../../cc/work-digest/scripts/extract_day.py --date <DATE>
+# 2. LLM이 segments 보고 토픽 생성 (work-digest SKILL.md Step 2 참조)
+# 3. update-topics CLI로 저장
+python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-topics \
+    --session-id <SID> --date <DATE> --topics '<JSON>'
+```
+
+**3a-2. 세션 요약 + 상태 업데이트**
+
+update-topics를 실행한 세션도 update-summary로 대표 요약을 업데이트한다.
 
 **요약 품질 기준:**
 - **무엇을**(어떤 기능/모듈) **왜**(어떤 문제/목적) **결과**(뭐가 만들어졌거나 바뀌었는지) 중심
