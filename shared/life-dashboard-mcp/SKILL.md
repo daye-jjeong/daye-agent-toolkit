@@ -1,6 +1,6 @@
 ---
 name: life-dashboard-mcp
-description: 공유 SQLite DB MCP 서버 — 활동·건강·금융·식재료 통합 저장소. 독립 스킬 아님, 다른 스킬이 내부적으로 참조.
+description: 공유 SQLite DB MCP 서버 — 활동·건강·금융·식재료 통합 저장소
 user-invocable: false
 disable-model-invocation: true
 ---
@@ -93,13 +93,13 @@ import 패턴 및 activity_writer.py CLI 사용법은 `references/api-reference.
 
 | 도메인 | 테이블 | 역할 |
 |--------|--------|------|
-| **작업** | `sessions` | v2 세션 (source, session_id, date 복합 PK) |
+| **작업** | `sessions` | v2 세션 (source, session_id, date 복합 UNIQUE) |
 | | `activities` | v1 호환 (Codex 세션 로거, 레거시) |
 | | `session_content` | 세션 원문 (messages, files, commands, errors) |
 | | `daily_stats` | 일별 집계 캐시 |
 | | `signals` | v2 행동 신호 (mistake, pattern, decision) |
 | | `behavioral_signals` | v1 행동 신호 (레거시) |
-| | `coaching_entries` | 코칭 내용 (daily/weekly/monthly) |
+| | `coaching_entries` | 코칭 내용 (daily/weekly) |
 | | `task_suggestions` | 코칭에서 추출한 태스크 제안 |
 | | `followup_chains` | follow-up 추적 |
 | | `coach_state` | escalation_level 등 코치 상태 KV |

@@ -3,6 +3,9 @@
 `~/life-dashboard/data.db` 전체 테이블 컬럼 정의.
 원본: `schema.sql`
 
+> **공통 컬럼:** 모든 테이블에 `created_at TEXT DEFAULT (datetime('now', 'localtime'))` 존재 (아래 생략).
+> `daily_stats`, `coach_state`, `finance_investments`, `finance_loans`, `pantry_items`는 추가로 `updated_at` 보유.
+
 ---
 
 ## 작업 기록 (Work Tracking)
@@ -27,7 +30,7 @@
 | has_tests | INTEGER | 테스트 포함 여부 |
 | has_commits | INTEGER | 커밋 포함 여부 |
 | token_total | INTEGER | 토큰 사용량 |
-| status | TEXT | `in_progress` / `done` |
+| status | TEXT | `in_progress` / `completed` |
 | follow_up | TEXT | 후속 작업 |
 | raw_json | TEXT | 원본 JSON |
 
@@ -45,8 +48,8 @@
 | branch | TEXT | 브랜치 |
 | tag | TEXT | 작업 태그 |
 | summary | TEXT | 요약 |
-| summary_source | TEXT | `pending` / `auto` / `manual` |
-| status | TEXT | `in_progress` / `done` |
+| summary_source | TEXT | `pending` / `llm` / `manual` |
+| status | TEXT | `in_progress` / `completed` / `blocked` / `follow_up` |
 | follow_up | TEXT | 후속 작업 |
 | start_at | TEXT NOT NULL | 시작 시각 |
 | end_at | TEXT | 종료 시각 |
@@ -117,7 +120,7 @@
 |------|------|------|
 | id | INTEGER PK | 자동증가 |
 | date | TEXT NOT NULL | 날짜 |
-| period_type | TEXT NOT NULL | `daily` / `weekly` / `monthly` |
+| period_type | TEXT NOT NULL | `daily` / `weekly` |
 | content | TEXT NOT NULL | 코칭 본문 |
 | sections | TEXT NOT NULL | 섹션 구조 (JSON) |
 | escalation_level | INTEGER | 에스컬레이션 단계 |
@@ -135,7 +138,7 @@
 | priority | INTEGER | 우선순위 |
 | source_type | TEXT NOT NULL | 출처 유형 |
 | origin_session_id | TEXT | 원본 세션 |
-| status | TEXT | `pending` / `done` / `skipped` |
+| status | TEXT | `pending` / `done` / `skipped` / `deferred` |
 | resolved_date | TEXT | 해결일 |
 | resolved_session_id | TEXT | 해결 세션 |
 | resolution_method | TEXT | 해결 방법 |
@@ -312,6 +315,7 @@
 | interest_rate | REAL | 이자율 |
 | start_date | TEXT | 시작일 |
 | end_date | TEXT | 만기일 |
+| source | TEXT | 데이터 출처 (`banksalad` 기본) |
 
 **Unique:** `(loan_name, institution, principal)`
 
