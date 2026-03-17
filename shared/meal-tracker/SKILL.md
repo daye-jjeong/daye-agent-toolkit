@@ -1,13 +1,13 @@
 ---
 name: meal-tracker
-description: GLP-1 약물 기반 식사 기록 + 영양 모니터링 — SQLite 기록
+description: 식사 기록 + 영양 모니터링 — SQLite 기록
 version: 1.1.0
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Meal Tracker
 
-마운자로 5.0 복용 중 식사 모니터링. DB: `~/life-dashboard/data.db` → `health_meals` 테이블.
+식사 기록 + 영양 모니터링. DB: `~/life-dashboard/data.db` → `health_meals` 테이블.
 식사 데이터는 life-coach 일일 코칭에서 건강 섹션으로 통합된다.
 
 ## 식사 기록
