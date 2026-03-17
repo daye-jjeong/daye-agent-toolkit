@@ -27,28 +27,58 @@ from _helpers import (
 
 # ── Section builders ──────────────────────────────────────────────────────────
 
+def _calc_actual_work_hours(topics: list[dict], sessions: list[dict]) -> float:
+    """토픽/세션의 시간 구간을 합쳐서 겹치지 않는 실제 작업 시간(h) 계산."""
+    intervals = []
+    for t in topics:
+        sa, ea = t.get("start_at", ""), t.get("end_at", "")
+        if sa and ea and len(sa) >= 16 and len(ea) >= 16:
+            try:
+                s = int(sa[11:13]) * 60 + int(sa[14:16])
+                e = int(ea[11:13]) * 60 + int(ea[14:16])
+                if e > s:
+                    intervals.append((s, e))
+            except (ValueError, IndexError):
+                pass
+    if not intervals:
+        # 폴백: sessions 기반
+        for s in sessions:
+            sa, ea = s.get("start_at", ""), s.get("end_at", "")
+            dur = s.get("duration_min", 0) or 0
+            if sa and len(sa) >= 16 and dur > 0:
+                try:
+                    start = int(sa[11:13]) * 60 + int(sa[14:16])
+                    intervals.append((start, start + dur))
+                except (ValueError, IndexError):
+                    pass
+    if not intervals:
+        return 0.0
+    # 겹치는 구간 병합
+    intervals.sort()
+    merged = [intervals[0]]
+    for s, e in intervals[1:]:
+        if s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+    total_min = sum(e - s for s, e in merged)
+    return round(total_min / 60, 1)
+
+
 def _build_stats_card(data: dict) -> str:
     sc = data.get("session_count", 0)
-    wh = data.get("work_hours", 0)
     tok = data.get("token_total", 0)
     first = data.get("first_session", "")
     last = data.get("last_session_end", "")
+    topics = data.get("topics", [])
+    sessions = data.get("sessions", [])
 
-    # wall clock span 계산
-    span_str = ""
-    if first and last:
-        try:
-            fh, fm = int(first.split(":")[0]), int(first.split(":")[1])
-            lh, lm = int(last.split(":")[0]), int(last.split(":")[1])
-            span_h = (lh * 60 + lm - fh * 60 - fm) / 60
-            span_str = f"{span_h:.1f}h"
-        except (ValueError, IndexError):
-            span_str = ""
+    actual_hours = _calc_actual_work_hours(topics, sessions)
 
     items = [
         ("세션", str(sc)),
-        ("총 시간", f"{first}~{last} ({span_str})" if span_str else f"{wh}h"),
-        ("활동", f"{wh}h"),
+        ("작업시간", f"{first}~{last}" if first and last else "—"),
+        ("활동", f"{actual_hours}h"),
         ("토큰", f"{_fmt_tokens(tok)}"),
     ]
 
