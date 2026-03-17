@@ -60,13 +60,8 @@ def prep(sessions, topics=None):
                 else:
                     start_min = cursor_min
 
-                # duration: end_at이 있으면 wall clock, 없으면 active time
-                topic_end_at = t.get("end_at", "")
-                if topic_end_at and len(topic_end_at) >= 16:
-                    end_min = _hhmm_to_min(topic_end_at[11:16])
-                    dur = max(1, end_min - start_min)
-                else:
-                    dur = t.get("duration_estimate_min") or 30
+                # duration: active time (idle 제외). wall clock은 start_at~end_at으로 별도 보존.
+                dur = t.get("duration_estimate_min") or 30
 
                 items.append({
                     "repo":     (t.get("repo") or "?").split("/")[-1],

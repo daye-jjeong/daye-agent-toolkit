@@ -126,14 +126,16 @@ def get_active_sessions() -> list[dict]:
             # -Users-dayejeong-dy-minions-squad → /Users/dayejeong/dy-minions-squad
             project_hash = project_dir.name
             # 알려진 사용자 prefix 제거 후 경로 복원
-            known_prefix = "-Users-dayejeong-"
-            if project_hash.startswith(known_prefix):
-                remainder = project_hash[len(known_prefix):]
-                if remainder.startswith("git-workplace-"):
-                    repo_name = remainder[len("git-workplace-"):]
-                    cwd = f"/Users/dayejeong/git_workplace/{repo_name}"
+            home = str(Path.home())
+            home_prefix = "-" + home.lstrip("/").replace("/", "-") + "-"
+            if project_hash.startswith(home_prefix):
+                remainder = project_hash[len(home_prefix):]
+                if remainder.startswith("git-workplace-") or remainder.startswith("git_workplace-"):
+                    repo_name = remainder.split("-", 1)[1] if "-" in remainder[len("git-workplace"):] else remainder
+                    repo_name = remainder[len("git-workplace-"):] if remainder.startswith("git-workplace-") else remainder[len("git_workplace-"):]
+                    cwd = f"{home}/git_workplace/{repo_name}"
                 else:
-                    cwd = f"/Users/dayejeong/{remainder}"
+                    cwd = f"{home}/{remainder}"
             else:
                 cwd = "/" + project_hash.lstrip("-").replace("-", "/")
 

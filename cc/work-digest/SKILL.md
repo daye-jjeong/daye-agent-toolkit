@@ -1,87 +1,125 @@
 ---
 name: work-digest
-description: 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림
+description: 일일 작업 다이제스트 — CC 세션 자동 기록 + "정리해줘"로 작업 단위 분해. 사용자가 "정리해줘", "오늘 뭐 했지?", "작업 정리", "요약해줘" 등을 요청할 때 사용.
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Work Digest Skill
 
-**Version:** 2.0.0 | **Updated:** 2026-03-06 | **Status:** Active
+CC 세션 로그를 자동 기록하고, 사용자 요청 시 작업 단위로 분해+요약한다.
 
-Claude Code 세션 로그를 자동 기록하고, LLM 요약 + 작업 유형 태깅으로 일일/주간 다이제스트를 생성한다.
-텔레그램 알림 + 프로젝트별 작업 컨텍스트 피드백 루프 포함.
-
-## File Structure
+## 구조
 
 ```
 work-digest/
 ├── SKILL.md
-├── .claude-skill
-├── telegram.conf            # Telegram 설정 (단일 소스)
 ├── scripts/
-│   ├── session_logger.py    # CC 세션 종료 시 LLM 요약 + SQLite 직접 기록 + 알림
-│   ├── active_session_scanner.py  # 열린 CC 세션 탐색 + SQLite 기록
-│   └── notify.sh            # permission/idle/error 알림 (stop 제외)
-└── references/
-    └── prompt-template.md
+│   ├── session_logger.py         # SessionEnd hook — 세션 메타+원본 자동 기록 (LLM 없음)
+│   ├── active_session_scanner.py # 열린 세션 스캔 + 기록
+│   ├── extract_session.py        # .jsonl → segments 추출 (결정적)
+│   └── extract_day.py            # 하루치 전체 세션 segments 추출
 ```
 
-## Workflow
+## 자동 기록 (LLM 없음, 항상 동작)
 
-### Pipeline 1 — Session Logger (CC Hook: SessionEnd/PreCompact)
-
-```
-CC 세션 종료 (SessionEnd/PreCompact hook)
-  → transcript에서 user/assistant 대화 추출
-  → 날짜별 분할 (parse_transcript_by_date)
-  → SQLite에 직접 기록 (activity_writer.record_activities)
-  → SessionEnd: claude sonnet으로 [태그] + 요약 생성 → SQLite 업데이트
-  → 텔레그램으로 세션 요약 알림 전송
-```
-
-태그 종류: 코딩, 디버깅, 리서치, 리뷰, ops, 설정, 문서, 기타
-
-### Pipeline 2 — Active Session Scanner
+### SessionEnd hook
 
 ```
-daily_coach.py 실행 시 (또는 수동)
-  → ~/.claude/sessions/*.json에서 열린 세션 탐색
-  → 각 세션의 transcript를 날짜별로 분할
-  → SQLite에 직접 기록 (요약 없이, topic만)
+세션 종료 → session_logger.py
+  → parse_transcript_by_date(): 트랜스크립트를 날짜별 분할
+  → sessions INSERT (start_at, end_at, duration_min, tokens, repo)
+  → session_content INSERT (user_messages, files_changed, commands)
+  → daily_stats 갱신
+  → behavioral_signals 추출 (LLM subprocess — 결정/실수/패턴)
+  → 텔레그램 알림
 ```
 
-### Pipeline 3 — Daily/Weekly Coach (life-coach 스킬)
-
-일일/주간 코칭은 `life-coach` 스킬이 담당. work-digest는 데이터 수집만.
-
-## Telegram 설정
-
-`telegram.conf`에서 모든 스크립트가 공통 참조:
-- `BOT_TOKEN`, `CHAT_ID`: 필수
-- `THREAD_SESSION`, `THREAD_DAILY`, `THREAD_WEEKLY`: Group Topics 분리 (선택)
-
-## 피드백 루프
+### Scanner
 
 ```
-세션 → 요약 → SQLite → daily-coach → work-context.md
-                                              ↓
-다음 세션 시작 ← memory/work-context.md ←────┘
+cron 또는 수동 → active_session_scanner.py
+  → 열린 세션 탐색 (sessions dir + projects dir)
+  → sessions + session_content 갱신
 ```
 
-각 프로젝트의 `~/.claude/projects/{project}/memory/work-context.md`에 기록.
-글로벌 규칙 `work-context-loop.md`가 세션 시작 시 참조를 안내.
+## "정리해줘" — 작업 단위 분해
 
-## Scripts
+사용자가 "정리해줘", "오늘 뭐 했지?", "작업 정리해줘" 등을 요청할 때 실행.
 
-| Script | Tier | Purpose |
-|--------|------|---------|
-| `session_logger.py` | 2 (LLM) | 세션 요약 + 태깅 + SQLite 기록 + 텔레그램 |
-| `active_session_scanner.py` | 1 (0 tokens) | 열린 세션 탐색 + SQLite 기록 |
-| `notify.sh` | 1 (0 tokens) | permission/idle/error 알림 |
+**원칙: 코드가 시간, LLM이 내용.**
 
-## Token Usage
+### Step 1: 추출 (코드, 결정적)
 
-- Session Logger (haiku): ~500 tokens/세션
-- Daily Digest (haiku): ~300-500 tokens/일
-- Weekly Digest (haiku): ~500-800 tokens/주
-- claude CLI 미가용 시: 0 tokens (템플릿 fallback)
+```bash
+python3 {baseDir}/scripts/extract_day.py --date <DATE>
+```
+
+출력: 세션별 segments (시간 경계 확정, idle gap 기준 분리, 각 구간의 user messages + file edits)
+
+### Step 2: 토픽 생성 (LLM)
+
+extract_day.py 출력의 segments를 보고 각 구간에 대해:
+
+1. **segment = topic 1:1 원칙**:
+   - segment를 병합하지 마라. 각 segment가 하나의 토픽.
+   - 시간은 segment에서 온 값만 사용. 절대 추정하지 마라.
+   - segment 사이 gap = idle. 이 gap을 없애는 병합 금지.
+
+2. **토픽 = 기능 단위** (활동 유형이 아님):
+   - 같은 기능의 설계→구현→리뷰가 하나의 segment에 있으면 하나의 토픽
+   - 나쁜: [설계] spec / [코딩] 구현 / [리뷰] PR review (활동 유형별)
+   - 좋은: pipeline-redesign — spec + 구현 + 리뷰 완료 (기능 단위)
+
+3. **tag는 실제 활동과 일치**:
+   - 코드 작성했으면 "코딩", 상태 확인만 했으면 "ops", 설계 논의했으면 "설계"
+   - 메시지 2개로 확인만 했는데 tag="코딩" 금지
+
+4. **짧은 segment(≤3분)**:
+   - 실제 활동이 짧았던 것. 억지로 늘리지 마라.
+   - summary는 실제로 한 것만. 안 한 걸 적지 마라.
+
+5. **하나의 segment에 여러 작업이 섞여있으면**:
+   - segment 시간 내에서 분리하지 않는다 (시간 추정 금지)
+   - 대신 summary에 (1)(2)(3)으로 순서 표기
+
+6. **각 토픽에 채울 것**:
+   - `tag`: 실제 활동과 일치
+   - `summary`: 무엇을/왜/결과/의사결정. "다음에 뭘 해야 하는지" 판단 가능한 수준
+   - `status`: completed / in_progress / blocked / follow_up
+   - `follow_up`: 후속 작업 (없으면 생략)
+   - `start_at`, `end_at`: segment에서 온 값 그대로
+   - `duration_estimate_min`: segment의 duration_min 그대로
+
+7. **반복 패턴/문제는 명시적 기록** (예: "rule 있는데 에이전트가 반복 위반 — 3번째")
+
+8. **signals 동시 생성**: 각 토픽을 만들면서 해당 구간의 의사결정, 실수, 패턴도 같이 추출.
+
+### Step 3: 저장
+
+```bash
+# 각 세션별로 update-topics 실행
+python3 {baseDir}/../../shared/life-dashboard-mcp/activity_writer.py update-topics \
+    --session-id <SID> --date <DATE> \
+    --topics '<JSON array>'
+```
+
+### Step 4: 검증
+
+토픽 저장 후 반드시 확인:
+- segment 수 = topic 수 (1:1)
+- 모든 start_at/end_at/duration이 segment 값과 일치
+- tag가 실제 활동과 일치 (메시지 내용 대조)
+
+## 데이터 흐름
+
+```
+트랜스크립트 .jsonl (CC 실시간)
+  ↓ SessionEnd hook
+sessions + session_content + daily_stats + signals (자동)
+  ↓ "정리해줘" (사용자 트리거)
+extract_day.py → segments (결정적)
+  ↓ LLM
+session_topics (기능 단위, 정확한 시간)
+  ↓ life-coach
+daily_report + coaching
+```

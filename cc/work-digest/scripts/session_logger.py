@@ -167,98 +167,6 @@ def extract_user_messages(transcript_path: str) -> str:
     return _truncate_text("\n---\n".join(parts))
 
 
-def summarize_session(conversation: str, repo: str) -> list[dict] | None:
-    """claude CLI로 세션 토픽 분해 + 요약. 실패 시 None.
-
-    Returns: [{"tag": "코딩", "summary": "...", "repo": "..."}, ...] or None
-    """
-    if not conversation.strip():
-        return None
-    tags_str = ", ".join(WORK_TAGS)
-    prompt = (
-        f"레포: {repo}\n\n"
-        f"다음은 Claude Code 세션의 대화 내용이다.\n\n"
-        f"{conversation}\n\n"
-        "이 세션에서 수행한 작업을 **기능/작업 단위**별로 분해하라.\n"
-        "하나의 기능만 작업했으면 1개, 여러 기능을 오갔으면 각각 분리.\n\n"
-        "토픽 = 기능 단위 (activity type이 아님):\n"
-        "- 같은 기능의 설계→구현→리뷰는 하나의 토픽으로 합침\n"
-        "- 다른 레포/worktree로 전환 → 별도 토픽\n"
-        "- 같은 레포에서 명확히 다른 기능 작업 → 별도 토픽\n"
-        "- 나쁜 분해: [설계] spec 작성 / [코딩] 구현 / [리뷰] PR review (활동 유형별 분해)\n"
-        "- 좋은 분해: pipeline-redesign — spec + 구현 + 리뷰 완료 (기능 단위)\n\n"
-        f"각 토픽의 태그 (가장 비중 큰 활동 기준): {tags_str}\n\n"
-        "요약 기준:\n"
-        "- 기능명 — 무엇을 왜 했고, 결과는 무엇인지\n"
-        "- worktree/브랜치명이 있으면 포함\n"
-        "- 나쁜 예: '설계 논의', 'PR 리뷰', '디버깅'\n"
-        "- 좋은 예: 'pipeline-redesign — 3계층 분리 아키텍처 설계 + 구현 + 리뷰 완료'\n\n"
-        "각 토픽의 status:\n"
-        "- completed: 작업 완료 (커밋, 머지 등)\n"
-        "- in_progress: 아직 진행중\n"
-        "- follow_up: 후속 작업 필요 (follow_up 필드에 내용 기술)\n"
-        "- blocked: 외부 의존성으로 막힘\n\n"
-        "JSON 배열로만 답하라. 다른 텍스트 금지:\n"
-        '[{"tag": "태그", "summary": "기능명 — 상세 요약", "repo": "레포명", "status": "completed", "follow_up": "후속 작업 (없으면 null)"}]'
-    )
-    try:
-        result = subprocess.run(
-            ["claude", "-p", "--model", "sonnet", "--no-session-persistence"],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=SUMMARY_TIMEOUT_SEC,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return _parse_topics_response(result.stdout.strip(), repo)
-    except subprocess.TimeoutExpired:
-        print(f"[session_logger] summarize_session timed out ({SUMMARY_TIMEOUT_SEC}s)", file=sys.stderr)
-    except FileNotFoundError:
-        print("[session_logger] 'claude' CLI not found on PATH", file=sys.stderr)
-    except Exception as e:
-        print(f"[session_logger] summarize_session failed: {type(e).__name__}: {e}", file=sys.stderr)
-    return None
-
-
-def _parse_topics_response(raw: str, fallback_repo: str) -> list[dict] | None:
-    """JSON 토픽 배열 파싱 + 검증. 실패 시 기존 형식 폴백."""
-    json_match = re.search(r'\[.*\]', raw, re.DOTALL)
-    if not json_match:
-        print("[session_logger] _parse_topics_response: no JSON array, trying legacy format", file=sys.stderr)
-        old = _parse_summary_response(raw)
-        if old:
-            return [{"tag": old.get("tag", "기타"), "summary": old["text"], "repo": fallback_repo}]
-        return None
-    try:
-        topics = json.loads(json_match.group())
-    except json.JSONDecodeError as e:
-        print(f"[session_logger] _parse_topics_response JSON parse failed: {e}", file=sys.stderr)
-        return None
-    if not isinstance(topics, list) or not topics:
-        return None
-    valid = []
-    for t in topics[:10]:
-        if not isinstance(t, dict) or not t.get("summary"):
-            continue
-        tag = t.get("tag", "기타")
-        if tag not in WORK_TAGS:
-            tag = "기타"
-        topic = {
-            "tag": tag,
-            "summary": t["summary"],
-            "repo": t.get("repo", fallback_repo),
-        }
-        if t.get("status"):
-            topic["status"] = t["status"]
-        if t.get("follow_up"):
-            topic["follow_up"] = t["follow_up"]
-        valid.append(topic)
-    skipped = len(topics[:10]) - len(valid)
-    if skipped:
-        print(f"[session_logger] _parse_topics_response: skipped {skipped} invalid topics", file=sys.stderr)
-    return valid if valid else None
-
-
 _TAG_KEYWORDS = {
     "디버깅": ["디버깅", "버그", "에러", "fix", "debug", "원인 파악", "원인 분석"],
     "코딩": ["구현", "생성", "추가", "작성", "신규", "feat", "implement"],
@@ -538,195 +446,6 @@ def parse_transcript(transcript_path: str) -> dict:
     }
 
 
-def _extract_work_unit(file_path: str) -> tuple[str, str]:
-    """파일 경로에서 (repo, work_unit) 추출.
-
-    work_unit = worktree 이름이 있으면 worktree명, 없으면 repo명.
-    다양한 경로 패턴 지원:
-      .claude/worktrees/pipeline-redesign/... → ("daye-agent-toolkit", "pipeline-redesign")
-      /git_workplace/cube-backend/... → ("cube-backend", "cube-backend")
-      ~/.openclaw/workspace-mingming/... → ("openclaw", "workspace-mingming")
-      ~/dy-minions-squad-fix-.../... → ("dy-minions-squad-fix-...", "dy-minions-squad-fix-...")
-      ~/.claude/projects/-Users-...-dy-minions-squad/... → ("dy-minions-squad", "dy-minions-squad")
-    """
-    parts = file_path.split("/")
-
-    # worktree 경로: .claude/worktrees/<name>/...
-    for i, p in enumerate(parts):
-        if p == "worktrees" and i + 1 < len(parts):
-            wt_name = parts[i + 1]
-            repo = ""
-            for j, q in enumerate(parts):
-                if q == "git_workplace" and j + 1 < len(parts):
-                    repo = parts[j + 1]
-                    break
-            return (repo or wt_name, wt_name)
-
-    # 일반 경로: git_workplace/<repo>/...
-    for i, p in enumerate(parts):
-        if p == "git_workplace" and i + 1 < len(parts):
-            return (parts[i + 1], parts[i + 1])
-
-    # .openclaw/workspace-<name>/...
-    for i, p in enumerate(parts):
-        if p == ".openclaw" and i + 1 < len(parts):
-            return ("openclaw", parts[i + 1])
-
-    # .claude/projects/-Users-...-<repo>/...
-    for i, p in enumerate(parts):
-        if p == "projects" and i + 1 < len(parts) and parts[i + 1].startswith("-"):
-            project_hash = parts[i + 1]
-            # 마지막 하이픈 구분 단어들에서 레포명 추출
-            segments = project_hash.split("-")
-            # -Users-dayejeong-git-workplace-daye-agent-toolkit → daye-agent-toolkit
-            # -Users-dayejeong-dy-minions-squad → dy-minions-squad
-            if "git" in segments and "workplace" in segments:
-                idx = segments.index("workplace")
-                repo = "-".join(segments[idx + 1:])
-            else:
-                # Users, dayejeong 등 제거 후 나머지
-                repo = "-".join(segments[3:]) if len(segments) > 3 else project_hash
-            return (repo, repo) if repo else ("", "")
-
-    # home directory 직접 경로: ~/some-project-name/...
-    home = str(Path.home())
-    if file_path.startswith(home):
-        rel = file_path[len(home):].strip("/")
-        top_dir = rel.split("/")[0] if "/" in rel else rel
-        if top_dir and not top_dir.startswith("."):
-            return (top_dir, top_dir)
-
-    return ("", "")
-
-
-def _compute_topic_segments(file_timeline: list[tuple], all_timestamps: list, idle_threshold: int = 300) -> list[dict]:
-    """파일 작업의 work_unit 전환 + 메시지 타임스탬프 → 토픽 구간 목록.
-
-    Returns: [{"work_unit": str, "repo": str, "start_at": str, "end_at": str, "duration_min": int}, ...]
-    각 구간은 같은 work_unit에서 연속 작업한 시간. idle gap으로 분리.
-    """
-    if not all_timestamps:
-        return []
-
-    # 1. 파일 작업에서 (timestamp, work_unit, repo) 이벤트 수집
-    file_events = []
-    for ts, fp in sorted(file_timeline):
-        repo, wu = _extract_work_unit(fp)
-        if wu:
-            file_events.append((ts, wu, repo))
-
-    # 2. 모든 타임스탬프를 시간순 정렬하고, 각 시점의 "현재 work_unit" 결정
-    # file 이벤트가 있는 시점에서 work_unit이 바뀜. 없으면 이전 work_unit 유지.
-    sorted_all = sorted(all_timestamps)
-    file_idx = 0
-    sorted_file = sorted(file_events)
-
-    current_wu = ""
-    current_repo = ""
-    segments = []
-    seg_start = sorted_all[0]
-    seg_end = sorted_all[0]
-
-    for ts in sorted_all:
-        # 이 시점까지의 file 이벤트 처리 → work_unit 업데이트
-        while file_idx < len(sorted_file) and sorted_file[file_idx][0] <= ts:
-            _, wu, repo = sorted_file[file_idx]
-            if wu != current_wu and current_wu:
-                # work_unit 전환 → 이전 구간 저장
-                dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
-                segments.append({
-                    "work_unit": current_wu, "repo": current_repo,
-                    "start_at": seg_start.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-                    "end_at": seg_end.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-                    "duration_min": dur,
-                })
-                seg_start = ts
-            current_wu = wu
-            current_repo = repo
-            file_idx += 1
-
-        # idle gap 체크
-        gap = (ts - seg_end).total_seconds()
-        if gap > idle_threshold and current_wu:
-            # idle gap → 이전 구간 저장, 새 구간 시작
-            dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
-            segments.append({
-                "work_unit": current_wu, "repo": current_repo,
-                "start_at": seg_start.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-                "end_at": seg_end.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-                "duration_min": dur,
-            })
-            seg_start = ts
-
-        seg_end = ts
-
-    # 마지막 구간
-    if current_wu:
-        dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
-        segments.append({
-            "work_unit": current_wu, "repo": current_repo,
-            "start_at": seg_start.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-            "end_at": seg_end.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-            "duration_min": dur,
-        })
-    elif sorted_all:
-        # file 작업 없는 세션 → 전체를 하나의 구간으로
-        dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
-        segments.append({
-            "work_unit": "", "repo": "",
-            "start_at": seg_start.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-            "end_at": seg_end.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-            "duration_min": dur,
-        })
-
-    # 같은 work_unit의 연속 구간 병합 + 2분 이하 잡음 흡수
-    merged = []
-    for seg in segments:
-        if merged and merged[-1]["work_unit"] == seg["work_unit"]:
-            merged[-1]["end_at"] = seg["end_at"]
-            merged[-1]["duration_min"] += seg["duration_min"]
-        elif seg["duration_min"] <= 2 and merged:
-            # 2분 이하 구간 → 이전 구간에 흡수
-            merged[-1]["end_at"] = seg["end_at"]
-            merged[-1]["duration_min"] += seg["duration_min"]
-        else:
-            merged.append(dict(seg))
-
-    return merged
-
-
-def _compute_work_unit_time_ranges(file_timeline: list[tuple]) -> dict[str, dict]:
-    """file_timeline [(timestamp, path), ...] → {work_unit: {start_at, end_at, duration_min, repo}}
-
-    work_unit = worktree 이름 또는 repo 이름. 기능 단위별 실제 작업 시간.
-    """
-    if not file_timeline:
-        return {}
-
-    unit_events: dict[str, list] = {}
-    unit_repo: dict[str, str] = {}
-    for ts, fp in sorted(file_timeline):
-        repo, work_unit = _extract_work_unit(fp)
-        if work_unit:
-            unit_events.setdefault(work_unit, []).append(ts)
-            unit_repo[work_unit] = repo
-
-    result = {}
-    for unit, timestamps in unit_events.items():
-        if not timestamps:
-            continue
-        first = min(timestamps)
-        last = max(timestamps)
-        dur = max(1, int((last - first).total_seconds() / 60))
-        result[unit] = {
-            "start_at": first.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-            "end_at": last.strftime("%Y-%m-%dT%H:%M:%S+09:00"),
-            "duration_min": dur,
-            "repo": unit_repo[unit],
-        }
-    return result
-
-
 def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = None) -> dict[str, dict]:
     """Parse transcript and split by KST date.
 
@@ -765,7 +484,6 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                 if entry_date not in by_date:
                     by_date[entry_date] = {
                         "files": set(),
-                        "file_timeline": [],  # [(timestamp, file_path), ...] 시간순 파일 작업
                         "commands": [],
                         "errors": [],
                         "topic": "",
@@ -842,8 +560,6 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                             fp = inp.get("file_path", "")
                             if fp:
                                 acc["files"].add(fp)
-                                if entry_ts:
-                                    acc["file_timeline"].append((entry_ts, fp))
                         if tool == "Bash":
                             cmd = inp.get("command", "")
                             if cmd:
@@ -878,38 +594,6 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
         end_kst = max(timestamps) if timestamps else None
         end_time_str = end_kst.strftime("%H:%M") if end_kst else None
 
-        # file_timeline → work_unit_time_ranges + topic_segments
-        work_unit_time_ranges = _compute_work_unit_time_ranges(acc.get("file_timeline", []))
-        topic_segments = _compute_topic_segments(
-            acc.get("file_timeline", []), timestamps, IDLE_THRESHOLD_SEC
-        )
-
-        # 활동 구간 (idle gap > 5분 기준으로 분리)
-        activity_segments = []
-        if len(timestamps) >= 2:
-            sorted_ts = sorted(timestamps)
-            seg_start = sorted_ts[0]
-            seg_end = sorted_ts[0]
-            for i in range(1, len(sorted_ts)):
-                gap = (sorted_ts[i] - sorted_ts[i - 1]).total_seconds()
-                if gap > IDLE_THRESHOLD_SEC:
-                    # 이전 구간 저장
-                    dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
-                    activity_segments.append({
-                        "start": seg_start.strftime("%H:%M"),
-                        "end": seg_end.strftime("%H:%M"),
-                        "duration_min": dur,
-                    })
-                    seg_start = sorted_ts[i]
-                seg_end = sorted_ts[i]
-            # 마지막 구간
-            dur = max(1, int((seg_end - seg_start).total_seconds() / 60))
-            activity_segments.append({
-                "start": seg_start.strftime("%H:%M"),
-                "end": seg_end.strftime("%H:%M"),
-                "duration_min": dur,
-            })
-
         result[date_str] = {
             "files": sorted(acc["files"]),
             "commands": acc["commands"][:10],
@@ -921,9 +605,6 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
             "end_time": end_time_str,
             "start_kst": start_kst,
             "has_commits": acc["has_commits"],
-            "work_unit_time_ranges": work_unit_time_ranges,
-            "topic_segments": topic_segments,
-            "activity_segments": activity_segments,
             "tokens": {
                 "input": acc["token_input"],
                 "output": acc["token_output"],
@@ -995,49 +676,23 @@ def main():
 
     repo, _ = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
 
-    # SessionEnd: LLM 요약 + 행동 추출 (세션 전체 대상, 1회)
+    # SessionEnd: 행동 추출 + DB 갱신 + 텔레그램 (세션 전체 대상, 1회)
     if event == "SessionEnd":
-        from concurrent.futures import ThreadPoolExecutor
-
-        conversation = extract_conversation(transcript_path)
         user_msgs = extract_user_messages(transcript_path)
-        summary = None
         signals = None
-        legacy_summary = None
 
         try:
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                summary_future = pool.submit(summarize_session, conversation, repo)
-                signals_future = pool.submit(extract_behavioral_signals, user_msgs, repo)
-
-                try:
-                    summary = summary_future.result(timeout=SUMMARY_TIMEOUT_SEC + 10)
-                except Exception as e:
-                    print(f"[session_logger] summary failed: {e}", file=sys.stderr)
-
-                try:
-                    signals = signals_future.result(timeout=BEHAVIOR_TIMEOUT_SEC + 10)
-                except Exception as e:
-                    print(f"[session_logger] signals failed: {e}", file=sys.stderr)
+            signals = extract_behavioral_signals(user_msgs, repo)
         except Exception as e:
-            print(f"[session_logger] ThreadPool failed: {e}", file=sys.stderr)
+            print(f"[session_logger] signals failed: {e}", file=sys.stderr)
 
-        if summary or signals:
+        if signals:
             _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
-            # summarize_session()은 항상 list[dict] 리턴 (새 토픽 형식)
-            topics = summary if isinstance(summary, list) else None
-            # topics가 있으면 legacy summary dict 파생 (텔레그램 등 하위 호환)
-            if topics:
-                first = topics[0]
-                legacy_summary = {"tag": first["tag"], "text": first["summary"]}
-            else:
-                legacy_summary = summary if isinstance(summary, dict) else None
             record_sessions("cc", session_id, by_date, repo, branch,
-                           summary=legacy_summary, topics=topics,
                            behavioral_signals=signals,
                            is_session_end=True)
         else:
-            # Layer 2 실패 → SessionEnd이므로 최소한 status를 completed로
+            # 행동 추출 실패 → SessionEnd이므로 최소한 status를 completed로
             try:
                 from db import get_conn as _get_conn
                 _conn = _get_conn()
@@ -1057,7 +712,7 @@ def main():
         # 텔레그램 전송
         last_data = by_date[max(by_date.keys())]
         total_duration = sum(d.get("duration_min") or 0 for d in by_date.values())
-        send_session_telegram(last_data, repo, total_duration or None, legacy_summary)
+        send_session_telegram(last_data, repo, total_duration or None)
 
 
 if __name__ == "__main__":

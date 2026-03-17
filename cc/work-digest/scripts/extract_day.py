@@ -16,7 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_session import extract
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"
+sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn
 
 KST = timezone(timedelta(hours=9))
@@ -56,6 +57,9 @@ def merge_segments(segments):
 
 def find_transcripts(date_str: str) -> list[dict]:
     """해당 날짜의 세션 목록 + transcript 경로 수집."""
+    projects_dir = Path.home() / ".claude" / "projects"
+
+    # DB에서 세션 목록
     conn = get_conn()
     rows = conn.execute(
         "SELECT session_id, repo, start_at, end_at, duration_min FROM sessions WHERE date = ? ORDER BY start_at",
@@ -63,28 +67,61 @@ def find_transcripts(date_str: str) -> list[dict]:
     ).fetchall()
     conn.close()
 
-    projects_dir = Path.home() / ".claude" / "projects"
+    seen_sids = set()
     results = []
+
     for r in rows:
         sid = r["session_id"]
-        # transcript 찾기
-        transcript = None
-        for project_dir in projects_dir.iterdir():
-            if not project_dir.is_dir():
-                continue
-            candidate = project_dir / f"{sid}.jsonl"
-            if candidate.exists():
-                transcript = str(candidate)
-                break
+        seen_sids.add(sid)
+        transcript = _find_transcript(projects_dir, sid)
         results.append({
             "session_id": sid,
             "repo": r["repo"],
-            "start_at": r["start_at"],
-            "end_at": r["end_at"],
-            "duration_min": r["duration_min"],
             "transcript": transcript,
         })
+
+    # DB에 없는 열린 세션 — .jsonl 직접 탐색
+    home_prefix = str(Path.home()).replace("/", "-").lstrip("-")
+    for project_dir in projects_dir.iterdir():
+        if not project_dir.is_dir():
+            continue
+        for jsonl in project_dir.glob("*.jsonl"):
+            sid = jsonl.stem
+            if sid in seen_sids:
+                continue
+            try:
+                stat = jsonl.stat()
+                mtime = datetime.fromtimestamp(stat.st_mtime, KST)
+                if mtime.strftime("%Y-%m-%d") != date_str or stat.st_size < 10000:
+                    continue
+            except OSError:
+                continue
+            # project hash에서 repo 추출
+            ph = project_dir.name
+            user_prefix = f"-{home_prefix}-"
+            if ph.startswith(user_prefix):
+                remainder = ph[len(user_prefix):]
+                repo = remainder.replace("git-workplace-", "") if "git-workplace-" in remainder else remainder
+            else:
+                repo = ph
+            seen_sids.add(sid)
+            results.append({
+                "session_id": sid,
+                "repo": repo,
+                "transcript": str(jsonl),
+            })
+
     return results
+
+
+def _find_transcript(projects_dir: Path, session_id: str) -> str | None:
+    for project_dir in projects_dir.iterdir():
+        if not project_dir.is_dir():
+            continue
+        candidate = project_dir / f"{session_id}.jsonl"
+        if candidate.exists():
+            return str(candidate)
+    return None
 
 
 def main():
@@ -103,10 +140,10 @@ def main():
         if not merged:
             continue
 
-        # messages를 요약용으로 정리 (첫 메시지 + 파일 목록만)
+        # messages를 요약용으로 정리
         for seg in merged:
-            seg["message_texts"] = [m["text"] for m in seg["messages"][:10]]
-            seg["file_names"] = list(dict.fromkeys(f["file"] for f in seg["file_edits"]))[:10]
+            seg["message_texts"] = [m["text"] for m in seg["messages"][:20]]
+            seg["file_names"] = list(dict.fromkeys(f["file"] for f in seg["file_edits"]))[:15]
             del seg["messages"]
             del seg["file_edits"]
 

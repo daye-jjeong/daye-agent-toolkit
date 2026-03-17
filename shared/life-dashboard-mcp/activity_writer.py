@@ -128,7 +128,6 @@ def record_sessions(
     repo: str,
     branch: str | None = None,
     summary: dict | None = None,
-    topics: list[dict] | None = None,
     behavioral_signals: dict | None = None,
     is_session_end: bool = False,
 ) -> dict[str, str]:
@@ -192,61 +191,6 @@ def record_sessions(
             }
             upsert_session_content(conn, content_data)
             recorded[date_str] = session_id
-
-            # session_topics — 마지막 날짜에만 토픽 저장
-            if date_str == dates[-1]:
-                try:
-                    topic_segments = data.get("topic_segments", [])
-
-                    if topics:
-                        # LLM topics가 있으면: topic_segments에서 시간 매칭
-                        for t in topics:
-                            matched = None
-                            topic_key = (t.get("repo") or "").split("/")[-1]
-                            for seg in topic_segments:
-                                if seg["work_unit"] == topic_key or seg["work_unit"] in t.get("summary", ""):
-                                    matched = seg
-                                    break
-                            if matched:
-                                if not t.get("start_at"):
-                                    t["start_at"] = matched["start_at"]
-                                if not t.get("end_at"):
-                                    t["end_at"] = matched.get("end_at")
-                                if not t.get("duration_estimate_min"):
-                                    t["duration_estimate_min"] = matched["duration_min"]
-                        upsert_session_topics(conn, source, session_id, date_str, topics)
-                    elif topic_segments:
-                        # 기존에 교정된 토픽(tag != 기타)이 있으면 proto-topics로 덮어쓰지 않음
-                        existing_enriched = conn.execute(
-                            "SELECT COUNT(*) FROM session_topics WHERE source=? AND session_id=? AND date=? AND tag != '기타'",
-                            (source, session_id, date_str),
-                        ).fetchone()[0]
-                        if existing_enriched == 0:
-                            proto_topics = []
-                            for seg in topic_segments:
-                                seg_repo = seg.get("repo") or repo
-                                seg_wu = seg.get("work_unit") or seg_repo.split("/")[-1]
-                                proto_topics.append({
-                                    "tag": auto_tag("", ""),
-                                    "summary": f"{seg_wu} 작업",
-                                    "repo": seg_repo,
-                                    "start_at": seg["start_at"],
-                                    "end_at": seg.get("end_at"),
-                                    "duration_estimate_min": seg["duration_min"],
-                                    "status": "in_progress",
-                                })
-                            if proto_topics:
-                                upsert_session_topics(conn, source, session_id, date_str, proto_topics)
-                    else:
-                        # segments도 없으면 세션 전체를 하나의 proto-topic으로
-                        upsert_session_topics(conn, source, session_id, date_str, [{
-                            "tag": tag,
-                            "summary": f"{repo.split('/')[-1]} 작업",
-                            "repo": repo,
-                            "status": "in_progress",
-                        }])
-                except Exception as e:
-                    print(f"[activity_writer] upsert_session_topics failed: {e}", file=sys.stderr)
 
             # followup_chains — status가 follow_up/blocked이면 자동 생성
             if status in ("follow_up", "blocked") and follow_up_text:

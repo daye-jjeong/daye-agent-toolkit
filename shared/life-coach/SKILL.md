@@ -52,67 +52,18 @@ python3 {baseDir}/scripts/weekly_coach.py --json > /tmp/_coach_data_weekly_<DATE
 `references/coaching-prompts.md` 프레임으로 데이터를 해석하고 **두 가지 파일**을 생성한다.
 escalation_level에 따른 톤 변화도 적용 (아래 "톤 에스컬레이션" 참조).
 
-**3a. 작업 정리 ("정리해줘")**
+**3a. 작업 정리**
 
-2단계: **코드가 시간, LLM이 내용.**
-
-**Step 1: 추출 (코드, 결정적)**
-
-```bash
-python3 {baseDir}/../life-dashboard-mcp/scripts/extract_day.py --date <DATE>
-```
-
-출력: 세션별 segments (시간 경계 확정, 각 구간의 user messages + file edits 포함)
-
-**Step 2: 토픽 생성 (LLM)**
-
-segments를 보고 각 구간에 대해:
-
-1. **segment = topic 1:1 원칙**:
-   - **segment를 병합하지 마라.** 각 segment가 하나의 토픽이 된다.
-   - 시간은 segment에서 온 값만 사용. **절대 추정하지 마라.**
-   - segment 사이 gap = idle. 이 gap을 없애는 병합은 금지.
-
-2. **토픽 = 기능 단위** (활동 유형이 아님):
-   - 같은 기능의 설계→구현→리뷰가 하나의 segment에 있으면 하나의 토픽
-   - 나쁜: [설계] spec / [코딩] 구현 / [리뷰] PR review (활동 유형별 분해)
-   - 좋은: pipeline-redesign — spec + 구현 + 리뷰 완료 (기능 단위)
-
-3. **tag는 실제 활동과 일치해야**:
-   - 코드를 작성했으면 "코딩", 작업 상태를 확인만 했으면 "ops", 설계 논의를 했으면 "설계"
-   - 나쁜: 메시지 2개로 상태 확인만 했는데 tag="코딩"
-   - 좋은: 상태 확인만 했으면 tag="ops", summary="강제종료 후 작업 상태 확인"
-
-4. **duration_estimate_min이 매우 짧은(≤3분) segment**:
-   - 실제 활동이 짧았던 것. 억지로 늘리지 마라.
-   - summary는 실제로 한 것만 적어라. "마무리", "구현"처럼 안 한 걸 적지 마라.
-
-5. **하나의 segment에 여러 작업이 섞여있으면**:
-   - segment 시간 내에서 분리하지 않는다 (시간 추정 금지)
-   - 대신 summary에 (1)(2)(3)으로 순서 표기
-
-6. **각 토픽에 채울 것**:
-   - `tag`: 실제 활동과 일치하는 유형
-   - `summary`: 무엇을/왜/결과/의사결정. "다음에 뭘 해야 하는지" 판단 가능한 수준
-   - `status`: completed / in_progress / blocked / follow_up
-   - `follow_up`: 후속 작업 (없으면 생략)
-   - `start_at`, `end_at`: segment에서 온 값 **그대로**
-   - `duration_estimate_min`: segment의 duration_min **그대로**
-
-7. **반복 패턴/문제는 명시적 기록** (예: "rule 있는데 에이전트가 반복 위반 — 3번째")
-
-**Step 3: 검증**
-
-토픽 저장 후 반드시 확인:
-- segment 수 = topic 수 (1:1)
-- 모든 start_at/end_at/duration이 segment 값과 일치
-- tag가 실제 활동과 일치 (메시지 내용 대조)
+session_topics가 없으면 `work-digest` 스킬의 "정리해줘" 절차를 먼저 실행한다.
+상세 절차는 `work-digest` SKILL.md 참조.
 
 ```bash
-# 각 세션별로 update-topics 실행
+# 1. segments 추출
+python3 {baseDir}/../../cc/work-digest/scripts/extract_day.py --date <DATE>
+# 2. LLM이 segments 보고 토픽 생성 (work-digest SKILL.md Step 2 참조)
+# 3. update-topics CLI로 저장
 python3 {baseDir}/../life-dashboard-mcp/activity_writer.py update-topics \
-    --session-id <SID> --date <DATE> \
-    --topics '<JSON array>'
+    --session-id <SID> --date <DATE> --topics '<JSON>'
 ```
 
 **3a-2. 세션 요약 + 상태 업데이트**
