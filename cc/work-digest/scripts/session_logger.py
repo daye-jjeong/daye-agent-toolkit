@@ -240,7 +240,7 @@ def _clean_summary_text(text: str) -> str:
     return text.strip()[:300]
 
 
-BEHAVIOR_TIMEOUT_SEC = 60
+BEHAVIOR_TIMEOUT_SEC = 90
 
 
 def extract_behavioral_signals(user_messages: str, repo: str) -> dict | None:
