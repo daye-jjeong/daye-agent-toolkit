@@ -58,84 +58,43 @@ python3 {baseDir}/scripts/extract_day.py --date <DATE>
 
 ### Step 2: 토픽 생성 (LLM)
 
-extract_day.py 출력의 segments를 보고 각 구간에 대해:
+extract_day.py 출력의 segments를 보고 각 구간에 토픽을 만든다.
 
-1. **segment = topic 1:1 원칙**:
-   - segment를 병합하지 마라. 각 segment가 하나의 토픽.
-   - 시간은 segment에서 온 값만 사용. 절대 추정하지 마라.
-   - segment 사이 gap = idle. 이 gap을 없애는 병합 금지.
+**핵심 원칙 3가지:**
 
-2. **토픽 = 기능 단위** (활동 유형이 아님):
-   - 같은 기능의 설계→구현→리뷰가 하나의 segment에 있으면 하나의 토픽
-   - 나쁜: [설계] spec / [코딩] 구현 / [리뷰] PR review (활동 유형별)
-   - 좋은: pipeline-redesign — spec + 구현 + 리뷰 완료 (기능 단위)
+1. **시간은 코드가 결정** — segment의 start/end/duration을 그대로 사용한다. 추정하거나 병합하면 idle gap이 사라져서 리포트에서 실제 작업 시간이 왜곡된다.
 
-3. **tag는 실제 활동과 일치**:
-   - 코드 작성했으면 "코딩", 상태 확인만 했으면 "ops", 설계 논의했으면 "설계"
-   - 메시지 2개로 확인만 했는데 tag="코딩" 금지
+2. **토픽 = 기능 단위** — "설계/코딩/리뷰"로 나누면 하나의 기능이 3개로 쪼개진다. pipeline-redesign이라는 하나의 기능 안에서 설계→구현→리뷰를 했으면 하나의 토픽.
 
-4. **짧은 segment(≤3분)**:
-   - 실제 활동이 짧았던 것. 억지로 늘리지 마라.
-   - summary는 실제로 한 것만. 안 한 걸 적지 마라.
+3. **코칭에 쓸 수 있는 수준** — 이 요약만 읽고 "뭘 했고, 왜 했고, 결과가 뭐고, 다음에 뭘 해야 하는지" 판단 가능해야 한다. "cron 수정"은 부족. "cron 중복 해결 — mingming 직접 분석 문제, PROPOSAL 상태 추가, simplify+PR review 후 머지"는 충분.
 
-5. **하나의 segment에 여러 작업이 섞여있으면**:
-   - segment 시간 내에서 분리하지 않는다 (시간 추정 금지)
-   - summary에 (1)(2)(3)으로 순서 표기
-   - **각 작업의 대략적 시간 비중도 표기**: "(1) 멘션 처리 (~20분). (2) retry 진단 (~30분). (3) cron 구조 검토 (~70분)"
+**구체 지침:**
 
-6. **다른 세션에서 이어진 작업은 연결 표기**:
-   - 같은 기능을 다른 세션에서 이어했으면 `[세션ID에서 이어짐]` 또는 `[세션ID로 이어짐]` 추가
-   - 예: "[f9524da1에서 cron 구조 검토 시작됨]", "[f9524da1→5a45a36d로 cron 수정 이어짐]"
+- segment 1:1로 토픽 생성 (segment 수 = topic 수)
+- tag는 실제 활동과 일치 (확인만 했으면 ops, 코드 작성했으면 코딩)
+- 여러 작업이 섞인 segment: (1)(2)(3) + 시간 비중 표기
+- 다른 세션 연결: `[세션ID에서 이어짐]`
+- completed이면 결과 명시 (머지, spec 완료 등)
+- follow_up은 구체적 (모호한 "대응" 금지)
+- 반복 패턴은 몇 번째인지 명시
 
-7. **summary에 결과/산출물 명시**:
-   - completed이면 반드시 결과를 적어라: "커밋", "머지", "spec 작성 완료", "설정 완료"
-   - 나쁜: "리포트 개선" (뭘 개선했는지 모름)
-   - 좋은: "리포트 개선 — UTC→KST 변환, 조리시간 KPI 추가, 방치 주문 기준 명시"
+**signals 동시 생성** — 각 토픽에서 의사결정/실수/패턴을 같이 추출.
 
-8. **각 토픽에 채울 것**:
-   - `tag`: 실제 활동과 일치
-   - `summary`: 무엇을/왜/결과/의사결정. "다음에 뭘 해야 하는지" 판단 가능한 수준
-   - `status`: completed / in_progress / blocked / follow_up
-   - `follow_up`: 후속 작업 (없으면 생략). **"모델 제한 대응"처럼 모호하게 적지 마라** → "haiku 모델 응답 품질 저하 — sonnet 전환 검토 또는 프롬프트 강화"
-   - `start_at`, `end_at`: segment에서 온 값 그대로
-   - `duration_estimate_min`: segment의 duration_min 그대로
+**완성 예시**: `{baseDir}/references/topic-creation-guide.md` 참조
 
-9. **반복 패턴/문제는 명시적 기록** (예: "rule 있는데 에이전트가 반복 위반 — 3번째")
-
-10. **signals 동시 생성**:
-    각 토픽을 만들면서 해당 구간의 의사결정, 실수, 패턴을 같이 추출.
-    - `decision`: 왜 그렇게 결정했는지 reasoning 포함. "A 대신 B를 선택 — 이유: ..."
-    - `mistake`: 뭘 잘못했고 왜 문제인지. "X를 안 해서 Y가 발생"
-    - `pattern`: 반복되는 것. 몇 번째인지, 이전에 언제 발생했는지 포함
-
-    ```bash
-    # signals 저장 (DB 직접 또는 activity_writer CLI)
-    python3 -c "
-    from db import get_conn, insert_signal
-    conn = get_conn()
-    insert_signal(conn, {
-        'session_id': '<SID>', 'date': '<DATE>',
-        'signal_type': 'decision|mistake|pattern',
-        'content': '내용',
-        'reasoning': '이유',
-        'repo': 'repo-name'
-    })
-    conn.commit(); conn.close()
-    "
-    ```
-
-### Step 3: 저장
+### Step 3: 저장 + 검증
 
 ```bash
 # 각 세션별로 update-topics 실행
 python3 {baseDir}/../../shared/life-dashboard-mcp/activity_writer.py update-topics \
     --session-id <SID> --date <DATE> \
     --topics '<JSON array>'
+
+# 모든 세션 저장 후 자동 검증
+python3 {baseDir}/scripts/validate_topics.py --date <DATE>
 ```
 
-### Step 4: 검증
-
-토픽 저장 후 반드시 확인:
+validate_topics.py가 자동 확인:
 - segment 수 = topic 수 (1:1)
 - 모든 start_at/end_at/duration이 segment 값과 일치
 - tag가 실제 활동과 일치 (메시지 내용 대조)
