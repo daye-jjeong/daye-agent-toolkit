@@ -16,7 +16,7 @@ from _common import BASE_DIR, WORK_TAGS, WORK_TAGS_SET, send_telegram
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from activity_writer import record_activities
+from activity_writer import record_sessions
 
 KST = timezone(timedelta(hours=9))
 IDLE_THRESHOLD_SEC = 300
@@ -766,7 +766,7 @@ def main() -> None:
     session_id = args.session_id or transcript.stem
 
     # SQLite에 기록 (요약 없이)
-    record_activities("codex", session_id, by_date, repo)
+    record_sessions("codex", session_id, by_date, repo)
 
     # session_end / compaction: LLM 요약
     summary = None
@@ -800,8 +800,9 @@ def main() -> None:
         )
 
     if summary or signals:
-        record_activities("codex", session_id, by_date, repo,
-                        summary=summary, behavioral_signals=signals)
+        record_sessions("codex", session_id, by_date, repo,
+                       summary=summary, behavioral_signals=signals,
+                       is_session_end=(args.event == "session_end"))
 
     if args.event == "session_end":
         last_data = by_date[max(by_date.keys())]
