@@ -2,8 +2,7 @@
 """Activity Writer — shared SQLite recording for CC and Codex session loggers.
 
 Usage (library):
-    from activity_writer import record_sessions   # v2 — sessions + session_content
-    from activity_writer import record_activities  # v1 — Codex compat (activities table)
+    from activity_writer import record_sessions
 
 Usage (CLI):
     python3 activity_writer.py unsummarized --date 2026-03-16
@@ -26,9 +25,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import (
     get_conn,
-    # v1 (Codex compat)
-    upsert_activity, insert_behavioral_signal,
-    # v2
     upsert_session, upsert_session_content, upsert_session_topics, insert_signal,
     upsert_followup_chain, update_daily_stats,
     upsert_coaching_entry, upsert_task_suggestion,
@@ -238,75 +234,6 @@ def record_sessions(
 
 
 # ── record_activities (v1 — Codex compat) ────────
-
-def record_activities(
-    source: str,
-    session_id: str,
-    by_date: dict[str, dict],
-    repo: str,
-    branch: str | None = None,
-    summary: dict | None = None,
-    behavioral_signals: dict | None = None,
-) -> dict[str, str]:
-    """v1: Codex 호환용 — activities 테이블에 기록."""
-    if not by_date:
-        return {}
-
-    conn = get_conn()
-    recorded = {}
-    dates = sorted(by_date.keys())
-    last_date = dates[-1]
-
-    try:
-        for date_str in dates:
-            data = by_date[date_str]
-            fields = _prepare_fields(data, date_str)
-            if not fields:
-                continue
-
-            tag = None
-            summary_text = None
-            if date_str == last_date and summary:
-                tag = summary.get("tag")
-                summary_text = summary.get("text")
-            if not tag:
-                tag = auto_tag(data.get("topic", ""), " ".join(data.get("commands", [])[:5]))
-
-            activity = {
-                "source": source, "session_id": session_id, "repo": repo,
-                "branch": branch, "tag": tag, "summary": summary_text,
-                "date": date_str,
-                **fields,
-                "raw_json": json.dumps({
-                    "topic": data.get("topic", ""),
-                    "files_changed": data.get("files", []),
-                    "commands": data.get("commands", [])[:10],
-                    "errors": data.get("errors", [])[:5],
-                }, ensure_ascii=False),
-            }
-            upsert_activity(conn, activity)
-            recorded[date_str] = session_id
-
-            if date_str == last_date and behavioral_signals:
-                for plural, singular in _SIGNAL_TYPE_MAP.items():
-                    for content in behavioral_signals.get(plural, []):
-                        insert_behavioral_signal(conn, {
-                            "session_id": session_id,
-                            "date": date_str,
-                            "signal_type": singular,
-                            "content": content,
-                            "repo": repo,
-                        })
-
-        for date_str in recorded:
-            update_daily_stats(conn, date_str)
-
-        conn.commit()
-    finally:
-        conn.close()
-
-    return recorded
-
 
 # ── CLI ───────────────────────────────────────────
 

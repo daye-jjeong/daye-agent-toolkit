@@ -1,30 +1,3 @@
-CREATE TABLE IF NOT EXISTS activities (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source TEXT NOT NULL,
-    session_id TEXT,
-    repo TEXT,
-    branch TEXT,
-    tag TEXT,
-    summary TEXT,
-    start_at TEXT NOT NULL,
-    end_at TEXT,
-    date TEXT,
-    duration_min INTEGER,
-    file_count INTEGER DEFAULT 0,
-    error_count INTEGER DEFAULT 0,
-    has_tests INTEGER DEFAULT 0,
-    has_commits INTEGER DEFAULT 0,
-    token_total INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'in_progress',
-    follow_up TEXT,
-    raw_json TEXT,
-    created_at TEXT DEFAULT (datetime('now', 'localtime'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_activities_date ON activities(start_at);
-CREATE INDEX IF NOT EXISTS idx_activities_source ON activities(source);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_session ON activities(source, session_id, date);
-
 CREATE TABLE IF NOT EXISTS daily_stats (
     date TEXT PRIMARY KEY,
     work_hours REAL,
@@ -47,21 +20,7 @@ INSERT OR IGNORE INTO coach_state (key, value) VALUES
     ('consecutive_overwork_days', '0'),
     ('consecutive_no_exercise_days', '0');
 
-CREATE TABLE IF NOT EXISTS behavioral_signals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    date TEXT NOT NULL,
-    signal_type TEXT NOT NULL,
-    content TEXT NOT NULL,
-    repo TEXT,
-    created_at TEXT DEFAULT (datetime('now', 'localtime'))
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_unique ON behavioral_signals(session_id, signal_type, content);
-CREATE INDEX IF NOT EXISTS idx_signals_date ON behavioral_signals(date);
-CREATE INDEX IF NOT EXISTS idx_signals_type ON behavioral_signals(signal_type);
-
--- ── Work Tracking (v2) ──────────────────────────
+-- ── Work Tracking ──────────────────────────
 
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
