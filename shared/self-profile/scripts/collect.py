@@ -29,12 +29,12 @@ def _normalize_tag(tag: str | None) -> str:
     return tag
 
 
-def _query_activities(conn, start: str, next_end: str) -> list:
-    """activities 테이블 1회 쿼리. sessions + daily_trend 양쪽에서 사용."""
+def _query_sessions(conn, start: str, next_end: str) -> list:
+    """sessions 테이블 1회 쿼리. sessions + daily_trend 양쪽에서 사용."""
     return conn.execute("""
         SELECT source, repo, tag, start_at, duration_min
-        FROM activities
-        WHERE start_at >= ? AND start_at < ?
+        FROM sessions
+        WHERE date >= ? AND date < ?
         ORDER BY start_at
     """, (start, next_end)).fetchall()
 
@@ -163,10 +163,10 @@ def _build_decision_profile(decisions: list[dict]) -> dict:
 
 
 def _collect_behavioral_signals(conn, start: str, end: str) -> dict:
-    """Query behavioral_signals and build summary."""
+    """Query signals (v2) and build summary."""
     rows = conn.execute("""
-        SELECT signal_type, content, date, repo
-        FROM behavioral_signals
+        SELECT signal_type, content, reasoning, date, repo
+        FROM signals
         WHERE date >= ? AND date <= ?
         ORDER BY date DESC
     """, (start, end)).fetchall()
@@ -175,7 +175,12 @@ def _collect_behavioral_signals(conn, start: str, end: str) -> dict:
     content_counts: dict[str, dict] = {}
 
     for r in rows:
-        entry = {"content": r["content"], "date": r["date"], "repo": r["repo"] or ""}
+        entry = {
+            "content": r["content"],
+            "reasoning": r["reasoning"],
+            "date": r["date"],
+            "repo": r["repo"] or "",
+        }
         st = r["signal_type"]
         if st in by_type:
             by_type[st].append(entry)
@@ -235,7 +240,7 @@ def _collect_from_conn(conn, start: str, end: str, project_roots: list[str]) -> 
     next_end = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d")
 
     # 1회 쿼리로 sessions + daily_trend 양쪽 커버
-    activity_rows = _query_activities(conn, start, next_end)
+    activity_rows = _query_sessions(conn, start, next_end)
 
     return {
         "period": {"start": start, "end": end, "days": days},
