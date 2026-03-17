@@ -59,6 +59,33 @@ def open_conn(auto_commit=True):
         conn.close()
 
 
+def _merge_intervals_minutes(intervals: list[tuple[str, str]]) -> int:
+    """ISO timestamp 구간 리스트를 병합하여 겹치지 않는 총 분을 반환."""
+    if not intervals:
+        return 0
+    parsed = []
+    for s, e in intervals:
+        try:
+            start = datetime.fromisoformat(s)
+            end = datetime.fromisoformat(e)
+            if end > start:
+                parsed.append((start, end))
+        except (ValueError, TypeError):
+            continue
+    if not parsed:
+        return 0
+    parsed.sort()
+    merged = [parsed[0]]
+    for start, end in parsed[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end:
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+    total = sum((e - s).total_seconds() for s, e in merged)
+    return round(total / 60)
+
+
 def update_daily_stats(conn: sqlite3.Connection, date_str: str):
     rows = conn.execute("""
         SELECT tag, repo, duration_min, start_at, end_at
@@ -86,20 +113,29 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
             tags[tag] = tags.get(tag, 0) + 1
 
     repos: dict[str, int] = {}
-    total_min = 0
     first_session = "99:99"
     last_end = "00:00"
+    intervals = []
+    sum_duration = 0
 
     for r in rows:
         repo = r["repo"] or "unknown"
         repos[repo] = repos.get(repo, 0) + 1
-        total_min += r["duration_min"] or 0
+        sum_duration += r["duration_min"] or 0
         start_time = r["start_at"][11:16] if r["start_at"] and len(r["start_at"]) > 15 else "00:00"
         end_time = r["end_at"][11:16] if r["end_at"] and len(r["end_at"]) > 15 else start_time
         if start_time < first_session:
             first_session = start_time
         if end_time > last_end:
             last_end = end_time
+        s = r["start_at"] or ""
+        e = r["end_at"] or s
+        if len(s) >= 16 and len(e) >= 16:
+            intervals.append((s, e))
+
+    # min(active 합산, 병합 wall time) → 겹침은 wall time으로 제한, idle은 active로 제한
+    merged_wall = _merge_intervals_minutes(intervals)
+    total_min = min(sum_duration, merged_wall) if merged_wall else sum_duration
 
     conn.execute("""
         INSERT INTO daily_stats (date, work_hours, session_count, tag_breakdown,
