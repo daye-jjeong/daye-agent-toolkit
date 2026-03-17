@@ -115,23 +115,18 @@ def get_active_sessions() -> list[dict]:
             except (json.JSONDecodeError, KeyError, OSError) as e:
                 print(f"[scanner] failed to read {session_file}: {e}", file=sys.stderr)
 
-    # 2차: projects 디렉토리 — 오늘 수정된 .jsonl 파일에서 미등록 세션 보완
+    # 2차: projects 디렉토리 — 최근 수정된 .jsonl에서 미등록 세션 보완
     if PROJECTS_DIR.exists():
-        today = datetime.now(KST).strftime("%Y-%m-%d")
+        cutoff = datetime.now(KST) - timedelta(hours=36)
         for project_dir in PROJECTS_DIR.iterdir():
             if not project_dir.is_dir():
                 continue
-            # project hash에서 cwd 복원
-            # -Users-dayejeong-git-workplace-cube-backend → /Users/dayejeong/git_workplace/cube-backend
-            # -Users-dayejeong-dy-minions-squad → /Users/dayejeong/dy-minions-squad
             project_hash = project_dir.name
-            # 알려진 사용자 prefix 제거 후 경로 복원
             home = str(Path.home())
             home_prefix = "-" + home.lstrip("/").replace("/", "-") + "-"
             if project_hash.startswith(home_prefix):
                 remainder = project_hash[len(home_prefix):]
                 if remainder.startswith("git-workplace-") or remainder.startswith("git_workplace-"):
-                    repo_name = remainder.split("-", 1)[1] if "-" in remainder[len("git-workplace"):] else remainder
                     repo_name = remainder[len("git-workplace-"):] if remainder.startswith("git-workplace-") else remainder[len("git_workplace-"):]
                     cwd = f"{home}/git_workplace/{repo_name}"
                 else:
@@ -146,8 +141,8 @@ def get_active_sessions() -> list[dict]:
                 try:
                     stat = jsonl.stat()
                     mtime = datetime.fromtimestamp(stat.st_mtime, KST)
-                    # 오늘 수정 + 10KB 이상 (잡음 제거)
-                    if mtime.strftime("%Y-%m-%d") != today or stat.st_size < 10000:
+                    # 36시간 이내 수정 + 1KB 이상 (잡음 제거)
+                    if mtime < cutoff or stat.st_size < 1000:
                         continue
                 except OSError:
                     continue
