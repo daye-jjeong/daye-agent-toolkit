@@ -47,6 +47,8 @@ python3 {baseDir}/scripts/daily_summary.py
 - **12:30** — 점심
 - **18:30** — 저녁
 
+설치: `bash {baseDir}/scripts/setup_cron.sh`
+
 ## SQLite 컬럼
 
 | 컬럼 | 설명 |
