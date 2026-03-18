@@ -2,8 +2,7 @@
 """Activity Writer — shared SQLite recording for CC and Codex session loggers.
 
 Usage (library):
-    from activity_writer import record_sessions   # v2 — sessions + session_content
-    from activity_writer import record_activities  # v1 — Codex compat (activities table)
+    from activity_writer import record_sessions
 
 Usage (CLI):
     python3 activity_writer.py unsummarized --date 2026-03-16
@@ -26,9 +25,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db import (
     get_conn,
-    # v1 (Codex compat)
-    upsert_activity, insert_behavioral_signal,
-    # v2
     upsert_session, upsert_session_content, upsert_session_topics, insert_signal,
     upsert_followup_chain, update_daily_stats,
     upsert_coaching_entry, upsert_task_suggestion,
@@ -42,19 +38,25 @@ KST = timezone(timedelta(hours=9))
 
 TAG_KEYWORDS: list[tuple[str, list[str]]] = [
     ("디버깅", ["debug", "디버깅", "에러", "error", "fix", "버그", "traceback", "stack trace",
-               "동작 안", "동작안해", "왜 안"]),
+               "동작 안", "동작안해", "왜 안", "누락", "원인", "문제", "안 되", "안되",
+               "실패", "깨진", "broken"]),
     ("리뷰", ["review", "리뷰", "code quality", "pr review", "approved", "rejected",
-             "git diff", "검토", "괜찮은지", "수정할건"]),
-    ("리서치", ["리서치", "research", "조사", "비교", "추천", "어떤게 있을까", "프레임워크"]),
+             "git diff", "검토", "괜찮은지", "수정할건", "품질", "점검"]),
+    ("리서치", ["리서치", "research", "조사", "비교", "추천", "어떤게 있을까", "프레임워크",
+               "분석", "파악", "알아봐"]),
     ("설계", ["설계", "design", "기획", "plan", "아키텍처", "brainstorm",
-             "목업", "mockup", "mock-up", "검증", "verify"]),
-    ("설정", ["설정", "config", "setup", "셋업", "install", "init"]),
-    ("문서", ["문서", "SKILL.md", "README", "documentation", "표준화", "문서화"]),
-    ("리팩토링", ["리팩토링", "refactor", "정리", "통합", "consolidat"]),
+             "목업", "mockup", "mock-up", "검증", "verify",
+             "구조", "방향", "전략"]),
+    ("설정", ["설정", "설치", "config", "setup", "셋업", "install", "init",
+             "환경", "세팅"]),
+    ("문서", ["문서", "SKILL.md", "README", "documentation", "표준화", "문서화",
+             "번역", "translate"]),
+    ("리팩토링", ["리팩토링", "refactor", "정리", "통합", "consolidat", "마이그레이션", "migration",
+                "전환", "제거", "cleanup"]),
     ("ops", ["deploy", "배포", "cron", "monitor", "운영", "워치독",
-            "thread list", "task list", "minions"]),
+            "thread list", "task list", "minions", "텔레그램", "알림", "스케줄"]),
     ("코딩", ["구현", "implement", "추가", "생성", "만들", "작성", "feature",
-             "write_file", "apply_diff", "create_file"]),
+             "write_file", "apply_diff", "create_file", "수정", "변경"]),
 ]
 
 _WORD_BOUNDARY_KW = frozenset({"error", "fix", "init", "plan"})
@@ -135,12 +137,12 @@ def record_sessions(
     if not by_date:
         return {}
 
-    conn = get_conn()
     recorded = {}
     dates = sorted(by_date.keys())
     import sys as _sys
     primary_date = dates[0]
 
+    conn = get_conn()
     try:
         for date_str in dates:
             data = by_date[date_str]
@@ -230,78 +232,7 @@ def record_sessions(
     except Exception as e:
         conn.rollback()
         print(f"[record_sessions] DB error: {e}", file=_sys.stderr)
-        return recorded
-    finally:
-        conn.close()
-
-    return recorded
-
-
-# ── record_activities (v1 — Codex compat) ────────
-
-def record_activities(
-    source: str,
-    session_id: str,
-    by_date: dict[str, dict],
-    repo: str,
-    branch: str | None = None,
-    summary: dict | None = None,
-    behavioral_signals: dict | None = None,
-) -> dict[str, str]:
-    """v1: Codex 호환용 — activities 테이블에 기록."""
-    if not by_date:
         return {}
-
-    conn = get_conn()
-    recorded = {}
-    dates = sorted(by_date.keys())
-    last_date = dates[-1]
-
-    try:
-        for date_str in dates:
-            data = by_date[date_str]
-            fields = _prepare_fields(data, date_str)
-            if not fields:
-                continue
-
-            tag = None
-            summary_text = None
-            if date_str == last_date and summary:
-                tag = summary.get("tag")
-                summary_text = summary.get("text")
-            if not tag:
-                tag = auto_tag(data.get("topic", ""), " ".join(data.get("commands", [])[:5]))
-
-            activity = {
-                "source": source, "session_id": session_id, "repo": repo,
-                "branch": branch, "tag": tag, "summary": summary_text,
-                "date": date_str,
-                **fields,
-                "raw_json": json.dumps({
-                    "topic": data.get("topic", ""),
-                    "files_changed": data.get("files", []),
-                    "commands": data.get("commands", [])[:10],
-                    "errors": data.get("errors", [])[:5],
-                }, ensure_ascii=False),
-            }
-            upsert_activity(conn, activity)
-            recorded[date_str] = session_id
-
-            if date_str == last_date and behavioral_signals:
-                for plural, singular in _SIGNAL_TYPE_MAP.items():
-                    for content in behavioral_signals.get(plural, []):
-                        insert_behavioral_signal(conn, {
-                            "session_id": session_id,
-                            "date": date_str,
-                            "signal_type": singular,
-                            "content": content,
-                            "repo": repo,
-                        })
-
-        for date_str in recorded:
-            update_daily_stats(conn, date_str)
-
-        conn.commit()
     finally:
         conn.close()
 

@@ -22,6 +22,32 @@ def _add_dual(bucket: dict, key: str, duration: int):
     bucket[key]["total_min"] += duration
 
 
+def _merge_intervals_minutes(intervals: list[tuple[str, str]]) -> int:
+    """ISO timestamp 구간 리스트를 병합하여 겹치지 않는 총 분을 반환."""
+    if not intervals:
+        return 0
+    parsed = []
+    for s, e in intervals:
+        try:
+            start = datetime.fromisoformat(s)
+            end = datetime.fromisoformat(e)
+            if end > start:
+                parsed.append((start, end))
+        except (ValueError, TypeError):
+            continue
+    if not parsed:
+        return 0
+    parsed.sort()
+    merged = [parsed[0]]
+    for start, end in parsed[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end:
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+    return round(sum((e - s).total_seconds() for s, e in merged) / 60)
+
+
 def _normalize_tag(tag: str | None) -> str:
     """NULL/빈 tag → '기타'."""
     if not tag or not tag.strip():
@@ -29,20 +55,29 @@ def _normalize_tag(tag: str | None) -> str:
     return tag
 
 
-def _query_activities(conn, start: str, next_end: str) -> list:
-    """activities 테이블 1회 쿼리. sessions + daily_trend 양쪽에서 사용."""
+def _query_sessions(conn, start: str, next_end: str) -> list:
+    """sessions 테이블 1회 쿼리. sessions + daily_trend 양쪽에서 사용."""
     return conn.execute("""
-        SELECT source, repo, tag, start_at, duration_min
-        FROM activities
-        WHERE start_at >= ? AND start_at < ?
+        SELECT source, repo, tag, start_at, end_at, duration_min
+        FROM sessions
+        WHERE date >= ? AND date < ?
         ORDER BY start_at
     """, (start, next_end)).fetchall()
 
 
 def _build_sessions(rows) -> dict:
-    """Build session breakdown from pre-fetched activity rows."""
+    """Build session breakdown from pre-fetched session rows."""
     total = len(rows)
-    total_min = sum(r["duration_min"] or 0 for r in rows)
+    intervals = []
+    sum_duration = 0
+    for r in rows:
+        s = r["start_at"] or ""
+        e = r["end_at"] or s
+        if len(s) >= 16 and len(e) >= 16:
+            intervals.append((s, e))
+        sum_duration += r["duration_min"] or 0
+    merged_wall = _merge_intervals_minutes(intervals)
+    total_min = min(sum_duration, merged_wall) if merged_wall else sum_duration
     by_weekday: dict = {}
     by_hour: dict = {}
     by_tag: dict = {}
@@ -80,31 +115,37 @@ def _build_sessions(rows) -> dict:
 
 
 def _build_daily_trend(rows, start_dt: datetime, end_dt: datetime) -> list[dict]:
-    """Build daily trend with 0-fill from pre-fetched activity rows."""
+    """Build daily trend with 0-fill from pre-fetched session rows."""
     by_date: dict[str, dict] = {}
     for r in rows:
         date = r["start_at"][:10] if r["start_at"] else None
         if not date:
             continue
         if date not in by_date:
-            by_date[date] = {"date": date, "sessions": 0, "total_min": 0, "tags": {}}
+            by_date[date] = {"date": date, "sessions": 0, "intervals": [], "sum_dur": 0, "tags": {}}
         entry = by_date[date]
         entry["sessions"] += 1
-        entry["total_min"] += r["duration_min"] or 0
+        entry["sum_dur"] += r["duration_min"] or 0
+        s = r["start_at"] or ""
+        e = r["end_at"] or s
+        if len(s) >= 16 and len(e) >= 16:
+            entry["intervals"].append((s, e))
         tag = _normalize_tag(r["tag"])
         entry["tags"][tag] = entry["tags"].get(tag, 0) + 1
 
-    # 0-fill + finalize hours
+    # 0-fill + finalize hours (interval merge per day)
     trend = []
     current = start_dt
     while current <= end_dt:
         ds = current.strftime("%Y-%m-%d")
         if ds in by_date:
             e = by_date[ds]
+            merged_wall = _merge_intervals_minutes(e["intervals"])
+            merged_min = min(e["sum_dur"], merged_wall) if merged_wall else e["sum_dur"]
             trend.append({
                 "date": ds,
                 "sessions": e["sessions"],
-                "hours": round(e["total_min"] / 60, 1),
+                "hours": round(merged_min / 60, 1),
                 "tags": e["tags"],
             })
         else:
@@ -163,10 +204,10 @@ def _build_decision_profile(decisions: list[dict]) -> dict:
 
 
 def _collect_behavioral_signals(conn, start: str, end: str) -> dict:
-    """Query behavioral_signals and build summary."""
+    """Query signals (v2) and build summary."""
     rows = conn.execute("""
-        SELECT signal_type, content, date, repo
-        FROM behavioral_signals
+        SELECT signal_type, content, reasoning, date, repo
+        FROM signals
         WHERE date >= ? AND date <= ?
         ORDER BY date DESC
     """, (start, end)).fetchall()
@@ -175,7 +216,12 @@ def _collect_behavioral_signals(conn, start: str, end: str) -> dict:
     content_counts: dict[str, dict] = {}
 
     for r in rows:
-        entry = {"content": r["content"], "date": r["date"], "repo": r["repo"] or ""}
+        entry = {
+            "content": r["content"],
+            "reasoning": r["reasoning"],
+            "date": r["date"],
+            "repo": r["repo"] or "",
+        }
         st = r["signal_type"]
         if st in by_type:
             by_type[st].append(entry)
@@ -235,7 +281,7 @@ def _collect_from_conn(conn, start: str, end: str, project_roots: list[str]) -> 
     next_end = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d")
 
     # 1회 쿼리로 sessions + daily_trend 양쪽 커버
-    activity_rows = _query_activities(conn, start, next_end)
+    activity_rows = _query_sessions(conn, start, next_end)
 
     return {
         "period": {"start": start, "end": end, "days": days},

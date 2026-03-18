@@ -31,31 +31,6 @@ def get_conn() -> sqlite3.Connection:
 
 def _migrate(conn: sqlite3.Connection):
     """Additive schema migrations for existing databases."""
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()}
-    if "branch" not in cols:
-        conn.execute("ALTER TABLE activities ADD COLUMN branch TEXT")
-        conn.commit()
-    if "date" not in cols:
-        conn.execute("ALTER TABLE activities ADD COLUMN date TEXT")
-        conn.execute("UPDATE activities SET date = date(start_at) WHERE date IS NULL")
-        conn.commit()
-    if "status" not in cols:
-        conn.execute("ALTER TABLE activities ADD COLUMN status TEXT DEFAULT 'in_progress'")
-        conn.execute("UPDATE activities SET status = 'completed' WHERE has_commits = 1")
-        conn.commit()
-    if "follow_up" not in cols:
-        conn.execute("ALTER TABLE activities ADD COLUMN follow_up TEXT")
-        conn.commit()
-    # Recreate unique index with date column
-    indices = {r[1] for r in conn.execute("PRAGMA index_list(activities)").fetchall()}
-    if "idx_activities_session" in indices:
-        idx_info = conn.execute("PRAGMA index_info(idx_activities_session)").fetchall()
-        col_names = {r[2] for r in idx_info}
-        if "date" not in col_names:
-            conn.execute("DROP INDEX idx_activities_session")
-            conn.execute("CREATE UNIQUE INDEX idx_activities_session ON activities(source, session_id, date)")
-            conn.commit()
-
     # session_topics: additive column migrations
     try:
         st_cols = {r[1] for r in conn.execute("PRAGMA table_info(session_topics)").fetchall()}
@@ -84,38 +59,39 @@ def open_conn(auto_commit=True):
         conn.close()
 
 
-def upsert_activity(conn: sqlite3.Connection, data: dict):
-    conn.execute("""
-        INSERT INTO activities (source, session_id, repo, branch, tag, summary,
-            start_at, end_at, date, duration_min, file_count, error_count,
-            has_tests, has_commits, token_total, raw_json)
-        VALUES (:source, :session_id, :repo, :branch, :tag, :summary,
-            :start_at, :end_at, :date, :duration_min, :file_count, :error_count,
-            :has_tests, :has_commits, :token_total, :raw_json)
-        ON CONFLICT(source, session_id, date) DO UPDATE SET
-            repo=excluded.repo, branch=excluded.branch,
-            tag=COALESCE(excluded.tag, tag),
-            summary=COALESCE(excluded.summary, summary),
-            end_at=excluded.end_at, duration_min=excluded.duration_min,
-            file_count=excluded.file_count, token_total=excluded.token_total,
-            raw_json=excluded.raw_json
-    """, data)
+def _merge_intervals_minutes(intervals: list[tuple[str, str]]) -> int:
+    """ISO timestamp 구간 리스트를 병합하여 겹치지 않는 총 분을 반환."""
+    if not intervals:
+        return 0
+    parsed = []
+    for s, e in intervals:
+        try:
+            start = datetime.fromisoformat(s)
+            end = datetime.fromisoformat(e)
+            if end > start:
+                parsed.append((start, end))
+        except (ValueError, TypeError):
+            continue
+    if not parsed:
+        return 0
+    parsed.sort()
+    merged = [parsed[0]]
+    for start, end in parsed[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end:
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+    total = sum((e - s).total_seconds() for s, e in merged)
+    return round(total / 60)
 
 
 def update_daily_stats(conn: sqlite3.Connection, date_str: str):
-    next_date = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-    # v2: sessions 테이블 우선, 없으면 activities fallback
     rows = conn.execute("""
         SELECT tag, repo, duration_min, start_at, end_at
         FROM sessions
         WHERE date = ?
     """, (date_str,)).fetchall()
-    if not rows:
-        rows = conn.execute("""
-            SELECT tag, repo, duration_min, start_at, end_at
-            FROM activities
-            WHERE start_at >= ? AND start_at < ?
-        """, (date_str, next_date)).fetchall()
 
     if not rows:
         conn.execute("DELETE FROM daily_stats WHERE date = ?", (date_str,))
@@ -137,20 +113,29 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
             tags[tag] = tags.get(tag, 0) + 1
 
     repos: dict[str, int] = {}
-    total_min = 0
     first_session = "99:99"
     last_end = "00:00"
+    intervals = []
+    sum_duration = 0
 
     for r in rows:
         repo = r["repo"] or "unknown"
         repos[repo] = repos.get(repo, 0) + 1
-        total_min += r["duration_min"] or 0
+        sum_duration += r["duration_min"] or 0
         start_time = r["start_at"][11:16] if r["start_at"] and len(r["start_at"]) > 15 else "00:00"
         end_time = r["end_at"][11:16] if r["end_at"] and len(r["end_at"]) > 15 else start_time
         if start_time < first_session:
             first_session = start_time
         if end_time > last_end:
             last_end = end_time
+        s = r["start_at"] or ""
+        e = r["end_at"] or s
+        if len(s) >= 16 and len(e) >= 16:
+            intervals.append((s, e))
+
+    # min(active 합산, 병합 wall time) → 겹침은 wall time으로 제한, idle은 active로 제한
+    merged_wall = _merge_intervals_minutes(intervals)
+    total_min = min(sum_duration, merged_wall) if merged_wall else sum_duration
 
     conn.execute("""
         INSERT INTO daily_stats (date, work_hours, session_count, tag_breakdown,
@@ -255,17 +240,9 @@ def set_coach_state(conn: sqlite3.Connection, key: str, value: str):
     """, (key, value))
 
 
-def insert_behavioral_signal(conn: sqlite3.Connection, signal: dict):
-    conn.execute("""
-        INSERT OR IGNORE INTO behavioral_signals (session_id, date, signal_type, content, repo)
-        VALUES (:session_id, :date, :signal_type, :content, :repo)
-    """, signal)
-
-
 def get_repeated_signals(conn: sqlite3.Connection, date_str: str, days: int = 7, min_count: int = 2) -> list[dict]:
-    """최근 N일간 반복된 행동 신호 집계. v2: signals 테이블 우선."""
+    """최근 N일간 반복된 행동 신호 집계."""
     since = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
-    # v2 signals 먼저 시도
     rows = conn.execute("""
         SELECT content, signal_type, COUNT(*) as cnt
         FROM signals
@@ -274,21 +251,11 @@ def get_repeated_signals(conn: sqlite3.Connection, date_str: str, days: int = 7,
         HAVING cnt >= ?
         ORDER BY cnt DESC LIMIT 10
     """, (since, min_count)).fetchall()
-    if not rows:
-        # fallback: 구 behavioral_signals
-        rows = conn.execute("""
-            SELECT content, signal_type, COUNT(*) as cnt
-            FROM behavioral_signals
-            WHERE date >= ? AND signal_type IN ('mistake', 'pattern')
-            GROUP BY content, signal_type
-            HAVING cnt >= ?
-            ORDER BY cnt DESC LIMIT 10
-        """, (since, min_count)).fetchall()
     return [{"content": r["content"], "signal_type": r["signal_type"], "count": r["cnt"]} for r in rows]
 
 
 def get_mistake_trends(conn: sqlite3.Connection, date_str: str, days: int = 14) -> dict:
-    """최근 N일간 mistake 신호를 카테고리별로 집계. v2: signals 테이블 우선."""
+    """최근 N일간 mistake 신호를 카테고리별로 집계."""
     since = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
     rows = conn.execute("""
         SELECT content, COUNT(*) as cnt
@@ -296,13 +263,6 @@ def get_mistake_trends(conn: sqlite3.Connection, date_str: str, days: int = 14) 
         WHERE date >= ? AND date <= ? AND signal_type = 'mistake'
         GROUP BY content ORDER BY cnt DESC
     """, (since, date_str)).fetchall()
-    if not rows:
-        rows = conn.execute("""
-            SELECT content, COUNT(*) as cnt
-            FROM behavioral_signals
-            WHERE date >= ? AND date <= ? AND signal_type = 'mistake'
-            GROUP BY content ORDER BY cnt DESC
-        """, (since, date_str)).fetchall()
 
     # Load category definitions from life-coach skill (cross-module dependency)
     cat_path = Path(__file__).resolve().parent.parent / "life-coach" / "references" / "mistake-categories.json"

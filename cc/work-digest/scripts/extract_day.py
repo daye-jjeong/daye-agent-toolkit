@@ -124,10 +124,23 @@ def _find_transcript(projects_dir: Path, session_id: str) -> str | None:
     return None
 
 
+def _run_scanner():
+    """열린 세션을 DB에 반영 — 리포트 전 데이터 신선도 보장."""
+    scanner = Path(__file__).resolve().parent / "active_session_scanner.py"
+    if scanner.exists():
+        import subprocess
+        subprocess.run([sys.executable, str(scanner)],
+                       capture_output=True, timeout=30)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=datetime.now(KST).strftime("%Y-%m-%d"))
+    ap.add_argument("--no-scan", action="store_true", help="scanner 생략")
     args = ap.parse_args()
+
+    if not args.no_scan:
+        _run_scanner()
 
     sessions = find_transcripts(args.date)
     output = []

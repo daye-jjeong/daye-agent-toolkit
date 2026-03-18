@@ -7,22 +7,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 
-def _insert_activity(conn, *, source="cc", session_id="s1", repo="test-repo",
-                     tag="코딩", start_at="2026-03-01 10:00", end_at="2026-03-01 10:30",
-                     duration_min=30):
+def _insert_session(conn, *, source="cc", session_id="s1", repo="test-repo",
+                    tag="코딩", start_at="2026-03-01 10:00", end_at="2026-03-01 10:30",
+                    date="2026-03-01", duration_min=30):
     conn.execute("""
-        INSERT INTO activities (source, session_id, repo, tag, start_at, end_at, duration_min)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (source, session_id, repo, tag, start_at, end_at, duration_min))
+        INSERT INTO sessions (source, session_id, date, repo, tag, start_at, end_at, duration_min)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (source, session_id, date, repo, tag, start_at, end_at, duration_min))
     conn.commit()
 
 
 def _insert_signal(conn, *, session_id="s1", date="2026-03-01",
-                   signal_type="mistake", content="test signal", repo="test-repo"):
+                   signal_type="mistake", content="test signal", repo="test-repo",
+                   reasoning=None):
     conn.execute("""
-        INSERT INTO behavioral_signals (session_id, date, signal_type, content, repo)
-        VALUES (?, ?, ?, ?, ?)
-    """, (session_id, date, signal_type, content, repo))
+        INSERT INTO signals (session_id, date, signal_type, content, reasoning, repo)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (session_id, date, signal_type, content, reasoning, repo))
     conn.commit()
 
 
@@ -36,8 +37,8 @@ class TestJsonSchema:
 
     def test_sessions_has_dual_metrics(self, collect_with_db):
         """by_weekday, by_hour, by_tag은 count + total_min 둘 다 있어야 한다."""
-        _insert_activity(collect_with_db.conn, session_id="s1",
-                         start_at="2026-03-01 10:00", duration_min=30)
+        _insert_session(collect_with_db.conn, session_id="s1",
+                        start_at="2026-03-01 10:00", duration_min=30)
         result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
         # 2026-03-01 = Sunday
         sun = result["sessions"]["by_weekday"].get("Sun")
@@ -46,8 +47,9 @@ class TestJsonSchema:
 
     def test_by_source_breakdown(self, collect_with_db):
         """source별 breakdown이 있어야 한다."""
-        _insert_activity(collect_with_db.conn, session_id="s1", source="cc")
-        _insert_activity(collect_with_db.conn, session_id="s2", source="codex")
+        _insert_session(collect_with_db.conn, session_id="s1", source="cc")
+        _insert_session(collect_with_db.conn, session_id="s2", source="codex",
+                        date="2026-03-01")
         result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
         assert "cc" in result["sessions"]["by_source"]
         assert "codex" in result["sessions"]["by_source"]
@@ -57,12 +59,12 @@ class TestNullHandling:
     """NULL/빈 데이터 처리."""
 
     def test_empty_tag_becomes_기타(self, collect_with_db):
-        _insert_activity(collect_with_db.conn, session_id="s1", tag="")
+        _insert_session(collect_with_db.conn, session_id="s1", tag="")
         result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
         assert "기타" in result["sessions"]["by_tag"]
 
     def test_null_tag_becomes_기타(self, collect_with_db):
-        _insert_activity(collect_with_db.conn, session_id="s1", tag=None)
+        _insert_session(collect_with_db.conn, session_id="s1", tag=None)
         result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
         assert "기타" in result["sessions"]["by_tag"]
 
@@ -72,8 +74,8 @@ class TestDailyTrend:
 
     def test_zero_fill_inactive_days(self, collect_with_db):
         """활동 없는 날도 daily_trend에 포함되어야 한다."""
-        _insert_activity(collect_with_db.conn, session_id="s1",
-                         start_at="2026-03-01 10:00")
+        _insert_session(collect_with_db.conn, session_id="s1",
+                        start_at="2026-03-01 10:00")
         result = collect_with_db(period_start="2026-03-01", period_end="2026-03-03")
         dates = [d["date"] for d in result["daily_trend"]]
         assert "2026-03-02" in dates
@@ -101,6 +103,17 @@ class TestBehavioralSignals:
         result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
         repeats = result["behavioral_signals"]["repeat_signals"]
         assert any(r["content"] == "같은 실수" and r["count"] == 3 for r in repeats)
+
+    def test_reasoning_field_included(self, collect_with_db):
+        """v2 signals의 reasoning 필드가 포함되어야 한다."""
+        _insert_signal(collect_with_db.conn, session_id="s1",
+                       signal_type="decision",
+                       content="A를 선택",
+                       reasoning="B보다 간단해서")
+        result = collect_with_db(period_start="2026-03-01", period_end="2026-03-01")
+        decisions = result["behavioral_signals"]["top_decisions"]
+        assert len(decisions) == 1
+        assert decisions[0]["reasoning"] == "B보다 간단해서"
 
 
 class TestDecisionProfile:

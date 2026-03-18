@@ -23,7 +23,6 @@ def main():
 
     conn = get_conn()
     try:
-        # v2 sessions + session_content JOIN
         rows = conn.execute(
             "SELECT s.id, s.source, s.session_id, s.date, s.repo, s.tag, s.summary, "
             "       sc.topic, sc.commands "
@@ -32,29 +31,14 @@ def main():
             "WHERE s.tag = '기타' OR s.tag = '' OR s.tag IS NULL"
         ).fetchall()
 
-        if not rows:
-            # fallback: v1 activities
-            rows = conn.execute(
-                "SELECT id, source, session_id, repo, tag, summary, raw_json "
-                "FROM activities WHERE tag = '기타' OR tag = '' OR tag IS NULL"
-            ).fetchall()
-            table = "activities"
-        else:
-            table = "sessions"
-
-        print(f"Found {len(rows)} untagged/기타 in {table}", file=sys.stderr)
+        print(f"Found {len(rows)} untagged/기타 in sessions", file=sys.stderr)
 
         updated = 0
         for r in rows:
             try:
                 summary = r["summary"] or ""
-                if table == "sessions":
-                    topic = r["topic"] or ""
-                    commands = " ".join(json.loads(r["commands"] or "[]")[:5])
-                else:
-                    raw = json.loads(r["raw_json"] or "{}")
-                    topic = raw.get("topic", "")
-                    commands = " ".join(raw.get("commands", [])[:5])
+                topic = r["topic"] or ""
+                commands = " ".join(json.loads(r["commands"] or "[]")[:5])
 
                 new_tag = auto_tag(summary, topic, commands)
                 if new_tag != "기타":
@@ -62,7 +46,7 @@ def main():
                           f"{r['repo']}: {r['tag']!r} → {new_tag!r}  ({summary[:60]})")
                     if args.apply:
                         conn.execute(
-                            f"UPDATE {table} SET tag = ? WHERE id = ?",
+                            "UPDATE sessions SET tag = ? WHERE id = ?",
                             (new_tag, r["id"]),
                         )
                     updated += 1
@@ -72,13 +56,13 @@ def main():
         if args.apply and updated > 0:
             conn.commit()
             dates = conn.execute(
-                f"SELECT DISTINCT date as d FROM {table}"
+                "SELECT DISTINCT date as d FROM sessions"
             ).fetchall()
             for d in dates:
                 update_daily_stats(conn, d["d"])
             conn.commit()
 
-        print(f"\n{'Applied' if args.apply else 'Would update'}: {updated}/{len(rows)} {table}",
+        print(f"\n{'Applied' if args.apply else 'Would update'}: {updated}/{len(rows)} sessions",
               file=sys.stderr)
     finally:
         conn.close()

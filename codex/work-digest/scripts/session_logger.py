@@ -16,7 +16,7 @@ from _common import BASE_DIR, WORK_TAGS, WORK_TAGS_SET, send_telegram
 
 _MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"
 sys.path.insert(0, str(_MCP_DIR))
-from activity_writer import record_activities
+from activity_writer import record_sessions
 
 KST = timezone(timedelta(hours=9))
 IDLE_THRESHOLD_SEC = 300
@@ -24,6 +24,7 @@ SUMMARY_TIMEOUT_SEC = 60
 BEHAVIOR_TIMEOUT_SEC = 60
 CONVERSATION_MAX_CHARS = 8000
 CODEX_BIN_CANDIDATES = ("/opt/homebrew/bin/codex", "/usr/local/bin/codex")
+STATE_FILE = BASE_DIR / "session_logger_state.json"
 
 
 def detect_repo(cwd: str) -> str:
@@ -704,6 +705,60 @@ def parse_rollout_by_date(transcript_path: str) -> dict[str, dict]:
 
 # ── Telegram ──────────────────────────────────────
 
+def already_recorded(session_id: str, event: str) -> bool:
+    """Check if (session_id, event) was already processed. Records it if not."""
+    key = f"{session_id}:{event}"
+    state: dict = {}
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(STATE_FILE.read_text())
+        except Exception:
+            state = {}
+    if key in state:
+        return True
+    state[key] = datetime.now(KST).isoformat()
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False))
+    return False
+
+
+def build_session_section(session_id: str, data: dict, now: datetime,
+                          repo: str, event: str) -> str:
+    """Format a markdown section for session logging."""
+    short_id = session_id.split("-")[0] if "-" in session_id else session_id[:8]
+    start = data.get("start_time", "??:??")
+    end = data.get("end_time", "??:??")
+
+    lines = [
+        f"## 세션 {start}~{end}",
+        f"({short_id}, {repo})",
+        f"> source: codex | event: {event}",
+    ]
+
+    summary = data.get("summary")
+    if summary:
+        tag = summary.get("tag", "")
+        text = summary.get("text", "")
+        tag_prefix = f"[{tag}] " if tag else ""
+        lines.append(f"{tag_prefix}{text}")
+
+    return "\n".join(lines)
+
+
+def write_session_marker(session_id: str, event: str) -> None:
+    """Record that session+event was processed."""
+    key = f"{session_id}:{event}"
+    state: dict = {}
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(STATE_FILE.read_text())
+        except Exception:
+            state = {}
+    state[key] = datetime.now(KST).isoformat()
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False))
+
+
 def send_session_telegram(data: dict, repo: str, duration_min: int | None, summary: dict | None = None) -> None:
     if summary:
         tag = summary.get("tag", "")
@@ -766,7 +821,7 @@ def main() -> None:
     session_id = args.session_id or transcript.stem
 
     # SQLite에 기록 (요약 없이)
-    record_activities("codex", session_id, by_date, repo)
+    record_sessions("codex", session_id, by_date, repo)
 
     # session_end / compaction: LLM 요약
     summary = None
@@ -800,8 +855,11 @@ def main() -> None:
         )
 
     if summary or signals:
-        record_activities("codex", session_id, by_date, repo,
-                        summary=summary, behavioral_signals=signals)
+        record_sessions("codex", session_id, by_date, repo,
+                       summary=summary, behavioral_signals=signals,
+                       is_session_end=(args.event == "session_end"))
+
+    write_session_marker(session_id, args.event)
 
     if args.event == "session_end":
         last_data = by_date[max(by_date.keys())]

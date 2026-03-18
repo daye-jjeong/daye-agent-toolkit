@@ -240,7 +240,7 @@ def _clean_summary_text(text: str) -> str:
     return text.strip()[:300]
 
 
-BEHAVIOR_TIMEOUT_SEC = 60
+BEHAVIOR_TIMEOUT_SEC = 90
 
 
 def extract_behavioral_signals(user_messages: str, repo: str) -> dict | None:
@@ -686,28 +686,13 @@ def main():
         except Exception as e:
             print(f"[session_logger] signals failed: {e}", file=sys.stderr)
 
-        if signals:
-            _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
+        _, branch = detect_repo_and_branch(cwd) if cwd else ("unknown", None)
+        try:
             record_sessions("cc", session_id, by_date, repo, branch,
                            behavioral_signals=signals,
                            is_session_end=True)
-        else:
-            # 행동 추출 실패 → SessionEnd이므로 최소한 status를 completed로
-            try:
-                from db import get_conn as _get_conn
-                _conn = _get_conn()
-                try:
-                    for _d in by_date:
-                        _conn.execute("""
-                            UPDATE sessions SET status = 'completed'
-                            WHERE source = 'cc' AND session_id = ? AND date = ?
-                              AND status = 'in_progress'
-                        """, (session_id, _d))
-                    _conn.commit()
-                finally:
-                    _conn.close()
-            except Exception as e:
-                print(f"[session_logger] status update failed: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[session_logger] record_sessions failed: {e}", file=sys.stderr)
 
         # 텔레그램 전송
         last_data = by_date[max(by_date.keys())]
