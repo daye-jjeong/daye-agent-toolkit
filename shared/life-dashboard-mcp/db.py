@@ -133,9 +133,19 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
         if len(s) >= 16 and len(e) >= 16:
             intervals.append((s, e))
 
-    # min(active 합산, 병합 wall time) → 겹침은 wall time으로 제한, idle은 active로 제한
-    merged_wall = _merge_intervals_minutes(intervals)
-    total_min = min(sum_duration, merged_wall) if merged_wall else sum_duration
+    # work_hours: 토픽 있으면 토픽 구간 병합 (정확), 없으면 세션 duration 합산 폴백
+    topic_intervals = conn.execute(
+        "SELECT start_at, end_at FROM session_topics "
+        "WHERE date = ? AND start_at IS NOT NULL AND end_at IS NOT NULL",
+        (date_str,),
+    ).fetchall()
+    if topic_intervals:
+        total_min = _merge_intervals_minutes(
+            [(r["start_at"], r["end_at"]) for r in topic_intervals]
+        )
+    else:
+        merged_wall = _merge_intervals_minutes(intervals)
+        total_min = min(sum_duration, merged_wall) if merged_wall else sum_duration
 
     conn.execute("""
         INSERT INTO daily_stats (date, work_hours, session_count, tag_breakdown,
