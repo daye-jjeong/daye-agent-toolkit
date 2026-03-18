@@ -59,29 +59,82 @@ def dedup_sessions(sessions: list) -> list:
     return list(seen.values())
 
 
+def _parse_md_table(lines: list[str], start: int) -> tuple[str, int]:
+    """마크다운 테이블을 HTML <table>로 변환. (html, 소비한 줄 수) 반환."""
+    header = [c.strip() for c in lines[start].strip().strip("|").split("|")]
+    # separator 행 건너뛰기
+    consumed = 2
+    rows = []
+    for i in range(start + 2, len(lines)):
+        stripped = lines[i].strip()
+        if not stripped.startswith("|"):
+            break
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        rows.append(cells)
+        consumed += 1
+    # HTML 생성
+    hdr = "".join(f"<th>{esc_html(h)}</th>" for h in header)
+    body = ""
+    for row in rows:
+        cells_html = []
+        for c in row:
+            # bold 치환 먼저, 나머지를 escape
+            parts = re.split(r'\*\*(.+?)\*\*', c)
+            escaped = ""
+            for j, part in enumerate(parts):
+                if j % 2 == 0:
+                    escaped += esc_html(part)
+                else:
+                    escaped += f"<strong>{esc_html(part)}</strong>"
+            cells_html.append(f"<td>{escaped}</td>")
+        body += f"<tr>{''.join(cells_html)}</tr>"
+    html = f'<table class="coaching-table"><thead><tr>{hdr}</tr></thead><tbody>{body}</tbody></table>'
+    return html, consumed
+
+
 def md_to_html(md: str) -> str:
-    """Minimal markdown → HTML (headings, bold, lists, paragraphs)."""
+    """Minimal markdown → HTML (headings, bold, lists, paragraphs, tables)."""
     lines = md.strip().split("\n")
     out = []
     in_ul = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("## "):
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        # 테이블 감지: 현재 행이 |로 시작하고 다음 행이 |---|
+        if stripped.startswith("|") and i + 1 < len(lines) and re.match(r"\|[\s\-:|]+\|", lines[i + 1].strip()):
             if in_ul: out.append("</ul>"); in_ul = False
-            out.append(f'<h4 class="coaching-h">{esc_html(stripped[3:])}</h4>')
+            html, consumed = _parse_md_table(lines, i)
+            out.append(html)
+            i += consumed
+            continue
         elif stripped.startswith("### "):
             if in_ul: out.append("</ul>"); in_ul = False
             out.append(f'<h5 class="coaching-h sub">{esc_html(stripped[4:])}</h5>')
+        elif stripped.startswith("## "):
+            if in_ul: out.append("</ul>"); in_ul = False
+            out.append(f'<h4 class="coaching-h">{esc_html(stripped[3:])}</h4>')
+        elif stripped.startswith("# "):
+            if in_ul: out.append("</ul>"); in_ul = False
+            out.append(f'<h3 class="coaching-h" style="font-size:16px;margin:18px 0 8px">{esc_html(stripped[2:])}</h3>')
         elif stripped.startswith("- ") or stripped.startswith("* "):
             if not in_ul: out.append('<ul class="coaching-list">'); in_ul = True
             content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped[2:])
             out.append(f"<li>{content}</li>")
-        elif stripped == "":
+        elif stripped.startswith("```"):
+            if in_ul: out.append("</ul>"); in_ul = False
+            code_lines = []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code_lines.append(esc_html(lines[i]))
+                i += 1
+            out.append(f'<pre style="background:#1a1a1a;padding:10px;border-radius:6px;font-size:12px;overflow-x:auto;color:#C0C0C0">{chr(10).join(code_lines)}</pre>')
+        elif stripped == "" or stripped == "---":
             if in_ul: out.append("</ul>"); in_ul = False
         else:
             if in_ul: out.append("</ul>"); in_ul = False
             content = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', stripped)
             out.append(f"<p>{content}</p>")
+        i += 1
     if in_ul: out.append("</ul>")
     return "\n".join(out)
 

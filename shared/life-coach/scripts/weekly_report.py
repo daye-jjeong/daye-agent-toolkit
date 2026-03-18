@@ -249,6 +249,11 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 .coaching-list{list-style:none;padding:0;margin:0 0 8px}
 .coaching-list li{font-size:12px;color:#C0C0C0;padding:3px 0;padding-left:14px;position:relative;line-height:1.6}
 .coaching-list li::before{content:"•";position:absolute;left:0;color:var(--mu)}
+.coaching-table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+.coaching-table th{text-align:left;padding:6px 10px;border-bottom:2px solid #444;color:#CCC;font-weight:600}
+.coaching-table td{padding:5px 10px;border-bottom:1px solid #333;color:#B0B0B0}
+.coaching-table tr:hover td{background:#2A2A2E}
+.coaching pre{background:#1a1a1a;padding:10px;border-radius:6px;font-size:12px;overflow-x:auto;color:#C0C0C0;margin:8px 0}
 .coaching-placeholder{border:1px dashed #444;background:transparent}
 .coaching-empty{color:#555;font-size:12px;font-style:italic}
 .health-line{font-size:12px;color:#B0B0B0;margin-bottom:4px}

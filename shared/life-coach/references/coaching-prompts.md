@@ -55,6 +55,8 @@
 ### 🔍 구조 리뷰
 **너는 코치다. 단순히 패턴을 나열하지 마라. 세션 데이터를 보고 빠진 것, 놓친 것, 비효율을 지적해라.**
 
+**절대 규칙: 데이터에 없는 수치를 적지 마라.** "40개 워크트리", "3번 반복" 같은 주장은 반드시 실제 데이터(git worktree list, DB 쿼리 등)로 확인한 뒤 적어라. 확인 안 된 인상이나 추측을 사실처럼 쓰면 코칭 신뢰가 무너진다.
+
 각 세션의 `status`와 `follow_up`을 반드시 확인하고:
 
 1. **블로커 점검**: `status=blocked`인 세션 — 정말 블로커인가? 사용자가 직접 해결할 수 있었는데 미룬 건 아닌가? 대안은 없었는가?
@@ -82,11 +84,14 @@
 - `status=follow_up` → 예상 소요 시간 + 우선순위 근거
 - 오늘 발견했는데 안 한 것 → 왜 내일 해야 하는지
 
+**필수 포함 정보**: 레포명, 구체적 행동(머지/수정/생성), 현재 상태(PR 번호, 브랜치명, 테스트 통과 여부 등), 왜 지금 해야 하는지.
+"worktree 머지", "이어서 작업", "확인" 같은 모호한 표현 금지.
+
 형식:
 ```
-1. [30분] codex-cli P2 --model 플래그 수정 — 코드 3줄 수정이라 이슈 등록보다 직접 수정이 빠름
-2. [15분] cube-backend PR #777 #720 머지 — CI 이미 통과, 지연 이유 없음
-3. [블로커 해소] order status Datadog 로그 확인 — MCP RDS로 직접 쿼리 시도
+1. [5분] daye-agent-toolkit wt/v1-to-v2-migration 머지 — 42/42 테스트 통과, simplify+PR review 수렴. `worktree.sh merge v1-to-v2-migration`
+2. [15분] cube-backend PR #776 prisma-skills 머지 — CI 통과, 리뷰 완료. 지연 이유 없음
+3. [블로커 해소] dy-minions-squad outbound 로깅 — handler.js 래핑 vs DB 직접 기록 중 택1. GitHub에서 openclaw hook 스펙 재확인 필요
 ```
 
 ### 🔍 코칭

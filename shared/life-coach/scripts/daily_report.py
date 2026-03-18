@@ -15,7 +15,7 @@ Usage:
 없으면 placeholder 표시.
 """
 import argparse, json, re, sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -106,9 +106,9 @@ def _build_tag_breakdown(data: dict) -> str:
 
 def _build_nudges(data: dict) -> str:
     nudges = []
-    wh = data.get("work_hours", 0)
-    if wh >= 8:
-        nudges.append(f'<div class="nudge warn">{wh}시간 작업 — 과작업 주의</div>')
+    actual = _calc_actual_work_hours(data.get("topics", []), data.get("sessions", []))
+    if actual >= 8:
+        nudges.append(f'<div class="nudge warn">{actual}h 활동 — 과작업 주의</div>')
     first = data.get("first_session", "")
     if first and first < "06:00":
         nudges.append('<div class="nudge warn">새벽 작업 감지 — 수면 패턴 주의</div>')
@@ -129,42 +129,88 @@ def _status_badge(status: str) -> str:
     return f'<span class="status-badge" style="color:{color}" title="{status}">{icon}</span> '
 
 
-def _build_topic_items(topics: list[dict]) -> str:
-    """session_topics 기준 작업 표시."""
-    items = []
-    for t in topics:
-        tag = t.get("tag") or "기타"
-        tag_color = TAG_COLORS.get(tag, "#707070")
-        summary = _esc(t.get("summary") or "(요약 없음)")
-        status = t.get("status", "in_progress")
-        status_badge = _status_badge(status)
-        source = t.get("s_source") or t.get("source", "")
-        src_html = ""
-        if source:
-            src_color = SOURCE_COLORS.get(source, "#888")
-            src_html = f'<span class="src-tag" style="color:{src_color}">[{source}]</span> '
-        dur = t.get("duration_estimate_min")
-        meta_parts = []
-        if dur:
-            prefix = "" if t.get("start_at") else "~"
-            meta_parts.append(f"{prefix}{dur}m")
-        if t.get("has_commits"):
-            meta_parts.append("커밋")
-        meta_str = (
-            f' <span class="work-meta">({", ".join(meta_parts)})</span>'
-            if meta_parts else ""
-        )
-        follow_up = t.get("follow_up", "")
-        follow_html = f' <span class="follow-up">→ {_esc(follow_up)}</span>' if follow_up else ""
+_NOISE_PATTERNS = ("/clear", "세션 초기화")
 
-        items.append(
-            f'<div class="work-item">'
-            f'{status_badge}'
-            f'{src_html}'
-            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
-            f'<span class="work-summary">{summary}{meta_str}{follow_html}</span>'
-            f'</div>'
-        )
+
+def _is_noise_topic(t: dict) -> bool:
+    """리포트에서 생략할 잡음 토픽."""
+    dur = t.get("duration_estimate_min", 0) or 0
+    summary = (t.get("summary") or "").lower()
+    if dur <= 1 and any(p in summary for p in _NOISE_PATTERNS):
+        return True
+    return False
+
+
+def _build_topic_items(topics: list[dict]) -> str:
+    """session_topics 기준 작업 표시 — 같은 세션의 토픽은 한 줄로 합침."""
+    # 세션별 그룹핑 (잡음 토픽 제외)
+    by_session: dict[str, list[dict]] = {}
+    for t in topics:
+        if _is_noise_topic(t):
+            continue
+        sid = t.get("session_id", "?")
+        by_session.setdefault(sid, []).append(t)
+
+    items = []
+    for sid, session_topics in by_session.items():
+        if len(session_topics) == 1:
+            t = session_topics[0]
+            tag = t.get("tag") or "기타"
+            tag_color = TAG_COLORS.get(tag, "#707070")
+            summary = _esc(t.get("summary") or "(요약 없음)")
+            status = t.get("status", "in_progress")
+            status_badge = _status_badge(status)
+            dur = t.get("duration_estimate_min")
+            meta_parts = []
+            if dur:
+                meta_parts.append(f"{dur}m")
+            if t.get("has_commits"):
+                meta_parts.append("커밋")
+            meta_str = f' <span class="work-meta">({", ".join(meta_parts)})</span>' if meta_parts else ""
+            follow_up = t.get("follow_up", "")
+            follow_html = f' <span class="follow-up">→ {_esc(follow_up)}</span>' if follow_up else ""
+            items.append(
+                f'<div class="work-item">'
+                f'{status_badge}'
+                f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+                f'<span class="work-summary">{summary}{meta_str}{follow_html}</span>'
+                f'</div>'
+            )
+        else:
+            # 복수 토픽 → 태그 모아서 한 줄 + 서브 아이템
+            total_dur = sum(t.get("duration_estimate_min", 0) or 0 for t in session_topics)
+            tags = list(dict.fromkeys(t.get("tag", "기타") for t in session_topics))
+            tag_html = " ".join(
+                f'<span class="sess-tag" style="color:{TAG_COLORS.get(tg, "#707070")}">[{tg}]</span>'
+                for tg in tags
+            )
+            # 가장 대표적인 status
+            statuses = [t.get("status", "in_progress") for t in session_topics]
+            status = "in_progress" if "in_progress" in statuses else statuses[0]
+            status_badge = _status_badge(status)
+            has_commits = any(t.get("has_commits") for t in session_topics)
+            meta_parts = []
+            if has_commits:
+                meta_parts.append("커밋")
+            commit_str = f' <span class="work-meta">({", ".join(meta_parts)})</span>' if meta_parts else ""
+            total_str = f' <span class="work-meta" style="margin-left:4px;color:#888">— 총 {total_dur}m</span>'
+            # 서브 아이템: 항목(시간) 순서
+            sub_items = []
+            for t in session_topics:
+                s = _esc(t.get("summary") or "")
+                short = s.split(" — ")[0] if " — " in s else s[:80]
+                dur_t = t.get("duration_estimate_min", 0) or 0
+                follow_up = t.get("follow_up", "")
+                follow_html = f' <span class="follow-up">→ {_esc(follow_up)}</span>' if follow_up else ""
+                sub_items.append(f"{short} ({dur_t}m){follow_html}")
+            sub_html = " / ".join(sub_items)
+            items.append(
+                f'<div class="work-item">'
+                f'{status_badge}'
+                f'{tag_html} '
+                f'<span class="work-summary">{sub_html}{commit_str}{total_str}</span>'
+                f'</div>'
+            )
     return "".join(items)
 
 
@@ -564,6 +610,11 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 .coaching-list{list-style:none;padding:0;margin:0 0 8px}
 .coaching-list li{font-size:12px;color:#C0C0C0;padding:3px 0;padding-left:14px;position:relative;line-height:1.6}
 .coaching-list li::before{content:"•";position:absolute;left:0;color:var(--mu)}
+.coaching-table{width:100%;border-collapse:collapse;font-size:12px;margin:8px 0}
+.coaching-table th{text-align:left;padding:6px 10px;border-bottom:2px solid #444;color:#CCC;font-weight:600}
+.coaching-table td{padding:5px 10px;border-bottom:1px solid #333;color:#B0B0B0}
+.coaching-table tr:hover td{background:#2A2A2E}
+.coaching pre{background:#1a1a1a;padding:10px;border-radius:6px;font-size:12px;overflow-x:auto;color:#C0C0C0;margin:8px 0}
 .coaching-placeholder{border:1px dashed #444;background:transparent}
 .coaching-empty{color:#555;font-size:12px;font-style:italic}
 .health-metrics{font-size:13px;color:var(--tx);margin-bottom:6px}
@@ -588,6 +639,157 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 """
 
 
+def _build_week_trend_chart(data: dict) -> str:
+    """최근 7일+당일의 활동시간·토큰 사용량 바 차트 (인라인 SVG)."""
+    date_str = data.get("date", "")
+    if not date_str:
+        return ""
+
+    # DB에서 최근 8일 sessions 직접 조회 (daily_stats는 부정확할 수 있음)
+    try:
+        _mcp = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+        import sys as _sys
+        _sys.path.insert(0, str(_mcp))
+        from db import get_conn
+        conn = get_conn()
+        end_dt = datetime.strptime(date_str, "%Y-%m-%d")
+        start_dt = end_dt - timedelta(days=7)
+        session_rows = conn.execute("""
+            SELECT date, start_at, end_at, duration_min, token_total
+            FROM sessions WHERE date >= ? AND date <= ?
+            ORDER BY date, start_at
+        """, (start_dt.strftime("%Y-%m-%d"), date_str)).fetchall()
+        conn.close()
+    except Exception:
+        return ""
+
+    # 날짜별 interval merge로 활동시간 계산
+    days_data: dict[str, dict] = {}
+    for i in range(8):
+        d = (start_dt + timedelta(days=i)).strftime("%Y-%m-%d")
+        days_data[d] = {"intervals": [], "sum_dur": 0, "tokens": 0, "sessions": 0}
+    for r in session_rows:
+        d = r["date"]
+        if d not in days_data:
+            continue
+        days_data[d]["sessions"] += 1
+        days_data[d]["sum_dur"] += r["duration_min"] or 0
+        days_data[d]["tokens"] += r["token_total"] or 0
+        s = r["start_at"] or ""
+        e = r["end_at"] or s
+        if len(s) >= 16 and len(e) >= 16:
+            days_data[d]["intervals"].append((s, e))
+    # interval merge → min(sum_dur, wall) per day
+    for d, dd in days_data.items():
+        intervals = dd["intervals"]
+        if not intervals:
+            dd["hours"] = 0.0
+            continue
+        parsed = []
+        for s, e in intervals:
+            try:
+                st = int(s[11:13]) * 60 + int(s[14:16])
+                et = int(e[11:13]) * 60 + int(e[14:16])
+                if et > st:
+                    parsed.append((st, et))
+            except (ValueError, IndexError):
+                pass
+        if not parsed:
+            dd["hours"] = round(dd["sum_dur"] / 60, 1)
+            continue
+        parsed.sort()
+        merged = [parsed[0]]
+        for s, e in parsed[1:]:
+            if s <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+            else:
+                merged.append((s, e))
+        wall_min = sum(e - s for s, e in merged)
+        dd["hours"] = round(min(dd["sum_dur"], wall_min) / 60, 1)
+
+    # 오늘은 topics 기반 활동시간으로 덮어쓰기 (더 정확)
+    today_hours = _calc_actual_work_hours(data.get("topics", []), data.get("sessions", []))
+    if date_str in days_data:
+        days_data[date_str]["hours"] = today_hours
+        days_data[date_str]["tokens"] = data.get("token_total", 0)
+        days_data[date_str]["sessions"] = data.get("session_count", 0)
+
+    dates = sorted(days_data.keys())
+    if not dates:
+        return ""
+
+    # SVG 차트 생성
+    W, H = 700, 180
+    pad_l, pad_r, pad_b = 40, 20, 36
+    chart_w = W - pad_l - pad_r
+    chart_h = H - pad_b - 10
+    bar_w = chart_w / len(dates)
+    max_hours = max((days_data[d]["hours"] for d in dates), default=1) or 1
+    max_tokens = max((days_data[d]["tokens"] for d in dates), default=1) or 1
+
+    bars_svg = ""
+    labels_svg = ""
+    for i, d in enumerate(dates):
+        dd = days_data[d]
+        x = pad_l + i * bar_w
+        cx = x + bar_w / 2
+
+        # 활동시간 바 (초록)
+        h_pct = dd["hours"] / max_hours
+        bh = h_pct * (chart_h * 0.85)
+        by = 10 + chart_h - bh
+        is_today = d == date_str
+        fill = "#7ABD7E" if not is_today else "#5AE05A"
+        opacity = "1" if is_today else "0.7"
+        bars_svg += f'<rect x="{cx - bar_w*0.18}" y="{by}" width="{bar_w*0.36}" height="{bh}" rx="3" fill="{fill}" opacity="{opacity}"/>'
+
+        # 토큰 라인 포인트 (파랑)
+        t_pct = dd["tokens"] / max_tokens
+        ty = 10 + chart_h - t_pct * (chart_h * 0.85)
+        if i > 0:
+            prev_d = dates[i - 1]
+            prev_pct = days_data[prev_d]["tokens"] / max_tokens
+            prev_ty = 10 + chart_h - prev_pct * (chart_h * 0.85)
+            prev_cx = pad_l + (i - 1) * bar_w + bar_w / 2
+            bars_svg += f'<line x1="{prev_cx}" y1="{prev_ty}" x2="{cx}" y2="{ty}" stroke="#4A90D9" stroke-width="1.5" opacity="0.6"/>'
+        bars_svg += f'<circle cx="{cx}" cy="{ty}" r="3" fill="#4A90D9" opacity="0.8"/>'
+
+        # 활동시간 값 (바 위)
+        if dd["hours"] > 0:
+            bars_svg += f'<text x="{cx}" y="{by - 4}" text-anchor="middle" font-size="9" fill="#AAA">{dd["hours"]}h</text>'
+
+        # 날짜 + 요일 라벨
+        d_dt = datetime.strptime(d, "%Y-%m-%d")
+        weekday_short = ["월", "화", "수", "목", "금", "토", "일"][d_dt.weekday()]
+        short_date = f"{d[8:10]}({weekday_short})"
+        weight = "700" if is_today else "400"
+        color = "#E0E0E0" if is_today else "#666"
+        labels_svg += f'<text x="{cx}" y="{H - 12}" text-anchor="middle" font-size="10" fill="{color}" font-weight="{weight}">{short_date}</text>'
+
+    # 범례
+    legend = (
+        f'<rect x="{pad_l}" y="{H - 6}" width="8" height="8" rx="2" fill="#7ABD7E" opacity="0.7"/>'
+        f'<text x="{pad_l + 12}" y="{H}" font-size="9" fill="#888">활동시간</text>'
+        f'<line x1="{pad_l + 70}" y1="{H - 2}" x2="{pad_l + 86}" y2="{H - 2}" stroke="#4A90D9" stroke-width="1.5" opacity="0.6"/>'
+        f'<circle cx="{pad_l + 78}" cy="{H - 2}" r="2.5" fill="#4A90D9"/>'
+        f'<text x="{pad_l + 90}" y="{H}" font-size="9" fill="#888">토큰</text>'
+    )
+
+    # 토큰 총량 (오른쪽 범례)
+    today_tok = days_data.get(date_str, {}).get("tokens", 0)
+    tok_str = _fmt_tokens(today_tok) if today_tok else "0"
+    tok_legend = f'<text x="{W - pad_r}" y="{H}" text-anchor="end" font-size="9" fill="#4A90D9">오늘 {tok_str} tokens</text>'
+
+    svg = (
+        f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="font-family:-apple-system,\'Apple SD Gothic Neo\',sans-serif">'
+        f'{bars_svg}{labels_svg}{legend}{tok_legend}'
+        f'</svg>'
+    )
+
+    return f'<div class="section"><h3>최근 8일 트렌드</h3>{svg}</div>'
+
+
 def build_daily_report(data: dict, coaching_md: str | None = None,
                        repo_summaries: dict[str, str | list[str]] | None = None) -> str:
     # repo_summaries는 deprecated — DB summary를 직접 사용.
@@ -605,6 +807,7 @@ def build_daily_report(data: dict, coaching_md: str | None = None,
     timeline = timeline_section_html(days, f"{dt.month}/{dt.day}({weekday}) 타임라인")
 
     sections = [
+        _build_week_trend_chart(data),
         _build_stats_card(data),
         _build_tag_breakdown(data),
         _build_nudges(data),
@@ -627,7 +830,7 @@ def build_daily_report(data: dict, coaching_md: str | None = None,
 </head>
 <body>
 <h1>{title}</h1>
-<div class="subtitle">{data.get('session_count', 0)}세션 · {data.get('work_hours', 0)}시간 · {_fmt_tokens(data.get('token_total', 0))} tokens</div>
+<div class="subtitle">{data.get('session_count', 0)}세션 · {_calc_actual_work_hours(data.get('topics', []), data.get('sessions', []))}h 활동 · {_fmt_tokens(data.get('token_total', 0))} tokens</div>
 {body}
 <div class="footer">generated by life-coach/daily_report.py</div>
 </body></html>"""
@@ -664,9 +867,25 @@ def main():
     if args.repo_summaries:
         repo_summaries = json.load(open(args.repo_summaries))
 
+    # validate gate — 토픽 누락 시 경고
+    date_str = raw.get("date", "unknown")
+    try:
+        import subprocess as _sp
+        # shared/life-coach → repo root → cc/work-digest
+        repo_root = Path(__file__).resolve().parent.parent.parent.parent
+        validate_script = repo_root / "cc" / "work-digest" / "scripts" / "validate_topics.py"
+        if validate_script.exists():
+            vr = _sp.run([sys.executable, str(validate_script), "--date", date_str],
+                         capture_output=True, text=True, timeout=30)
+            if vr.returncode != 0:
+                print(f"[daily_report] ⚠ VALIDATE FAILED — 토픽 누락 있음:\n{vr.stdout.strip()}", file=sys.stderr)
+                print("[daily_report] 토픽을 보완한 뒤 다시 생성하세요.", file=sys.stderr)
+                sys.exit(1)
+    except Exception as e:
+        print(f"[daily_report] validate skipped: {e}", file=sys.stderr)
+
     html = build_daily_report(raw, coaching_md, repo_summaries=repo_summaries)
 
-    date_str = raw.get("date", "unknown")
     output_path = args.output or f"/tmp/daily_report_{date_str}.html"
     Path(output_path).write_text(html, encoding="utf-8")
     print(f"[daily_report] saved: {output_path}", file=sys.stderr)
