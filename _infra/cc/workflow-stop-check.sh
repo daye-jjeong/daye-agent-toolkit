@@ -8,14 +8,12 @@ INPUT="$(cat 2>/dev/null || echo '{}')"
 STOP_ACTIVE="$(echo "$INPUT" | grep -o '"stop_hook_active":[a-z]*' | cut -d: -f2 || true)"
 [ "$STOP_ACTIVE" = "true" ] && exit 0
 
-# worktree 안에 있는지 확인 (구현 작업 = worktree 사용)
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  exit 0
-fi
+# stdin의 cwd 필드로 현재 작업 경로 확인
+CWD="$(echo "$INPUT" | grep -o '"cwd":"[^"]*"' | cut -d'"' -f4 || true)"
+[ -z "$CWD" ] && exit 0
 
-TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-# .claude/worktrees/ 경로 안에 있으면 worktree 작업 중
-if [[ "$TOPLEVEL" != *"/.claude/worktrees/"* ]]; then
+# .claude/worktrees/ 경로 안에 있으면 구현 작업 중
+if [[ "$CWD" != *"/.claude/worktrees/"* ]]; then
   exit 0
 fi
 
