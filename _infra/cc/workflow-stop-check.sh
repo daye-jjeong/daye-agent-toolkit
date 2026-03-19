@@ -19,13 +19,10 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
 fi
 
 if [ "$HAS_REPORT" = false ]; then
-  # prompt-based hook output: 보고 리마인드
   cat <<'HOOKJSON'
 {
-  "hookSpecificOutput": {
-    "hookEventName": "Stop",
-    "additionalContext": "워크플로우 보고 체크:\n1. 이번에 뭘 했는지 한 줄 요약\n2. M/L 작업이면: simplify + pr-review 돌렸는지\n3. 다음에 뭘 해야 하는지\n\n보고 없이 멈추지 마라."
-  }
+  "decision": "block",
+  "reason": "워크플로우 보고 체크:\n1. 이번에 뭘 했는지 한 줄 요약\n2. M/L 작업이면: simplify + pr-review 돌렸는지\n3. 다음에 뭘 해야 하는지\n\n보고 없이 멈추지 마라."
 }
 HOOKJSON
 fi
