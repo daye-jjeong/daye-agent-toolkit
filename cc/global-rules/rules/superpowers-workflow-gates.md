@@ -1,44 +1,54 @@
 # Superpowers Workflow
 
-멀티 세션 환경 전제. 상세 절차는 각 스킬 참조.
-
 ## 세션 시작
 
 1. `git worktree list` → 진행중 worktree + 미완료 plan 있으면 이어하기 제안
-2. 새 작업이면 아래 워크플로우 진행
+2. 새 작업이면 규모 판단 후 워크플로우 진행
 
 ## 항상 Worktree
 
 모든 구현 작업은 worktree에서 시작. 규모 무관. 예외: read-only 탐색.
 
-생성 우선순위: gitflow 스킬 → `worktree.sh` → `git worktree add`
-완료 우선순위: gitflow 스킬 → `worktree.sh merge` → `finishing-a-development-branch` 스킬
+## 규모 판단
 
-## 규모 판단 → 워크플로우
+작업 시작 전 반드시 규모를 판단하고 사용자에게 알려라.
 
 | 규모 | 기준 | 워크플로우 |
 |------|------|-----------|
 | **S** | 1-2 파일, 단순 수정 | worktree → 코딩 → 테스트 → 완료 |
-| **M** | 3-5 파일, 또는 코어/아키텍처/불확실성 높음 | worktree → brainstorming → plan → Codex 리뷰 → TDD 구현 → 자기검증 → [자동] simplify + pr-review → 완료 |
-| **L** | 6+ 파일 | M + Ralph Loop 평가 |
+| **M** | 3-5 파일, 또는 불확실성 높음 | 아래 M 파이프라인 |
+| **L** | 6+ 파일 | M + codex plan 리뷰 |
 
 단순 rename/이동은 파일 수 많아도 하위 티어 적용 가능.
 
-## M 파이프라인 요약
+## M 파이프라인
 
-1. `superpowers:brainstorming` → 디자인 합의
-2. **⛔ GATE A: spec 완료** — 다음 세 가지 모두 충족 전 `writing-plans` 호출 금지:
-   - spec 문서 커밋 (`docs/superpowers/specs/`)
-   - spec review loop (subagent) 통과
-   - 사용자 spec 리뷰 승인
-3. `superpowers:writing-plans` → plan 생성
-4. **⛔ GATE B: plan 리뷰** — `codex-cli` exec 모드로 plan 리뷰 완료 전 구현 착수 금지
-   - `subagent-driven-development`, `executing-plans` 호출 금지
-   - 타당한 피드백만 반영, 반영 후 plan 파일 업데이트
-5. 메인 세션이 직접 구현 (TDD or 수동검증). 태스크 경계에서 커밋
-6. `superpowers:verification-before-completion` → 자기검증
-7. [자동] `/simplify` → `/pr-review-toolkit:review-pr` → 수렴 확인 → 완료 알림
-8. 사용자 OK 후 완료 (자동 완료 금지)
+1. `superpowers:brainstorming` → 디자인 합의 + spec 작성 (스킬 내장 체크리스트 따름)
+2. `superpowers:writing-plans` → plan 생성 + plan review loop (스킬 내장 subagent)
+3. 구현 (TDD, 태스크 경계에서 커밋)
+4. `superpowers:verification-before-completion` → 자기검증
+5. `/simplify` → `pr-review-toolkit:review-pr` → 수렴까지 반복
+6. `superpowers:finishing-a-development-branch` → 완료 처리
+
+## L 추가 사항
+
+2번과 3번 사이에: `codex-cli` exec 모드로 plan 교차 리뷰. 구현 착수 전 완료할 것.
+
+## 보고 규칙
+
+작업 중 항상 **현재 위치 + 다음 행동**을 함께 보고하라.
+
+- ❌ "커밋할까요?"
+- ✅ "태스크 2/4 완료, 테스트 통과. 커밋하고 태스크 3 진행할게."
+
+## 커밋 시점
+
+1. plan 태스크 1개 완료 + 테스트 통과 시
+2. simplify/pr-review 수렴 후
+3. 세션 종료/핸드오프 시 (WIP 커밋)
+4. 사용자가 명시적으로 요청 시
+
+파일 수정 직후, 루프 중간에는 커밋을 묻지 마라.
 
 ## 핸드오프
 
