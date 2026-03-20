@@ -12,5 +12,12 @@
 		"target": "breaking-alert",
 		"reason": "cron: breaking-alert",
 		"instructions": "news-brief 스킬의 'Breaking Alert' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요."
+	},
+	{
+		"name": "reddit-hot",
+		"schedule": "0 */2 * * *",
+		"target": "reddit-hot",
+		"reason": "cron: reddit-hot",
+		"instructions": "shared/news-brief/scripts/reddit-hot.py를 --subs references/reddit-hot-subs.txt로 실행하세요. 출력이 있으면 daye에게 전달하세요. 출력이 없으면 아무것도 하지 마세요."
 	}
 ]
