@@ -1,6 +1,6 @@
 ---
 name: news-brief
-description: 키워드 기반 뉴스 브리핑 + 로닉 임팩트 분석
+description: 뉴스 수집 · 요약 · 알림 — 데일리 신문(RSS 4개 소스 → HTML), AI 속보 알림(keyword scoring), Reddit AI 서브레딧 핫 포스트. 뉴스 정리, 신문 만들어, breaking alert, 레딧 핫, 속보, RSS 피드, 밍밍 데일리, 뉴스 브리핑, reddit-hot 등의 요청에 사용.
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
