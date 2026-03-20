@@ -49,7 +49,9 @@ python3 {baseDir}/scripts/spending_query.py <mode> [options]
 1. `spending_query.py uncategorized` 실행
 2. 미분류 merchant 목록을 사용자에게 보여주고 카테고리 매핑 제안
 3. 사용자 확인 후 `finance_merchant_categories`에 INSERT
-4. 기존 transactions의 category_l1도 UPDATE
+4. 이후 같은 merchant의 새 거래는 자동 분류됨
+
+**결제대행(KCP, NICE, KICC, 네이버페이, 네이버파이낸셜 등)은 일괄 매핑하지 마라.** 건별로 내용이 다르므로 사용자에게 개별 거래를 보여주고 물어봐야 한다.
 
 ### 5. 예산 ("예산 설정 식사 30만원")
 1. `coach_state`에 `budget_{category}` 키로 저장

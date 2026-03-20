@@ -1,6 +1,6 @@
 {
   "name": "health-tracker",
   "version": "1.0.0",
-  "description": "건강 데이터 기록 및 추적 — 운동, 증상, PT 숙제",
+  "description": "건강 활동 기록 — 운동/증상/식사를 SQLite에 저장. 사용자가 운동했다, 아프다, 뭘 먹었다고 말하면 이 스킬 사용.",
   "entrypoint": "SKILL.md"
 }

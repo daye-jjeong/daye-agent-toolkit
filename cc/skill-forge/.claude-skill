@@ -1,6 +1,0 @@
-{
-  "name": "skill-forge",
-  "version": "1.0.0",
-  "description": "SKILL.md 생성/최적화/감사/검증. 매니페스트 자동 동기화 + git diff 드리프트 탐지.",
-  "entrypoint": "SKILL.md"
-}

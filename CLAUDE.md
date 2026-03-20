@@ -22,30 +22,26 @@ _infra/       — 빌드/설치/동기화 스크립트
 
 ## 스킬 분류
 
-### Claude Code 전용 (7개 스킬 + 1개 규칙묶음) — `cc/` 디렉토리
+### Claude Code 전용 (4개 스킬 + 1개 규칙묶음) — `cc/` 디렉토리
 
 | 이름 | 유형 | 설명 |
 |------|------|------|
 | correction-memory | 스킬 | 교정 기억 — 실수 반복 방지 3계층 메모리 |
 | global-rules | 규칙 | 글로벌 규칙 묶음 — 세션 자동 로드 (SKILL.md 없음) |
-| mermaid-diagrams | 스킬 | Mermaid 다이어그램 생성 가이드 |
-| professional-communication | 스킬 | 업무 커뮤니케이션 가이드 |
 | reddit-fetch | 스킬 | Reddit 포스트/댓글 조회 + 검색 |
-| skill-forge | 스킬 | SKILL.md 생성/최적화/감사/검증 |
 | work-digest | 스킬 | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
 | youtube-fetch | 스킬 | YouTube 메타데이터 + 자막 추출 |
 
-### Claude Code + OpenClaw 양쪽 (13개) — `shared/` 디렉토리
+### Claude Code + OpenClaw 양쪽 (12개) — `shared/` 디렉토리
 
 | 스킬 | 설명 |
 |------|------|
 | banksalad-import | 뱅크샐러드 → life-dashboard SQLite DB import |
 | codex-cli | Codex CLI 래퍼 — 코드 리뷰, 범용 질문을 Codex(OpenAI)에게 위임 |
 | gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
-| health-tracker | 운동/증상/PT/건강체크인 트래킹 + 루틴 추천 + 분석 |
+| health-tracker | 운동/증상/PT/건강체크인/식사 트래킹 + 루틴 추천 + 분석 |
 | investment-manager | 투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신 |
 | life-coach | 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석 |
-| meal-tracker | 식사 기록 + 영양 모니터링 |
 | news-brief | 키워드 뉴스 브리핑 |
 | pantry-manager | 식재료 관리 자동화 |
 | saju-manse | 사주팔자 분석 |

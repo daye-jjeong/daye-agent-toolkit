@@ -239,9 +239,65 @@ def import_investments(conn, sheet_rows, dry_run=False):
         else:
             new += 1
 
+    # 매도 종목 삭제: 이번 import에 없는 종목은 DB에서 제거
+    imported_keys = set()
+    for i in range(header_idx + 1, len(sheet_rows)):
+        row_num, cells = sheet_rows[i]
+        product_type = cells.get("B", "")
+        if "총계" in product_type:
+            break
+        if not product_type:
+            continue
+        name = cells.get("D", "")
+        institution = cells.get("C", "")
+        if not name or "보유상품" in name:
+            continue
+        invested = safe_float(cells.get("F", ""))
+        current_val = safe_float(cells.get("G", ""))
+        if invested == 0 and current_val == 0:
+            continue
+        imported_keys.add((name, institution))
+
+    deleted = 0
+    sold_pending = []
+    if imported_keys:
+        existing = conn.execute(
+            "SELECT product_name, product_type, institution, invested, current_value, return_pct "
+            "FROM finance_investments"
+        ).fetchall()
+        for row in existing:
+            key = (row["product_name"], row["institution"])
+            if key not in imported_keys:
+                if not dry_run:
+                    # 매도 이력 저장 (sold_value는 NULL — 사용자에게 물어봐야 함)
+                    conn.execute("""
+                        INSERT INTO finance_sold_investments
+                            (product_name, product_type, institution, invested, sold_value, return_pct)
+                        VALUES (?, ?, ?, ?, NULL, NULL)
+                        ON CONFLICT(product_name, institution, sold_date) DO NOTHING
+                    """, (row["product_name"], row["product_type"], row["institution"], row["invested"]))
+                    conn.execute(
+                        "DELETE FROM finance_investments WHERE product_name=? AND institution=?",
+                        key,
+                    )
+                sold_pending.append({
+                    "name": row["product_name"],
+                    "institution": row["institution"],
+                    "invested": row["invested"],
+                    "last_value": row["current_value"],
+                })
+                print(f"  [매도] {key[0]} ({key[1]}) — 투자금 {row['invested']:,.0f}원, 마지막 평가 {row['current_value']:,.0f}원")
+                deleted += 1
+
     if not dry_run:
         conn.commit()
-    print(f"  Result: {new} new, {updated} updated")
+    print(f"  Result: {new} new, {updated} updated, {deleted} deleted")
+
+    if sold_pending:
+        print(f"\n  ⚠ 매도 {len(sold_pending)}건 감지 — 매도일/매도금액을 사용자에게 확인하세요:")
+        for s in sold_pending:
+            print(f"    - {s['name']} ({s['institution']}): 투자 {s['invested']:,.0f}원")
+        print("    → finance_sold_investments 테이블의 sold_date, sold_value를 UPDATE해주세요.")
 
 
 # ── 대출현황 import ───────────────────────────

@@ -199,6 +199,21 @@ CREATE TABLE IF NOT EXISTS finance_investments (
     UNIQUE(product_name, institution)
 );
 
+CREATE TABLE IF NOT EXISTS finance_sold_investments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_name TEXT NOT NULL,
+    product_type TEXT,
+    institution TEXT,
+    invested REAL DEFAULT 0,
+    sold_value REAL,
+    return_pct REAL,
+    sold_date TEXT,
+    reason TEXT,
+    source TEXT DEFAULT 'banksalad',
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(product_name, institution, sold_date)
+);
+
 CREATE TABLE IF NOT EXISTS finance_loans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     loan_name TEXT NOT NULL,

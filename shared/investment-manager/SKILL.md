@@ -66,6 +66,13 @@ python3 {baseDir}/scripts/fetch_prices.py --products "엔비디아,애플,QQQ" -
 2. WebSearch로 종목별 현재가 조회
 3. `fetch_prices.py --products "종목1,종목2" --prices "가격1,가격2"` 로 DB 저장
 
+### 5. 매도 이력 확인 ("팔았던 종목", "매도 이력")
+1. `finance_sold_investments` 테이블 조회
+2. `sold_value`가 NULL이면 사용자에게 매도일/매도금액 물어보기
+3. 확인 후 UPDATE
+
+매도 이력은 banksalad-import 시 자동 감지된다. 새 데이터에 종목이 없으면 매도로 판단하고 `finance_sold_investments`에 기록 + 사용자에게 매도가 확인 요청.
+
 ## KR/US 분류 규칙
 
 - US: institution == '토스증권' OR product_name이 'TIGER'로 시작
