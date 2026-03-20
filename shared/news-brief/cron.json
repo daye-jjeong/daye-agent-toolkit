@@ -12,5 +12,12 @@
 		"target": "breaking-alert",
 		"reason": "cron: breaking-alert",
 		"instructions": "news-brief 스킬의 'Breaking Alert' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요."
+	},
+	{
+		"name": "reddit-hot",
+		"schedule": "0 */2 * * *",
+		"target": "reddit-hot",
+		"reason": "cron: reddit-hot",
+		"instructions": "news-brief 스킬의 'Reddit 핫 포스트' 절차를 따르세요."
 	}
 ]

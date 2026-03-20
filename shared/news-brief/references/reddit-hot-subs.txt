@@ -1,0 +1,11 @@
+# AI 관련 서브레딧 — reddit-hot 알림용
+# 한 줄에 하나. '#'은 주석.
+
+r/artificial
+r/MachineLearning
+r/LocalLLaMA
+r/singularity
+r/ClaudeAI
+r/OpenClaw
+r/ChatGPT
+r/ArtificialIntelligence

@@ -33,7 +33,6 @@ import re
 import sys
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -41,10 +40,9 @@ import feedparser
 
 from html_source import fetch_entries as fetch_html_entries
 from kst_utils import format_kst, parse_pub_date
+from seen_cache import CACHE_DIR, load_seen, save_seen, prune_seen
 
-CACHE_DIR = Path(os.path.expanduser("~/.cache/news-brief"))
 SEEN_FILE = CACHE_DIR / "seen.json"
-PRUNE_HOURS = 48
 ALERT_THRESHOLD = 7
 
 PRIORITY_SCORES = {"high": 2, "medium": 1, "low": 0}
@@ -101,30 +99,6 @@ def load_feeds_txt(path: str) -> list[dict]:
                 continue
             sources.append({"url": line, "priority": "medium", "name": line})
     return sources
-
-
-# ── Seen cache (dedup) ───────────────────────────────────────────────
-
-def load_seen() -> dict[str, float]:
-    if not SEEN_FILE.exists():
-        return {}
-    try:
-        with open(SEEN_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return {}
-
-
-def save_seen(seen: dict[str, float]) -> None:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    with open(SEEN_FILE, "w", encoding="utf-8") as f:
-        json.dump(seen, f, indent=2)
-
-
-def prune_seen(seen: dict[str, float]) -> dict[str, float]:
-    """Remove entries older than PRUNE_HOURS."""
-    cutoff = time.time() - (PRUNE_HOURS * 3600)
-    return {url: ts for url, ts in seen.items() if ts > cutoff}
 
 
 # ── Scoring ──────────────────────────────────────────────────────────
@@ -270,7 +244,7 @@ def main() -> None:
         sources.extend(load_feeds_txt(args.feeds))
 
     keywords = load_keywords(args.keywords)
-    seen = prune_seen(load_seen())
+    seen = prune_seen(load_seen(SEEN_FILE))
 
     alerts = fetch_and_score(sources, keywords, args.since, seen,
                              threshold=args.threshold)
@@ -289,7 +263,7 @@ def main() -> None:
         now = time.time()
         for alert in alerts:
             seen[alert["link"]] = now
-        save_seen(seen)
+        save_seen(seen, SEEN_FILE)
         print(f"({len(alerts)} alerts sent, cache updated)", file=sys.stderr)
     else:
         print(f"(dry-run) {len(alerts)} alerts would be sent", file=sys.stderr)
