@@ -18,15 +18,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-import time
+import os
 import subprocess
-from pathlib import Path
+import time
+from concurrent.futures import ThreadPoolExecutor
 
-CACHE_DIR = Path(os.path.expanduser("~/.cache/news-brief"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from seen_cache import CACHE_DIR, load_seen, save_seen, prune_seen
+
 SEEN_FILE = CACHE_DIR / "reddit-hot-seen.json"
-PRUNE_HOURS = 48
 DEFAULT_MIN_UPS = 50
 MAX_PER_SUB = 3
 MAX_TOTAL = 10
@@ -44,31 +46,9 @@ def load_subs(path: str) -> list[str]:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            # normalize: strip leading r/ if present
             sub = line[2:] if line.startswith("r/") else line
             subs.append(sub)
     return subs
-
-
-def load_seen() -> dict[str, float]:
-    if not SEEN_FILE.exists():
-        return {}
-    try:
-        with open(SEEN_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return {}
-
-
-def save_seen(seen: dict[str, float]) -> None:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    with open(SEEN_FILE, "w", encoding="utf-8") as f:
-        json.dump(seen, f, indent=2)
-
-
-def prune_seen(seen: dict[str, float]) -> dict[str, float]:
-    cutoff = time.time() - (PRUNE_HOURS * 3600)
-    return {url: ts for url, ts in seen.items() if ts > cutoff}
 
 
 def fetch_hot(sub: str) -> list[dict]:
@@ -130,11 +110,14 @@ def main() -> None:
         print("Error: no subreddits loaded", file=sys.stderr)
         sys.exit(1)
 
-    seen = prune_seen(load_seen())
-    all_posts: list[dict] = []
+    seen = prune_seen(load_seen(SEEN_FILE))
 
-    for sub in subs:
-        posts = fetch_hot(sub)
+    # Fetch all subreddits in parallel
+    with ThreadPoolExecutor(max_workers=len(subs)) as pool:
+        results = list(pool.map(fetch_hot, subs))
+
+    all_posts: list[dict] = []
+    for posts in results:
         sub_count = 0
         for p in posts:
             if p["url"] in seen:
@@ -163,7 +146,7 @@ def main() -> None:
         now = time.time()
         for post in all_posts:
             seen[post["url"]] = now
-        save_seen(seen)
+        save_seen(seen, SEEN_FILE)
         print(f"({len(all_posts)} alerts sent, cache updated)", file=sys.stderr)
     else:
         print(f"(dry-run) {len(all_posts)} alerts would be sent", file=sys.stderr)
