@@ -52,7 +52,10 @@ notify_participants: z.array(z.string()).default([]),
 |------|------|
 | `created_by` | 태스크를 시스템에 등록한 주체 (에이전트 포함, 기존 유지) |
 | `requester` | 실제 요청자 (human participant ID) |
-| `notify_participants` | 결과 수신자 목록. 기본값 = `[requester]` |
+| `notify_participants` | 결과 수신자 목록. 태스크 생성 시 `requester`를 materialize하여 포함 |
+
+**생성 시 materialize 규칙**: `requester`가 있으면 `notify_participants`에 자동 포함.
+이후 동적 추가("B한테도 보내줘")는 기존 배열에 append — requester가 빠지지 않음.
 
 태스크 완료 시:
 ```
@@ -104,11 +107,15 @@ export async function findParticipantByChannelTarget(
 Telegram에서 요청이 오면:
 ```
 chat_id 수신 → findParticipantByChannelTarget("telegram", chat_id)
+  → null이면 → 태스크 생성 거부 (unroutable, 미등록 사용자 owner 유출 방지)
   → participant ID → task.requester에 자동 설정
 ```
 
 함수명을 `findParticipantByChatId`가 아닌 `findParticipantByChannelTarget`으로 일반화.
 Slack 등 다른 채널에서도 동일하게 사용 가능.
+
+**DB 제약**: `(channel, channel_target)` 조합에 UNIQUE 인덱스 추가.
+동일 chat_id에 복수 participant가 매핑되는 것을 방지.
 
 ### 4. Config: 멀티 Human
 
@@ -148,10 +155,13 @@ export function addTaskNotifyParticipant(ticketId: string, participantId: string
 **File**: `src/core/workspace/tasks.ts` (기존 상태 전이 로직에 추가)
 
 태스크가 DONE 상태로 전이될 때:
-1. `notify_participants`가 비어있으면 → `[requester]` fallback
-2. `requester`도 없으면 → `config.minions.owner` fallback
+1. `notify_participants`가 비어있으면 → 에이전트 자체 생성 태스크(requester 없음)는 `owner` fallback
+2. human-originated task인데 `notify_participants`가 비어있으면 → `unroutable`로 로깅 (owner에게 유출하지 않음)
 3. 각 participant에 대해 `createDelivery()` 호출
 4. delivery의 `source_message_id`는 태스크의 최종 thread message
+
+**부분 실패 정책**: 한 recipient의 전송 실패가 나머지를 막지 않는다.
+기존 `createDelivery()`의 `(source_message_id, recipient_participant_id)` 기반 dedup이 중복 전송을 방지한다.
 
 ### 7. Cron 실행기에서 Recipients → Delivery 연결
 
@@ -160,6 +170,10 @@ export function addTaskNotifyParticipant(ticketId: string, participantId: string
 크론 실행 완료 시:
 1. `cron.recipients`가 있으면 → 각 participant에 대해 `createDelivery()`
 2. `cron.recipients`가 없으면 → `config.minions.owner`에게 전달 (기존 동작)
+3. `recipients`가 없고 `target`도 없는 command cron (예: `life-dashboard-sync`) → delivery 생성하지 않음 (maintenance cron)
+
+**구분**: `recipients` 필드 존재 여부로 delivery-producing cron과 maintenance cron을 구분.
+`recipients`가 없는 command cron은 산출물이 없으므로 fanout 대상이 아니다.
 
 ## Data Flow
 
@@ -205,4 +219,4 @@ export function addTaskNotifyParticipant(ticketId: string, participantId: string
 | 레포 | 변경 |
 |------|------|
 | **dy-minions-squad** | schemas, participants, tasks, cron-registry, config — 핵심 구현 전부 |
-| **daye-agent-toolkit** | cron.json 파일들에 `recipients` 추가, instructions 하드코딩 제거 |
+| **daye-agent-toolkit** | cron.json `recipients` 추가, instructions 하드코딩 제거, SKILL.md 내 "daye" 하드코딩 제거, scripts의 `send_telegram()` 직접 호출을 delivery 경로로 전환 |
