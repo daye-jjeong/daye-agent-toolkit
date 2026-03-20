@@ -18,6 +18,6 @@
 		"schedule": "0 */2 * * *",
 		"target": "reddit-hot",
 		"reason": "cron: reddit-hot",
-		"instructions": "shared/news-brief/scripts/reddit-hot.py를 --subs shared/news-brief/references/reddit-hot-subs.txt로 실행하세요. 출력이 없으면 아무것도 하지 마세요. 출력이 있으면 각 포스트를 한국어로 요약하여 daye에게 전달하세요. 요약 형식: 번호. 제목 — r/서브레딧 (⬆upvotes) + 링크, 포스트 내용 1-2문장 요약, 댓글 핵심 반응 1-2문장."
+		"instructions": "news-brief 스킬의 'Reddit 핫 포스트' 절차를 따르세요."
 	}
 ]
