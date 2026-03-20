@@ -6,66 +6,65 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 # News Brief Skill
 
-Five-pipeline news briefing system:
-1. **General:** Korean/international general news + daily summary
-2. **AI Trends:** AI/tech RSS + community (HN, Reddit, PH, GitHub)
-3. **Ronik:** Robotics/kitchen automation RSS + Ronik impact analysis
-4. **Breaking:** 1시간 간격 속보 알림 (keyword scoring, LLM 0 tokens)
-5. **Reddit Hot:** AI 서브레딧 핫 포스트 알림 (upvote 필터, 2시간 주기)
+뉴스 수집 · 요약 · 알림 스킬.
 
-## Architecture
+## 기능
+
+### 데일리 신문
+
+General, AI Trends, Ronik, Community(Reddit) 4개 소스에서 RSS를 수집하고, 클러스터링 · 스코어링 · 한국어 번역 · 요약을 거쳐 HTML 신문을 생성한다.
 
 ```
-Pipeline 1 (General):  news_brief.py --output-format json  ─┐
-Pipeline 2 (AI):       news_brief.py --output-format json  ─┤→ compose-newspaper.py → enrich.py → render_newspaper.py → HTML
-Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┤
-Community  (Reddit):   news_brief.py --output-format json  ─┘
-Pipeline 4 (Breaking): breaking-alert.py (hourly cron)
-Pipeline 5 (Reddit):   reddit-hot.py (*/2h cron)
+news_brief.py (4개 소스) → compose-newspaper.py → enrich.py → render_newspaper.py → HTML
 ```
 
-**시간 표시**: 모든 파이프라인 KST (kst_utils.py). 포맷: `2026-02-21 18:30 KST`
+- 매일 09:00 자동 실행 또는 수동
+- LLM 사용: enrich 단계에서 번역 + 요약 (~200-400 tokens)
 
-## Core Workflow
+### 속보 알림
 
-1. `news_brief.py` fetches RSS feeds, filters by keywords, clusters by story, scores, ranks
-2. `compose-newspaper.py` merges General + AI + Ronik + Community → newspaper schema
-3. `enrich.py extract` → 에이전트가 한국어 번역 + 요약(why) 생성 → `enrich.py apply`
-4. `render_newspaper.py` renders enriched JSON → HTML newspaper
+AI/테크 RSS 소스를 키워드 스코어링으로 감시하여 고신호 기사를 즉시 알린다.
+
+- `breaking-alert.py`: tiered keyword scoring + word boundary 매칭
+- 매시간 자동 실행, LLM 0 tokens
+
+### Reddit 핫 포스트
+
+AI 관련 서브레딧(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA 등 8개)의 핫 포스트를 upvote 기반으로 필터링하여 알린다.
+
+- `reddit-hot.py`: upvote 50+ 필터, 서브레딧당 최대 3개
+- 2시간 간격 자동 실행, LLM 0 tokens
 
 ## Output
 
 | 산출물 | 경로 | 설명 |
 |--------|------|------|
-| HTML 신문 | `/tmp/mingming_daily.html` | 4개 파이프라인 종합 신문 |
+| HTML 신문 | `/tmp/mingming_daily.html` | 4개 소스 종합 신문 |
 | 속보 텍스트 | stdout | breaking-alert.py 감지 결과 |
 | Reddit 핫 | stdout | reddit-hot.py 알림 결과 |
 
-## Trigger
+## 시간 표시
 
-- Pipeline 1-3: Daily cron 09:00 or manual
-- Pipeline 4: `0 * * * *` (1시간 간격)
-- Pipeline 5: `0 */2 * * *` (2시간 간격)
+모든 출력은 KST (kst_utils.py). 포맷: `2026-02-21 18:30 KST`
 
 ## Token Usage
 
-- RSS Fetch + Breaking Alert: ~0 tokens (no LLM)
-- Weather + Outfit: ~0 tokens (Open-Meteo + rule-based)
-- Analysis: ~200-400 tokens (3 sentences x 5 items)
-- Total: ~200-400 tokens/day
+- 데일리 신문 enrich: ~200-400 tokens
+- 속보 + Reddit 핫: 0 tokens
+- 날씨 + 옷차림: 0 tokens (Open-Meteo + rule-based)
 
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
 | `news_brief.py` | RSS fetch + cluster + score + rank |
-| `compose-newspaper.py` | 4-input 파이프라인 조합 |
+| `compose-newspaper.py` | 4-input 소스 조합 |
 | `enrich.py` | 영어→한국어 번역 + 요약(why) 추가 |
 | `breaking-alert.py` | 속보 알림 (tiered keyword + word boundary) |
 | `reddit-hot.py` | Reddit 핫 포스트 알림 (AI 서브레딧, upvote 필터) |
-| `seen_cache.py` | 알림 dedup 캐시 (library) |
 | `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo) |
 | `render_newspaper.py` | JSON → 신문 스타일 HTML |
+| `seen_cache.py` | 알림 dedup 캐시 (library) |
 | `kst_utils.py` | KST 시간 변환 유틸 (library) |
 | `html_source.py` | Non-RSS 블로그 HTML 스크래핑 (library) |
 
@@ -79,5 +78,5 @@ Pipeline 5 (Reddit):   reddit-hot.py (*/2h cron)
 | `references/scripts-detail.md` | 스크립트별 상세 플래그 |
 | `references/newspaper-schema.md` | 신문 JSON 스키마 |
 | `references/output-example.md` | 산출물 예시 |
-| `references/*_feeds.txt` | 파이프라인별 RSS 피드 목록 |
-| `references/*_keywords.txt` | 파이프라인별 키워드 필터 |
+| `references/*_feeds.txt` | 소스별 RSS 피드 목록 |
+| `references/*_keywords.txt` | 소스별 키워드 필터 |
