@@ -41,7 +41,7 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
    - upvote 50+ 필터, 서브레딧당 최대 3개, 전체 최대 10개
    - 포스트 본문 + 상위 댓글 3개를 함께 수집
 2. 출력이 없으면 아무것도 하지 않는다
-3. 출력이 있으면 각 포스트를 한국어로 요약하여 daye에게 전달:
+3. 출력이 있으면 각 포스트를 한국어로 요약하여 recipients에게 전달:
    - 번호. **제목** — r/서브레딧 (⬆upvotes) + 링크
    - 포스트 내용 1-2문장 요약
    - 댓글 핵심 반응 1-2문장
@@ -51,7 +51,7 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
 Claude Code, OpenClaw, Claude 스킬 등의 실전 활용 사례를 Reddit에서 검색하여 다이제스트로 요약한다.
 
 - 검색 쿼리 목록: `references/cc-showcase-queries.txt`
-- 수동 실행 전용 (cron 없음)
+- 하루 2회 자동 실행 (10:00, 16:00) 또는 수동
 
 #### 절차
 
@@ -60,7 +60,7 @@ Claude Code, OpenClaw, Claude 스킬 등의 실전 활용 사례를 Reddit에서
    - upvote 50+ 필터, 전체 최대 10개
    - 포스트 본문 + 상위 댓글 3개를 함께 수집
 2. 출력이 없으면 아무것도 하지 않는다
-3. 출력이 있으면 각 포스트를 한국어로 요약하여 daye에게 전달:
+3. 출력이 있으면 각 포스트를 한국어로 요약하여 recipients에게 전달:
    - 번호. **제목** — r/서브레딧 (⬆upvotes) + 링크
    - 포스트 내용 1-2문장 요약 (어떤 활용인지 구체적으로)
    - 댓글 핵심 반응/팁 1-2문장

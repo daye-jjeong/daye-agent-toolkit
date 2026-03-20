@@ -4,20 +4,23 @@
 		"schedule": "0 21 * * *",
 		"target": "daily-spending",
 		"reason": "cron: daily-spending",
-		"instructions": "spending-manager 스킬의 '사용 흐름'을 따르세요. 데이터가 없으면 뱅크샐러드 내보내기 리마인드만 전달하세요."
+		"instructions": "spending-manager 스킬의 '사용 흐름'을 따르세요. 데이터가 없으면 뱅크샐러드 내보내기 리마인드만 전달하세요.",
+		"recipients": ["daye"]
 	},
 	{
 		"name": "weekly-spending",
 		"schedule": "0 9 * * 1",
 		"target": "weekly-spending",
 		"reason": "cron: weekly-spending",
-		"instructions": "spending-manager 스킬의 '사용 흐름'을 따르세요. 예산 대비 페이스 체크와 미분류 확인을 포함하세요. 데이터가 없으면 리마인드만 전달하세요."
+		"instructions": "spending-manager 스킬의 '사용 흐름'을 따르세요. 예산 대비 페이스 체크와 미분류 확인을 포함하세요. 데이터가 없으면 리마인드만 전달하세요.",
+		"recipients": ["daye"]
 	},
 	{
 		"name": "monthly-spending",
 		"schedule": "0 9 1 * *",
 		"target": "monthly-spending",
 		"reason": "cron: monthly-spending",
-		"instructions": "spending-manager 스킬의 '사용 흐름'을 따르세요. 전월 요약 + 추세 비교 + 예산 평가를 포함하세요. 데이터가 없으면 리마인드만 전달하세요."
+		"instructions": "spending-manager 스킬의 '사용 흐름'을 따르세요. 전월 요약 + 추세 비교 + 예산 평가를 포함하세요. 데이터가 없으면 리마인드만 전달하세요.",
+		"recipients": ["daye"]
 	}
 ]

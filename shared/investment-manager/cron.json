@@ -4,6 +4,7 @@
 		"schedule": "0 9 * * *",
 		"target": "daily-portfolio",
 		"reason": "cron: daily-portfolio",
-		"instructions": "investment-manager 스킬의 '사용 흐름'을 따르세요. 현황 → 시세 갱신 → 리스크 체크 순서로 수행하세요."
+		"instructions": "investment-manager 스킬의 '사용 흐름'을 따르세요. 현황 → 시세 갱신 → 리스크 체크 순서로 수행하세요.",
+		"recipients": ["daye"]
 	}
 ]

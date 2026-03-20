@@ -4,20 +4,31 @@
 		"schedule": "0 8 * * *",
 		"target": "daily-newspaper",
 		"reason": "cron: daily-newspaper",
-		"instructions": "news-brief 스킬의 'Quick Usage' 절차를 따르세요. enrich 단계를 절대 생략하지 마세요 — 영어 헤드라인이 남으면 안 됩니다. 완성된 HTML은 daye에게 --media로 전달하세요."
+		"instructions": "news-brief 스킬의 'Quick Usage' 절차를 따르세요. enrich 단계를 절대 생략하지 마세요 — 영어 헤드라인이 남으면 안 됩니다. 완성된 HTML은 recipients에게 --media로 전달하세요.",
+		"recipients": ["daye"]
 	},
 	{
 		"name": "breaking-alert",
 		"schedule": "0 * * * *",
 		"target": "breaking-alert",
 		"reason": "cron: breaking-alert",
-		"instructions": "news-brief 스킬의 'Breaking Alert' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요."
+		"instructions": "news-brief 스킬의 'Breaking Alert' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요.",
+		"recipients": ["daye"]
 	},
 	{
 		"name": "reddit-hot",
 		"schedule": "0 */2 * * *",
 		"target": "reddit-hot",
 		"reason": "cron: reddit-hot",
-		"instructions": "news-brief 스킬의 'Reddit 핫 포스트' 절차를 따르세요."
+		"instructions": "news-brief 스킬의 'Reddit 핫 포스트' 절차를 따르세요.",
+		"recipients": ["daye"]
+	},
+	{
+		"name": "cc-showcase",
+		"schedule": "0 10,16 * * *",
+		"target": "cc-showcase",
+		"reason": "cron: cc-showcase",
+		"instructions": "news-brief 스킬의 'CC/OpenClaw 활용 사례' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요.",
+		"recipients": ["daye"]
 	}
 ]

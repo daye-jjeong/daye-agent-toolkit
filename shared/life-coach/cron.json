@@ -4,13 +4,15 @@
 		"schedule": "0 21 * * *",
 		"target": "daily-coach",
 		"reason": "cron: daily-coach",
-		"instructions": "life-coach 스킬의 데일리 코칭을 실행하세요. 완성된 HTML은 daye에게 --media로 전달하세요."
+		"instructions": "life-coach 스킬의 데일리 코칭을 실행하세요. 완성된 HTML은 recipients에게 --media로 전달하세요.",
+		"recipients": ["daye"]
 	},
 	{
 		"name": "weekly-coach",
 		"schedule": "0 21 * * 0",
 		"target": "weekly-coach",
 		"reason": "cron: weekly-coach",
-		"instructions": "life-coach 스킬의 위클리 코칭을 실행하세요. 완성된 HTML은 daye에게 --media로 전달하세요."
+		"instructions": "life-coach 스킬의 위클리 코칭을 실행하세요. 완성된 HTML은 recipients에게 --media로 전달하세요.",
+		"recipients": ["daye"]
 	}
 ]
