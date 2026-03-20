@@ -6,11 +6,12 @@ metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 
 # News Brief Skill
 
-Four-pipeline news briefing system:
+Five-pipeline news briefing system:
 1. **General:** Korean/international general news + daily summary
 2. **AI Trends:** AI/tech RSS + community (HN, Reddit, PH, GitHub)
 3. **Ronik:** Robotics/kitchen automation RSS + Ronik impact analysis
-4. **Breaking:** 15분 간격 속보 알림 (keyword scoring, LLM 0 tokens)
+4. **Breaking:** 1시간 간격 속보 알림 (keyword scoring, LLM 0 tokens)
+5. **Reddit Hot:** AI 서브레딧 핫 포스트 알림 (upvote 필터, 2시간 주기)
 
 ## Architecture
 
@@ -19,7 +20,8 @@ Pipeline 1 (General):  news_brief.py --output-format json  ─┐
 Pipeline 2 (AI):       news_brief.py --output-format json  ─┤→ compose-newspaper.py → enrich.py → render_newspaper.py → HTML
 Pipeline 3 (Ronik):    news_brief.py --output-format json  ─┤
 Community  (Reddit):   news_brief.py --output-format json  ─┘
-Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
+Pipeline 4 (Breaking): breaking-alert.py (hourly cron)
+Pipeline 5 (Reddit):   reddit-hot.py (*/2h cron)
 ```
 
 **시간 표시**: 모든 파이프라인 KST (kst_utils.py). 포맷: `2026-02-21 18:30 KST`
@@ -37,11 +39,13 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 |--------|------|------|
 | HTML 신문 | `/tmp/mingming_daily.html` | 4개 파이프라인 종합 신문 |
 | 속보 텍스트 | stdout | breaking-alert.py 감지 결과 |
+| Reddit 핫 | stdout | reddit-hot.py 알림 결과 |
 
 ## Trigger
 
 - Pipeline 1-3: Daily cron 09:00 or manual
-- Pipeline 4: `*/15 * * * *` (15분 간격)
+- Pipeline 4: `0 * * * *` (1시간 간격)
+- Pipeline 5: `0 */2 * * *` (2시간 간격)
 
 ## Token Usage
 
@@ -58,6 +62,8 @@ Pipeline 4 (Breaking): breaking-alert.py (*/15 cron)
 | `compose-newspaper.py` | 4-input 파이프라인 조합 |
 | `enrich.py` | 영어→한국어 번역 + 요약(why) 추가 |
 | `breaking-alert.py` | 속보 알림 (tiered keyword + word boundary) |
+| `reddit-hot.py` | Reddit 핫 포스트 알림 (AI 서브레딧, upvote 필터) |
+| `seen_cache.py` | 알림 dedup 캐시 (library) |
 | `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo) |
 | `render_newspaper.py` | JSON → 신문 스타일 HTML |
 | `kst_utils.py` | KST 시간 변환 유틸 (library) |
