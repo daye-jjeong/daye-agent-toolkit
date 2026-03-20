@@ -15,7 +15,7 @@
 
 | 규모 | 기준 | 워크플로우 |
 |------|------|-----------|
-| **S** | 1-2 파일, 단순 수정 | worktree → 코딩 → 테스트 → 완료 |
+| **S** | 1-2 파일, 단순 수정 | worktree → 코딩 → 테스트 → simplify + pr-review → 사용자 승인 → 머지 |
 | **M** | 3-5 파일, 또는 불확실성 높음 | 아래 M 파이프라인 |
 | **L** | 6+ 파일 | M + codex plan 리뷰 |
 
@@ -28,11 +28,20 @@
 3. 구현 (TDD, 태스크 경계에서 커밋)
 4. `superpowers:verification-before-completion` → 자기검증
 5. `/simplify` → `pr-review-toolkit:review-pr` → 수렴까지 반복
-6. `superpowers:finishing-a-development-branch` → 완료 처리
+6. **사용자 머지 승인** → 명시적 확인 후 진행
+7. `superpowers:finishing-a-development-branch` → 완료 처리
 
 ## L 추가 사항
 
 2번과 3번 사이에: `codex-cli` exec 모드로 plan 교차 리뷰. 구현 착수 전 완료할 것.
+
+## 머지 게이트
+
+**모든 규모에서 머지 전 필수:**
+1. `/simplify` + `pr-review-toolkit:review-pr` 실행 (S 포함)
+2. 사용자에게 머지 승인 요청 — 승인 없이 머지하지 마라
+
+Why: 리뷰 없이 머지하면 cross-file 불일치, 불필요한 코드가 그대로 반영된다.
 
 ## 보고 규칙
 
