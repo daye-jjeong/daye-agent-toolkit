@@ -1,0 +1,10 @@
+# Claude Code / OpenClaw 활용 사례 검색 쿼리
+# 한 줄에 하나. '#'은 주석.
+# 형식: query | subreddit (생략 시 전체 검색)
+
+claude code workflow | ClaudeAI
+claude code built | ClaudeAI
+claude skill | ClaudeAI
+openclaw project
+claude code tips | ClaudeAI
+CLAUDE.md setup | ClaudeAI

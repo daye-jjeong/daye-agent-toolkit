@@ -1,6 +1,6 @@
 ---
 name: news-brief
-description: 뉴스 수집 · 요약 · 알림 — 데일리 신문(RSS 4개 소스 → HTML), AI 속보 알림(keyword scoring), Reddit AI 서브레딧 핫 포스트. 뉴스 정리, 신문 만들어, breaking alert, 레딧 핫, 속보, RSS 피드, 밍밍 데일리, 뉴스 브리핑, reddit-hot 등의 요청에 사용.
+description: 뉴스 수집 · 요약 · 알림 — 데일리 신문(RSS 4개 소스 → HTML), AI 속보 알림(keyword scoring), Reddit AI 서브레딧 핫 포스트, CC/OpenClaw 활용 사례 검색. 뉴스 정리, 신문 만들어, breaking alert, 레딧 핫, 속보, RSS 피드, 밍밍 데일리, 뉴스 브리핑, reddit-hot, CC 활용 사례, claude code 사례, openclaw 사례 등의 요청에 사용.
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
@@ -46,6 +46,25 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
    - 포스트 내용 1-2문장 요약
    - 댓글 핵심 반응 1-2문장
 
+### CC/OpenClaw 활용 사례
+
+Claude Code, OpenClaw, Claude 스킬 등의 실전 활용 사례를 Reddit에서 검색하여 다이제스트로 요약한다.
+
+- 검색 쿼리 목록: `references/cc-showcase-queries.txt`
+- 수동 실행 전용 (cron 없음)
+
+#### 절차
+
+1. `reddit-cc-showcase.py --queries references/cc-showcase-queries.txt` 실행
+   - 기본 시간 범위: week (--time으로 변경 가능: day, month, year, all)
+   - upvote 50+ 필터, 전체 최대 10개
+   - 포스트 본문 + 상위 댓글 3개를 함께 수집
+2. 출력이 없으면 아무것도 하지 않는다
+3. 출력이 있으면 각 포스트를 한국어로 요약하여 daye에게 전달:
+   - 번호. **제목** — r/서브레딧 (⬆upvotes) + 링크
+   - 포스트 내용 1-2문장 요약 (어떤 활용인지 구체적으로)
+   - 댓글 핵심 반응/팁 1-2문장
+
 ## Output
 
 | 산출물 | 경로 | 설명 |
@@ -53,6 +72,7 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
 | HTML 신문 | `/tmp/mingming_daily.html` | 4개 소스 종합 신문 |
 | 속보 텍스트 | stdout | breaking-alert.py 감지 결과 |
 | Reddit 핫 | stdout | reddit-hot.py 알림 결과 |
+| CC 활용 사례 | stdout | reddit-cc-showcase.py 검색 결과 |
 
 ## 시간 표시
 
@@ -63,6 +83,7 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
 - 데일리 신문 enrich: ~200-400 tokens
 - 속보: 0 tokens
 - Reddit 핫: 수집 0 tokens, 요약 ~100-200 tokens
+- CC 활용 사례: 수집 0 tokens, 요약 ~200-400 tokens
 - 날씨 + 옷차림: 0 tokens (Open-Meteo + rule-based)
 
 ## Scripts
@@ -74,6 +95,7 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
 | `enrich.py` | 영어→한국어 번역 + 요약(why) 추가 |
 | `breaking-alert.py` | 속보 알림 (tiered keyword + word boundary) |
 | `reddit-hot.py` | Reddit 핫 포스트 알림 (AI 서브레딧, upvote 필터) |
+| `reddit-cc-showcase.py` | CC/OpenClaw 활용 사례 검색 (Reddit search API) |
 | `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo) |
 | `render_newspaper.py` | JSON → 신문 스타일 HTML |
 | `seen_cache.py` | 알림 dedup 캐시 (library) |
@@ -93,3 +115,4 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
 | `references/*_feeds.txt` | 소스별 RSS 피드 목록 |
 | `references/*_keywords.txt` | 소스별 키워드 필터 |
 | `references/reddit-hot-subs.txt` | Reddit 핫 구독 서브레딧 목록 |
+| `references/cc-showcase-queries.txt` | CC/OpenClaw 활용 사례 검색 쿼리 |
