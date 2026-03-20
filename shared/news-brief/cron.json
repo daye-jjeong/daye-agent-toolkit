@@ -8,7 +8,7 @@
 	},
 	{
 		"name": "breaking-alert",
-		"schedule": "*/15 * * * *",
+		"schedule": "0 * * * *",
 		"target": "breaking-alert",
 		"reason": "cron: breaking-alert",
 		"instructions": "news-brief 스킬의 'Breaking Alert' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요."

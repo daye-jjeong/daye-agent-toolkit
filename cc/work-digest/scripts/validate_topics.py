@@ -53,7 +53,14 @@ def validate(date_str: str) -> bool:
 
         for i, (seg, top) in enumerate(zip(segments, topics)):
             # 시간 일치 확인
-            topic_start = top["start_at"][11:16] if top["start_at"] else "?"
+            raw_start = top["start_at"] or ""
+            # start_at can be 'HH:MM' (5 chars) or 'YYYY-MM-DD HH:MM:SS' (19+ chars)
+            if len(raw_start) >= 16:
+                topic_start = raw_start[11:16]
+            elif len(raw_start) == 5:
+                topic_start = raw_start  # already 'HH:MM'
+            else:
+                topic_start = "?"
             if seg["start"] != topic_start:
                 errors.append(f"{sid[:8]} #{i}: seg.start={seg['start']} topic.start={topic_start}")
 
