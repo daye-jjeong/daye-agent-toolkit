@@ -93,28 +93,6 @@ def daily_chart(data: dict, output_path: str):
     print(f"[timeline_chart] saved: {output_path}", file=sys.stderr)
 
 
-def assign_lanes(sessions: list[dict]) -> list[list[dict]]:
-    """겹치는 세션을 서로 다른 레인에 배치."""
-    lanes: list[list[dict]] = []
-    for s in sessions:
-        s_start = to_hours(s["start_at"])
-        s_end = s_start + (s.get("duration_min") or 30) / 60
-        placed = False
-        for lane in lanes:
-            fits = all(
-                s_end <= to_hours(e["start_at"]) or
-                s_start >= to_hours(e["start_at"]) + (e.get("duration_min") or 30) / 60
-                for e in lane
-            )
-            if fits:
-                lane.append(s)
-                placed = True
-                break
-        if not placed:
-            lanes.append([s])
-    return lanes
-
-
 def weekly_chart(data: dict, output_path: str):
     """주간 차트 — 요일별 subplot, 각 subplot은 일일 차트와 동일한 방식."""
     import matplotlib

@@ -1,6 +1,6 @@
 """work-digest 공용 상수 + 유틸리티.
 
-session_logger.py, daily_digest.py, weekly_digest.py에서 공유.
+session_logger.py 등에서 공유.
 stdlib만 사용 (외부 패키지 금지).
 """
 

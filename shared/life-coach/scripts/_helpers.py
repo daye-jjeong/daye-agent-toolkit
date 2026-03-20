@@ -5,7 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 # ── 공유 상수 ─────────────────────────────────────
 
@@ -170,17 +169,6 @@ def group_sessions_by_repo_branch(
 def has_meaningful_branches(branch_groups: dict[str | None, list[dict]]) -> bool:
     """branch가 있는 세션이 하나라도 있으면 True."""
     return len(branch_groups) > 1 or (None not in branch_groups)
-
-
-def find_project_memory(repo_name: str) -> Path | None:
-    """레포 이름에 매칭되는 프로젝트 memory 디렉토리 탐색."""
-    try:
-        for entry in PROJECTS_DIR.iterdir():
-            if entry.is_dir() and entry.name.endswith(repo_name):
-                return entry / "memory"
-    except FileNotFoundError:
-        pass
-    return None
 
 
 def get_pending_work() -> list[dict]:
