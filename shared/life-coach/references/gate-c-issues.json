@@ -5,5 +5,5 @@
   {"date": "2026-03-20", "type": "trivial-topic", "detail": "/exit /clear /login /reload 독립 토픽 → 기능 단위 병합", "auto_fixed": true},
   {"date": "2026-03-20", "type": "task-dup", "detail": "사주앱 기획 5건 등 중복 태스크 → superseded 처리 + save-task dedup 추가", "auto_fixed": true},
   {"date": "2026-03-21", "type": "repo-null", "detail": "3/18 9건, 3/19 11건, 3/21 2건 — scanner가 repo 미기록. --fix로 사후 보정", "auto_fixed": true, "count": 22},
-  {"date": "2026-03-21", "type": "session-missing", "detail": "3/15 세션 5건이 sessions 테이블에 없음 — scanner가 종료된 세션 미등록. extract_day.py가 발견한 세션 자동 INSERT 필요", "auto_fixed": false, "count": 5}
+  {"date": "2026-03-21", "type": "session-missing", "detail": "3/15 세션 5건 DB 누락 → validate_topics.py --fix에 자동 INSERT 추가. 해결.", "auto_fixed": true, "count": 5}
 ]
