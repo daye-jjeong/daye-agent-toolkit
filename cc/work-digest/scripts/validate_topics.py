@@ -28,12 +28,39 @@ def _is_eval_repo(repo: str | None) -> bool:
     return bool(repo and repo.endswith("-claude"))
 
 
-def _run_fixes(conn, date_str: str):
+def _run_fixes(conn, date_str: str, transcripts: list[dict] | None = None):
     """--fix 모드: validation 전에 DB를 정정한다.
 
+    0. sessions 테이블에 없는 세션 자동 등록
     1. session_topics.repo가 NULL인 행 → 부모 sessions.repo로 채움
     2. -claude repo 세션 → session_topics.tag와 sessions.tag를 'eval'로 변경
     """
+    # Fix 0: 누락 세션 자동 등록
+    fixed_sessions = 0
+    if transcripts:
+        for s in transcripts:
+            if not s.get("transcript"):
+                continue
+            sid = s["session_id"]
+            exists = conn.execute(
+                "SELECT 1 FROM sessions WHERE session_id = ? AND date = ?",
+                (sid, date_str),
+            ).fetchone()
+            if not exists:
+                data = extract(s["transcript"], date_str)
+                segs = merge_segments(data.get("segments", []))
+                if segs:
+                    first_start = f"{date_str}T{segs[0]['start']}:00"
+                    last_end = f"{date_str}T{segs[-1]['end']}:00"
+                    total_dur = sum(seg["duration_min"] for seg in segs)
+                    repo = s.get("repo", "unknown")
+                    conn.execute("""
+                        INSERT OR IGNORE INTO sessions
+                            (source, session_id, date, repo, start_at, end_at, duration_min)
+                        VALUES ('cc', ?, ?, ?, ?, ?, ?)
+                    """, (sid, date_str, repo, first_start, last_end, total_dur))
+                    fixed_sessions += 1
+
     # Fix 1: repo NULL 채우기
     fixed_repo = conn.execute("""
         UPDATE session_topics SET repo = (
@@ -59,8 +86,15 @@ def _run_fixes(conn, date_str: str):
 
     conn.commit()
 
-    if fixed_repo or fixed_eval_topics or fixed_eval_sessions:
-        print(f"[fix] repo NULL filled: {fixed_repo}, eval tag set: topics={fixed_eval_topics} sessions={fixed_eval_sessions}")
+    if fixed_sessions or fixed_repo or fixed_eval_topics or fixed_eval_sessions:
+        parts = []
+        if fixed_sessions:
+            parts.append(f"sessions registered: {fixed_sessions}")
+        if fixed_repo:
+            parts.append(f"repo NULL filled: {fixed_repo}")
+        if fixed_eval_topics or fixed_eval_sessions:
+            parts.append(f"eval tag set: topics={fixed_eval_topics} sessions={fixed_eval_sessions}")
+        print(f"[fix] {', '.join(parts)}")
     else:
         print("[fix] nothing to fix")
 
@@ -70,7 +104,7 @@ def validate(date_str: str, fix: bool = False) -> bool:
     conn = get_conn()
 
     if fix:
-        _run_fixes(conn, date_str)
+        _run_fixes(conn, date_str, transcripts=sessions)
 
     total_segments = 0
     total_topics = 0

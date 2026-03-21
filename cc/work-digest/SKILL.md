@@ -74,20 +74,21 @@ python3 {baseDir}/../../shared/life-dashboard-mcp/activity_writer.py update-summ
 - `--status`: `completed`, `in_progress`, `blocked`, `follow_up`
 - `--follow-up`: follow_up/blocked일 때 구체적 다음 행동 명시
 
-### Gate A: 요약 품질 검증
-
-Step 2 완료 후, Step 3 진입 전에 실행.
-
-1. `unsummarized --date <DATE>` 재실행 → 0건이어야 통과
-2. `-claude` 레포 세션은 tag="eval", summary="자동 스킬 eval 세션"으로 일괄 처리 (LLM 요약 불필요)
-3. eval 세션 시간대와 겹치는 건강 기록(health_exercises, health_symptoms, health_meals) 확인 → 있으면 삭제
-4. 미요약 잔존 시 해당 세션 요약 후 재확인
-
 ### Step 3: Segment 추출 (결정적)
 
 ```bash
 python3 {baseDir}/scripts/extract_day.py --date <DATE>
 ```
+
+### Gate A: 데이터 정합성 검증
+
+Step 3 완료 후, Step 4 진입 전에 실행.
+
+1. **누락 세션 등록**: extract_day.py가 발견한 세션이 sessions 테이블에 없으면 자동 INSERT (repo, start_at, end_at, duration_min을 트랜스크립트에서 추출)
+2. **미요약 확인**: `unsummarized --date <DATE>` 재실행 → 0건이어야 통과
+3. **eval 일괄 처리**: `-claude` 레포 세션은 tag="eval", summary="자동 스킬 eval 세션"으로 일괄 처리
+4. **가짜 건강 데이터 삭제**: eval 세션 시간대와 겹치는 건강 기록(health_exercises, health_symptoms, health_meals) 삭제
+5. 미요약 잔존 시 해당 세션 요약 후 재확인
 
 출력: 세션별 segments (시간 경계 확정, idle gap 기준 분리, 각 구간의 user messages + file edits)
 
