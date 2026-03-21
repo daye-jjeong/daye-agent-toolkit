@@ -386,10 +386,11 @@ def validate_report(html: str, data: dict) -> list[dict]:
     if _re.search(r'data-tag="eval"', html) or _re.search(r'"-claude"', html):
         issues.append({"type": "eval-leak", "detail": "eval in timeline data"})
 
-    # 9. 빈 섹션 (CSS 정의가 아닌 실제 사용 체크)
+    # 9. 빈 코칭 섹션
     body_html = html.split('</style>')[-1] if '</style>' in html else html
-    if 'coaching-placeholder' in body_html or 'coaching-empty' in body_html:
-        issues.append({"type": "empty-section", "detail": "coaching section empty"})
+    has_coaching_section = 'coaching-section' in body_html or 'coaching-h' in body_html
+    if not has_coaching_section:
+        issues.append({"type": "empty-section", "detail": "coaching section missing"})
 
     # 10. 1-2분 단순 명령 독립 항목 (B-2 실패 감지)
     trivial_patterns = [r'/exit[^a-z]', r'/clear[^a-z]', r'/login[^a-z]', r'/reload']
