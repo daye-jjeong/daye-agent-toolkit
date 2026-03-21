@@ -182,7 +182,7 @@ def upsert_session_topics(
     sync_session_cache=True면 첫 번째 토픽으로 sessions.summary/tag 캐시 갱신.
     """
     valid = []
-    for t in topics[:10]:
+    for t in topics[:20]:
         if not t.get("summary"):
             continue
         tag = t.get("tag", "기타")
