@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""정리해줘 결과 검증 — segment vs topic 1:1 대조 + eval 세션 면제 + --fix 모드.
+"""토픽 품질 검증 — repo/tag/summary 체크 + eval 면제 + --fix 모드.
 
 Usage:
     python3 validate_topics.py --date 2026-03-16
@@ -101,27 +101,15 @@ def validate(date_str: str, fix: bool = False) -> bool:
         total_segments += len(segments)
         total_topics += len(topics)
 
-        # repo NULL 체크
-        for i, top in enumerate(topics):
-            if not top["repo"]:
-                errors.append(f"{sid[:8]} #{i}: repo is NULL")
-
-        if len(segments) != len(topics):
-            errors.append(f"{sid[:8]}: segments={len(segments)} topics={len(topics)} MISMATCH")
+        # 토픽 없는 세션은 허용 (다른 세션에 병합된 경우)
+        if not topics:
             continue
 
-        for i, (seg, top) in enumerate(zip(segments, topics)):
-            # 시간 일치 확인
-            raw_start = top["start_at"] or ""
-            # start_at can be 'HH:MM' (5 chars) or 'YYYY-MM-DD HH:MM:SS' (19+ chars)
-            if len(raw_start) >= 16:
-                topic_start = raw_start[11:16]
-            elif len(raw_start) == 5:
-                topic_start = raw_start  # already 'HH:MM'
-            else:
-                topic_start = "?"
-            if seg["start"] != topic_start:
-                errors.append(f"{sid[:8]} #{i}: seg.start={seg['start']} topic.start={topic_start}")
+        # 각 토픽 검증
+        for i, top in enumerate(topics):
+            # repo NULL 체크
+            if not top["repo"]:
+                errors.append(f"{sid[:8]} #{i}: repo is NULL")
 
             # tag 확인
             if not top["tag"] or top["tag"] not in VALID_TAGS:
