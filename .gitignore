@@ -6,3 +6,4 @@
 __pycache__/
 .claude/worktrees/
 .claude/.worktrees/
+codex/work-digest/session_logger_state.json
