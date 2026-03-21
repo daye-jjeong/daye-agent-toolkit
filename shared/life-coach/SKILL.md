@@ -65,6 +65,13 @@ CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 코
 3. **HTML 리포트 생성**
    - 데일리: `daily_report.py --input <json> --coaching <md>` → `/tmp/daily_report_<DATE>.html` → `open`
    - 위클리: `weekly_report.py --input <json> --coaching <md>` → `/tmp/weekly_report_<DATE>.html` → `open`
+4. **Gate C: 리포트 프리뷰 검증** — `daily_report.py --validate` 또는 LLM이 직접 `validate_report()` 호출
+   - 통과하면 `open`
+   - 실패하면:
+     - 데이터 문제 → 데이터 수정 후 리포트 재생성
+     - 코칭 문제 (가짜 데이터 참조 등) → 코칭 재생성 후 리포트 재생성
+   - 이슈를 `references/gate-c-issues.json`에 기록
+   - 같은 type이 2일 이상 반복 → 스크립트 업데이트 제안 (사용자 승인 후 적용)
 
 ## 온디맨드 특정 주제
 

@@ -74,6 +74,15 @@ python3 {baseDir}/../../shared/life-dashboard-mcp/activity_writer.py update-summ
 - `--status`: `completed`, `in_progress`, `blocked`, `follow_up`
 - `--follow-up`: follow_up/blocked일 때 구체적 다음 행동 명시
 
+### Gate A: 요약 품질 검증
+
+Step 2 완료 후, Step 3 진입 전에 실행.
+
+1. `unsummarized --date <DATE>` 재실행 → 0건이어야 통과
+2. `-claude` 레포 세션은 tag="eval", summary="자동 스킬 eval 세션"으로 일괄 처리 (LLM 요약 불필요)
+3. eval 세션 시간대와 겹치는 건강 기록(health_exercises, health_symptoms, health_meals) 확인 → 있으면 삭제
+4. 미요약 잔존 시 해당 세션 요약 후 재확인
+
 ### Step 3: Segment 추출 (결정적)
 
 ```bash
@@ -124,6 +133,31 @@ validate_topics.py가 자동 확인:
 - segment 수 = topic 수 (1:1)
 - 모든 start_at/end_at/duration이 segment 값과 일치
 - tag가 실제 활동과 일치 (메시지 내용 대조)
+
+### Gate B-1: 구조 검증
+
+    python3 {baseDir}/scripts/validate_topics.py --fix --date <DATE>
+
+- eval 세션(`-claude` 레포) 면제, repo NULL 자동 채움, eval 태그 자동 변경
+- 에러 0이면 Gate B-2로 진행
+- 에러 있으면 해당 토픽 재생성 후 재검증 (최대 2회)
+- 2회 실패 시 파이프라인 중단, 사용자에게 보고
+
+### Gate B-2: 내용 품질 검증 (LLM 자기 검증)
+
+`daily_coach.py --json` 출력의 topics + sessions(user_messages)를 읽고 판단.
+
+통과 기준:
+- **PASS**: 모든 항목 이상 없음 → Phase 2로 진행
+- **WARN**: 경미한 품질 이슈 → 진행하되 로그 기록
+- **FAIL**: 내용 불일치, eval 혼입, 병합 필요 → 수정 후 Gate B-1부터 재실행
+
+체크 항목:
+1. 토픽 summary가 user_messages 내용과 일치하는지 (태그-활동 불일치 감지)
+2. 같은 레포 연속 5분 미만 세션이 하나의 맥락이면 병합
+3. 요약이 코칭에 쓸 수 있는 수준인지 (명령어 나열 아닌 뭘/왜/결과)
+4. 1-2분 단순 명령(/exit, /clear)은 독립 토픽으로 만들지 않음
+5. eval 세션이 실제 작업 토픽에 섞이지 않았는지
 
 ## 데이터 흐름
 
