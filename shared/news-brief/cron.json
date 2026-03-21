@@ -12,12 +12,12 @@
 		"schedule": "0 * * * *",
 		"target": "breaking-alert",
 		"reason": "cron: breaking-alert",
-		"instructions": "news-brief 스킬의 'Breaking Alert' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요.",
+		"instructions": "news-brief 스킬의 '속보 알림' 섹션을 따르세요. 출력이 없으면 아무것도 하지 마세요.",
 		"recipients": ["daye"]
 	},
 	{
 		"name": "reddit-hot",
-		"schedule": "0 */2 * * *",
+		"schedule": "0 10,12,14,16,18 * * *",
 		"target": "reddit-hot",
 		"reason": "cron: reddit-hot",
 		"instructions": "news-brief 스킬의 'Reddit 핫 포스트' 절차를 따르세요.",
