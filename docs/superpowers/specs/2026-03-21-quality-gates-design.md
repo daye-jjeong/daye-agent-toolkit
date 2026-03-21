@@ -167,7 +167,7 @@ Gate C가 잡은 이슈를 `shared/life-coach/references/gate-c-issues.json`에 
   {"date": "2026-03-21", "type": "fake-health", "count": 13, "fix": "Gate A 삭제", "auto_fixed": true}
 ]
 ```
-type 필드는 정해진 enum: `repo-null`, `eval-leak`, `fake-health`, `stale-coaching`, `task-dup`, `empty-section`, `trivial-topic`, `tag-mismatch`.
+type 필드는 정해진 enum: `repo-null`, `eval-leak`, `fake-health`, `stale-coaching`, `task-dup`, `empty-section`, `trivial-topic`, `tag-mismatch`, `session-missing`.
 
 ### 코드 수정 흐름
 ```
