@@ -65,11 +65,22 @@ CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 코
 3. **HTML 리포트 생성**
    - 데일리: `daily_report.py --input <json> --coaching <md>` → `/tmp/daily_report_<DATE>.html` → `open`
    - 위클리: `weekly_report.py --input <json> --coaching <md>` → `/tmp/weekly_report_<DATE>.html` → `open`
-4. **Gate C: 리포트 프리뷰 검증** — `daily_report.py --validate` 또는 LLM이 직접 `validate_report()` 호출
-   - 통과하면 `open`
-   - 실패하면:
-     - 데이터 문제 → 데이터 수정 후 리포트 재생성
-     - 코칭 문제 (가짜 데이터 참조 등) → 코칭 재생성 후 리포트 재생성
+4. **Gate C: 리포트 프리뷰 검증** — 스크립트 + LLM 직접 확인. **사용자에게 보여주기 전에 반드시 통과.**
+
+   **Step C-1: 스크립트 검증** — `daily_report.py --validate`
+   - eval 노출, 레포명 이상, 가짜 건강 데이터, 태스크 중복 등 구조적 체크
+   - 블로킹 이슈 있으면 데이터 수정 후 리포트 재생성
+
+   **Step C-2: LLM 직접 확인** — 생성된 HTML의 내용을 직접 읽고 검토
+   - stats 카드: 세션 수, 토큰, 작업시간이 정상적인가
+   - 태그 분포: eval이 표시되지 않는가, 분포가 실제 활동과 맞는가
+   - 토픽 목록: 쓰레기 항목 없는가, 기능 단위로 잘 묶였는가, 불필요하게 쪼개진 것 없는가
+   - 코칭 내용: 삭제된 데이터를 참조하지 않는가, 건강 섹션이 정확한가
+   - 제안 태스크: 중복 없는가, 이미 완료된 것이 pending으로 남지 않았는가
+   - 타임라인: eval 바 없는가, 시간 배치가 자연스러운가
+
+   **하나라도 이상하면 수정 후 리포트 재생성.** 사용자한테 확인받지 마라 — 직접 고쳐라.
+
    - 이슈를 `references/gate-c-issues.json`에 기록
    - 같은 type이 2일 이상 반복 → 스크립트 업데이트 제안 (사용자 승인 후 적용)
 
