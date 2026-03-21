@@ -398,6 +398,25 @@ def upsert_coaching_entry(conn: sqlite3.Connection, data: dict):
 
 
 def upsert_task_suggestion(conn: sqlite3.Connection, data: dict):
+    # Dedup: check pending tasks with same first 3 words
+    desc_words = data["description"].split()[:3]
+    if len(desc_words) >= 2:
+        prefix = " ".join(desc_words)
+        existing = conn.execute(
+            "SELECT id FROM task_suggestions WHERE status = 'pending' AND description LIKE ? || '%'",
+            (prefix,)
+        ).fetchone()
+        if existing:
+            conn.execute("""
+                UPDATE task_suggestions
+                SET suggested_date = ?, description = ?, estimated_min = ?,
+                    priority = ?, source_type = ?
+                WHERE id = ?
+            """, (data["suggested_date"], data["description"], data["estimated_min"],
+                  data["priority"], data["source_type"], existing["id"]))
+            return
+
+    # Original insert logic
     conn.execute("""
         INSERT INTO task_suggestions (suggested_date, description, estimated_min,
             priority, source_type, origin_session_id, status)
