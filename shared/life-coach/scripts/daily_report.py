@@ -315,6 +315,91 @@ def _match_repo_summary(repo: str, summaries: dict[str, str | list[str]]) -> str
     return None
 
 
+def validate_report(html: str, data: dict) -> list[dict]:
+    """Gate C: HTML 리포트 프리뷰 검증. 이슈 목록 반환."""
+    import re as _re
+    issues = []
+    date_str = data.get("date", "")
+
+    # 1. 세션 수에 eval 포함
+    m = _re.search(r'stat-val">(\d+)</div><div class="stat-lbl">세션', html)
+    real_count = len([s for s in data.get("sessions", []) if s.get("tag") != "eval"])
+    if m and int(m.group(1)) != real_count:
+        issues.append({"type": "eval-leak", "detail": f"stats sessions {m.group(1)} != real {real_count}"})
+
+    # 2. tag pill에 eval 표시
+    if _re.search(r'tag-pill[^>]*>eval', html):
+        issues.append({"type": "eval-leak", "detail": "eval tag in tag pills"})
+
+    # 3. 토큰 수에 eval 포함
+    eval_tokens = sum(s.get("token_total", 0) for s in data.get("sessions", []) if s.get("tag") == "eval")
+    if eval_tokens > 0:
+        m = _re.search(r'stat-val">([\d.]+)M</div><div class="stat-lbl">토큰', html)
+        if m:
+            total_tokens = sum(s.get("token_total", 0) for s in data.get("sessions", []))
+            real_tokens = total_tokens - eval_tokens
+            displayed = float(m.group(1)) * 1_000_000
+            if abs(displayed - real_tokens) > real_tokens * 0.1:
+                issues.append({"type": "eval-leak", "detail": f"tokens include eval: displayed={m.group(1)}M"})
+
+    # 4. 레포명 unknown
+    for m in _re.finditer(r'repo-name[^>]*>([^<]+)<', html):
+        name = m.group(1).strip()
+        if name in ("unknown", "", "None"):
+            issues.append({"type": "repo-null", "detail": f"repo name: '{name}'"})
+
+    # 5. 건강 데이터: eval 시간대 겹침 (주 기준)
+    try:
+        _mcp = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+        sys.path.insert(0, str(_mcp))
+        from db import get_conn as _get_conn
+        conn = _get_conn()
+        eval_exists = conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE date = ? AND repo = '-claude'",
+            (date_str,)
+        ).fetchone()[0]
+        if eval_exists:
+            for table in ["health_exercises", "health_symptoms", "health_meals"]:
+                count = conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE date = ?", (date_str,)
+                ).fetchone()[0]
+                if count:
+                    issues.append({"type": "fake-health", "detail": f"{table}: {count} records on eval day"})
+        conn.close()
+    except Exception:
+        pass
+
+    # 6. 가짜 키워드 (보조)
+    for kw in ["테스트용", "스크립트 검증", "알수없는음식"]:
+        if kw in html:
+            issues.append({"type": "fake-health", "detail": f"keyword '{kw}'"})
+
+    # 7. 제안 태스크 중복
+    task_texts = _re.findall(r'work-summary[^>]*>([^<]{5,})', html)
+    from collections import Counter
+    prefix_counter = Counter(" ".join(t.split()[:3]) for t in task_texts if len(t.split()) >= 3)
+    for prefix, cnt in prefix_counter.items():
+        if cnt >= 3:
+            issues.append({"type": "task-dup", "detail": f"'{prefix}' x{cnt}"})
+
+    # 8. 타임라인에 eval 잔존
+    if _re.search(r'data-tag="eval"', html) or _re.search(r'"-claude"', html):
+        issues.append({"type": "eval-leak", "detail": "eval in timeline data"})
+
+    # 9. 빈 섹션
+    if 'coaching-placeholder' in html or 'coaching-empty' in html:
+        issues.append({"type": "empty-section", "detail": "coaching section empty"})
+
+    # 10. 1-2분 단순 명령 독립 항목 (B-2 실패 감지)
+    trivial_patterns = [r'/exit[^a-z]', r'/clear[^a-z]', r'/login[^a-z]', r'/reload']
+    for pat in trivial_patterns:
+        matches = _re.findall(pat, html)
+        if len(matches) > 1:
+            issues.append({"type": "trivial-topic", "detail": f"'{pat}' appears {len(matches)}x"})
+
+    return issues
+
+
 def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] | None = None) -> str:
     """레포별 작업. topics 있으면 토픽 기준, 없으면 세션 원문."""
     sessions = data.get("sessions", [])
@@ -797,11 +882,6 @@ def build_daily_report(data: dict, coaching_md: str | None = None,
     if not data.get("has_data"):
         return _build_empty_page(data.get("date", ""))
 
-    # eval 세션/토픽 제외 (자동 스킬 테스트)
-    data = {**data,
-            "sessions": [s for s in data.get("sessions", []) if s.get("tag") != "eval"],
-            "topics": [t for t in data.get("topics", []) if t.get("tag") != "eval"]}
-
     date_str = data["date"]
     dt = datetime.strptime(date_str, "%Y-%m-%d")
     weekday = WEEKDAY[dt.weekday()]
@@ -860,6 +940,7 @@ def main():
     parser.add_argument("--coaching", help="LLM coaching markdown file")
     parser.add_argument("--repo-summaries", help="LLM repo summaries JSON file")
     parser.add_argument("--output", help="Output HTML path (default: date-based)")
+    parser.add_argument("--validate", action="store_true", help="Gate C: validate report before saving")
     args = parser.parse_args()
 
     raw = json.load(open(args.input) if args.input else sys.stdin)
@@ -890,6 +971,20 @@ def main():
         print(f"[daily_report] validate skipped: {e}", file=sys.stderr)
 
     html = build_daily_report(raw, coaching_md, repo_summaries=repo_summaries)
+
+    if args.validate:
+        vi = validate_report(html, raw)
+        if vi:
+            print(f"[daily_report] ⚠ Gate C: {len(vi)} issues", file=sys.stderr)
+            for iss in vi:
+                print(f"  ✗ [{iss['type']}] {iss['detail']}", file=sys.stderr)
+            log_path = Path(__file__).resolve().parent.parent / "references" / "gate-c-issues.json"
+            existing = json.loads(log_path.read_text()) if log_path.exists() else []
+            for iss in vi:
+                existing.append({"date": date_str, **iss, "auto_fixed": False})
+            log_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2))
+            print("[daily_report] Gate C failed. Fix issues and retry.", file=sys.stderr)
+            sys.exit(1)
 
     output_path = args.output or f"/tmp/daily_report_{date_str}.html"
     Path(output_path).write_text(html, encoding="utf-8")
