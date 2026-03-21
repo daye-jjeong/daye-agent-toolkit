@@ -34,6 +34,10 @@ def _min_to_hhmm(m: int) -> str:
 def prep(sessions, topics=None):
     """타임라인 데이터 생성. topics 있으면 세션별로 토픽을 순차 배치."""
     if topics:
+        # eval 세션 제외
+        topics = [t for t in topics if t.get("tag") != "eval"]
+        sessions = [s for s in sessions if s.get("tag") != "eval"]
+
         # 세션별로 토픽 그룹핑 → 각 세션 시간 범위 안에서 순차 배치
         from collections import defaultdict
         sess_map = {}

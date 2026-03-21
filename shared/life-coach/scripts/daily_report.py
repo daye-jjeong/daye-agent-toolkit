@@ -797,6 +797,11 @@ def build_daily_report(data: dict, coaching_md: str | None = None,
     if not data.get("has_data"):
         return _build_empty_page(data.get("date", ""))
 
+    # eval 세션/토픽 제외 (자동 스킬 테스트)
+    data = {**data,
+            "sessions": [s for s in data.get("sessions", []) if s.get("tag") != "eval"],
+            "topics": [t for t in data.get("topics", []) if t.get("tag") != "eval"]}
+
     date_str = data["date"]
     dt = datetime.strptime(date_str, "%Y-%m-%d")
     weekday = WEEKDAY[dt.weekday()]

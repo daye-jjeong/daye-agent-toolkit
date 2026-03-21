@@ -167,7 +167,7 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
     ))
 
 
-_VALID_TAGS = {"코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "설계", "리팩토링", "기타"}
+_VALID_TAGS = {"코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "설계", "리팩토링", "eval", "기타"}
 
 
 def upsert_session_topics(
@@ -193,14 +193,20 @@ def upsert_session_topics(
     if not valid:
         return
 
+    # repo 자동 채우기 — 토픽에 repo가 없으면 부모 세션에서 가져옴
+    session_row = conn.execute(
+        "SELECT repo, duration_min FROM sessions WHERE source=? AND session_id=? AND date=?",
+        (source, session_id, date),
+    ).fetchone()
+    session_repo = session_row["repo"] if session_row else None
+    for t in valid:
+        if not t.get("repo") and session_repo:
+            t["repo"] = session_repo
+
     # duration_estimate_min 자동 채우기 — 명시 안 된 토픽은 세션 시간 균등 분배
     any_missing = any(not t.get("duration_estimate_min") for t in valid)
     if any_missing:
-        row = conn.execute(
-            "SELECT duration_min FROM sessions WHERE source=? AND session_id=? AND date=?",
-            (source, session_id, date),
-        ).fetchone()
-        session_dur = row["duration_min"] if row and row["duration_min"] else 30
+        session_dur = session_row["duration_min"] if session_row and session_row["duration_min"] else 30
         per_topic = max(1, session_dur // len(valid))
         for t in valid:
             if not t.get("duration_estimate_min"):
