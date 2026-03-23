@@ -8,7 +8,7 @@ including post body and top comments for LLM summarization.
 Uses Reddit's hot ranking algorithm (time decay + engagement) as the
 primary signal, with a minimum upvote floor to filter noise.
 
-Designed for 2-hour cron: 0 */2 * * *
+Designed for daily cron: 0 18 * * *
 
 Usage:
   python3 reddit-hot.py --subs references/reddit-hot-subs.txt --dry-run
