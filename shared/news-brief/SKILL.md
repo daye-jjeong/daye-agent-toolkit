@@ -33,6 +33,8 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
 
 - 구독 목록: `references/reddit-hot-subs.txt`
 
+**하루 1회 상한:** 크론·태스크 합산으로 reddit-hot은 하루 1회만 전송. 당일 이미 발송됐으면 스킵.
+
 #### 절차
 
 1. `reddit-hot.py --subs references/reddit-hot-subs.txt` 실행
