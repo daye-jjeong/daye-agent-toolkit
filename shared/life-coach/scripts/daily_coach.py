@@ -159,6 +159,7 @@ def get_today_data(conn, date_str: str) -> dict:
         "open_followups": open_followups,
         "pending_tasks": pending_tasks,
         "yesterday_coaching": yesterday_coaching,
+        "unsummarized_count": sum(1 for s in sessions if s.get("summary_source") == "pending"),
     }
 
 
@@ -354,6 +355,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
 
     sections.append(_build_stats_line(data))
 
+    unsummarized = data.get("unsummarized_count", 0)
+    if unsummarized > 0:
+        return f"❌ 미요약 세션 {unsummarized}건 — work-digest Step 2를 실행한 후 다시 시도하세요."
+
     tags = data.get("tag_breakdown", {})
     if tags:
         parts = [f"{TAG_ICONS.get(t, '💡')}{t} {c}건" for t, c in
@@ -459,6 +464,10 @@ def main():
         coach_state = get_coach_state(conn)  # re-read after update
 
         if args.json:
+            unsummarized = data.get("unsummarized_count", 0)
+            if unsummarized > 0:
+                print(f"[daily_coach] ❌ 미요약 세션 {unsummarized}건 — work-digest Step 2 필요", file=sys.stderr)
+                sys.exit(1)
             print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
             return
 
