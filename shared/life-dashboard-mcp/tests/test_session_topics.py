@@ -155,6 +155,94 @@ def test_sync_session_cache():
     assert row["summary_source"] == "llm"
 
 
+def test_merge_intervals_hhmm():
+    """_merge_intervals_minutes가 HH:MM 형식도 처리."""
+    from db import _merge_intervals_minutes
+    # HH:MM 형식 — date_str 제공 시 정상 계산
+    result = _merge_intervals_minutes(
+        [("10:00", "11:30"), ("11:00", "12:00")],
+        date_str="2026-03-17",
+    )
+    assert result == 120  # 10:00~12:00 = 120분 (겹침 병합)
+
+
+def test_merge_intervals_hhmm_no_date():
+    """date_str 없이 HH:MM이면 0 반환 (파싱 불가)."""
+    from db import _merge_intervals_minutes
+    result = _merge_intervals_minutes([("10:00", "11:00")])
+    assert result == 0
+
+
+def test_upsert_topics_normalizes_hhmm():
+    """upsert_session_topics가 HH:MM을 ISO로 변환하여 저장."""
+    conn = _setup_db()
+    _insert_session(conn)
+    upsert_session_topics(conn, "cc", "test-123", "2026-03-16", [
+        {"tag": "코딩", "summary": "work", "start_at": "10:05", "end_at": "11:30"},
+    ])
+    row = conn.execute(
+        "SELECT start_at, end_at FROM session_topics WHERE date='2026-03-16'"
+    ).fetchone()
+    assert row["start_at"] == "2026-03-16T10:05:00"
+    assert row["end_at"] == "2026-03-16T11:30:00"
+
+
+def test_daily_stats_work_hours_uses_session_intervals():
+    """work_hours는 세션 구간 병합으로 계산 (토픽이 아닌 세션 기준)."""
+    conn = _setup_db()
+    _insert_session(conn)  # 10:00~12:00 = 120분
+    # 토픽이 있어도 work_hours는 세션 기준
+    conn.execute(
+        "INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, start_at, end_at, duration_estimate_min, status)"
+        " VALUES ('cc','test-123','2026-03-16',0,'코딩','work','10:00','11:30',90,'completed')"
+    )
+    update_daily_stats(conn, "2026-03-16")
+    row = conn.execute("SELECT work_hours FROM daily_stats WHERE date='2026-03-16'").fetchone()
+    assert row["work_hours"] == 2.0  # 세션 10:00~12:00 = 120분
+
+
+def test_daily_stats_ignores_topic_intervals_for_work_hours():
+    """work_hours는 토픽 구간이 아닌 sessions.duration_min 합산."""
+    conn = _setup_db()
+    _insert_session(conn)  # duration_min=120
+    # 토픽이 있어도 work_hours는 duration_min 기준
+    conn.execute(
+        "INSERT INTO session_topics (source, session_id, date, topic_order, tag, summary, start_at, end_at, duration_estimate_min, status)"
+        " VALUES ('cc','test-123','2026-03-16',0,'ops','short','2026-03-16T00:00:00','2026-03-16T00:01:00',1,'completed')"
+    )
+    update_daily_stats(conn, "2026-03-16")
+    row = conn.execute("SELECT work_hours FROM daily_stats WHERE date='2026-03-16'").fetchone()
+    # session duration_min=120 → 2.0h
+    assert row["work_hours"] == 2.0
+
+
+def test_daily_stats_parallel_sessions():
+    """병렬 세션의 work_hours는 duration_min 합산."""
+    conn = _setup_db()
+    upsert_session(conn, {
+        "source": "cc", "session_id": "s1", "date": "2026-03-16",
+        "repo": "r", "branch": None, "tag": "코딩",
+        "summary": "a", "summary_source": "llm",
+        "status": "completed", "follow_up": None,
+        "start_at": "2026-03-16T10:00:00+09:00", "end_at": "2026-03-16T12:00:00+09:00",
+        "duration_min": 120, "file_count": 0, "error_count": 0,
+        "has_tests": 0, "has_commits": 0, "token_total": 0,
+    })
+    upsert_session(conn, {
+        "source": "cc", "session_id": "s2", "date": "2026-03-16",
+        "repo": "r", "branch": None, "tag": "코딩",
+        "summary": "b", "summary_source": "llm",
+        "status": "completed", "follow_up": None,
+        "start_at": "2026-03-16T11:00:00+09:00", "end_at": "2026-03-16T13:00:00+09:00",
+        "duration_min": 120, "file_count": 0, "error_count": 0,
+        "has_tests": 0, "has_commits": 0, "token_total": 0,
+    })
+    update_daily_stats(conn, "2026-03-16")
+    row = conn.execute("SELECT work_hours FROM daily_stats WHERE date='2026-03-16'").fetchone()
+    # min(duration합 240, wall 10:00~13:00=180) = 180min = 3.0h
+    assert row["work_hours"] == 3.0
+
+
 if __name__ == "__main__":
     passed = failed = 0
     for name, func in list(globals().items()):

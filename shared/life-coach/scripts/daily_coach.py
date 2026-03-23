@@ -18,7 +18,7 @@ sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals, \
     query_exercises, query_symptoms, query_meals, query_check_ins, query_expiring_pantry, \
     get_mistake_trends, get_coaching_entry, get_pending_tasks, get_open_followups, \
-    get_session_topics
+    get_session_topics, update_daily_summary
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -159,6 +159,7 @@ def get_today_data(conn, date_str: str) -> dict:
         "open_followups": open_followups,
         "pending_tasks": pending_tasks,
         "yesterday_coaching": yesterday_coaching,
+        "unsummarized_count": sum(1 for s in sessions if s.get("summary_source") == "pending"),
     }
 
 
@@ -354,6 +355,10 @@ def build_template_report(data: dict, coach_state: dict) -> str:
 
     sections.append(_build_stats_line(data))
 
+    unsummarized = data.get("unsummarized_count", 0)
+    if unsummarized > 0:
+        return f"❌ 미요약 세션 {unsummarized}건 — work-digest Step 2를 실행한 후 다시 시도하세요."
+
     tags = data.get("tag_breakdown", {})
     if tags:
         parts = [f"{TAG_ICONS.get(t, '💡')}{t} {c}건" for t, c in
@@ -420,6 +425,23 @@ def update_overwork_tracking(conn, data: dict, coach_state: dict):
     return level
 
 
+def _build_daily_summary(data: dict) -> str:
+    """세션/토픽에서 일간 작업 요약 텍스트 생성."""
+    lines = []
+    topics = data.get("topics", [])
+    if topics:
+        for t in topics:
+            s = t.get("summary", "")
+            if s:
+                lines.append(f"[{t.get('tag', '기타')}] {s[:80]}")
+    else:
+        for s in data.get("sessions", []):
+            summary = s.get("summary", "")
+            if summary:
+                lines.append(f"[{s.get('tag', '기타')}] {summary[:80]}")
+    return "\n".join(lines[:20]) if lines else ""
+
+
 def main():
     parser = argparse.ArgumentParser(description="Daily coaching report")
     parser.add_argument("--dry-run", action="store_true", help="stdout only")
@@ -442,10 +464,21 @@ def main():
         coach_state = get_coach_state(conn)  # re-read after update
 
         if args.json:
+            unsummarized = data.get("unsummarized_count", 0)
+            if unsummarized > 0:
+                print(f"[daily_coach] ❌ 미요약 세션 {unsummarized}건 — work-digest Step 2 필요", file=sys.stderr)
+                sys.exit(1)
             print(json.dumps(data, ensure_ascii=False, indent=2, default=str))
             return
 
         message = build_template_report(data, coach_state)
+
+        # daily_stats.summary 저장
+        if data["has_data"]:
+            summary_text = _build_daily_summary(data)
+            if summary_text:
+                update_daily_summary(conn, args.date, summary_text)
+                conn.commit()
 
         if len(message) > TELEGRAM_MAX_CHARS:
             message = message[:TELEGRAM_MAX_CHARS - 20] + "\n\n... (truncated)"

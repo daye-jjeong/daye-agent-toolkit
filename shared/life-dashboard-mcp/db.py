@@ -2,6 +2,7 @@
 """life-dashboard-mcp DB module — SQLite access layer."""
 
 import json
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -12,6 +13,7 @@ DB_PATH = DB_DIR / "data.db"
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
 _schema_initialized = False
+_HHMM_RE = re.compile(r"^\d{2}:\d{2}$")
 
 
 def get_conn() -> sqlite3.Connection:
@@ -43,6 +45,15 @@ def _migrate(conn: sqlite3.Connection):
     except Exception:
         pass
 
+    # daily_stats: summary column
+    try:
+        ds_cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_stats)").fetchall()}
+        if ds_cols and "summary" not in ds_cols:
+            conn.execute("ALTER TABLE daily_stats ADD COLUMN summary TEXT")
+            conn.commit()
+    except Exception:
+        pass
+
 
 @contextmanager
 def open_conn(auto_commit=True):
@@ -59,15 +70,21 @@ def open_conn(auto_commit=True):
         conn.close()
 
 
-def _merge_intervals_minutes(intervals: list[tuple[str, str]]) -> int:
-    """ISO timestamp 구간 리스트를 병합하여 겹치지 않는 총 분을 반환."""
+def _merge_intervals_minutes(intervals: list[tuple[str, str]], *, date_str: str = "") -> int:
+    """ISO timestamp 또는 HH:MM 구간 리스트를 병합하여 겹치지 않는 총 분을 반환."""
     if not intervals:
         return 0
     parsed = []
     for s, e in intervals:
         try:
-            start = datetime.fromisoformat(s)
-            end = datetime.fromisoformat(e)
+            if _HHMM_RE.match(s or "") and _HHMM_RE.match(e or ""):
+                if not date_str:
+                    continue
+                start = datetime.fromisoformat(f"{date_str}T{s}:00")
+                end = datetime.fromisoformat(f"{date_str}T{e}:00")
+            else:
+                start = datetime.fromisoformat(s)
+                end = datetime.fromisoformat(e)
             if end > start:
                 parsed.append((start, end))
         except (ValueError, TypeError):
@@ -115,7 +132,6 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
     repos: dict[str, int] = {}
     first_session = "99:99"
     last_end = "00:00"
-    intervals = []
     sum_duration = 0
 
     for r in rows:
@@ -128,24 +144,19 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
             first_session = start_time
         if end_time > last_end:
             last_end = end_time
-        s = r["start_at"] or ""
-        e = r["end_at"] or s
-        if len(s) >= 16 and len(e) >= 16:
-            intervals.append((s, e))
 
-    # work_hours: 토픽 있으면 토픽 구간 병합 (정확), 없으면 세션 duration 합산 폴백
-    topic_intervals = conn.execute(
-        "SELECT start_at, end_at FROM session_topics "
-        "WHERE date = ? AND start_at IS NOT NULL AND end_at IS NOT NULL",
-        (date_str,),
-    ).fetchall()
-    if topic_intervals:
-        total_min = _merge_intervals_minutes(
-            [(r["start_at"], r["end_at"]) for r in topic_intervals]
-        )
+    # work_hours: 세션별 활동시간(idle 제외된 duration_min) 합산
+    # 벽시계 시간(first~last)으로 상한 — 병렬 세션 이중 계산 방지
+    if first_session != "99:99" and last_end != "00:00":
+        fh, fm = int(first_session[:2]), int(first_session[3:5])
+        eh, em = int(last_end[:2]), int(last_end[3:5])
+        wall_min = (eh * 60 + em) - (fh * 60 + fm)
+        if wall_min > 0:
+            total_min = min(sum_duration, wall_min)
+        else:
+            total_min = sum_duration
     else:
-        merged_wall = _merge_intervals_minutes(intervals)
-        total_min = min(sum_duration, merged_wall) if merged_wall else sum_duration
+        total_min = sum_duration
 
     conn.execute("""
         INSERT INTO daily_stats (date, work_hours, session_count, tag_breakdown,
@@ -165,6 +176,14 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
         first_session,
         last_end,
     ))
+
+
+def update_daily_summary(conn: sqlite3.Connection, date_str: str, summary: str):
+    """daily_stats의 summary 필드 갱신."""
+    conn.execute("""
+        UPDATE daily_stats SET summary = ?, updated_at = datetime('now','localtime')
+        WHERE date = ?
+    """, (summary, date_str))
 
 
 _VALID_TAGS = {"코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "설계", "리팩토링", "eval", "기타"}
@@ -192,6 +211,13 @@ def upsert_session_topics(
 
     if not valid:
         return
+
+    # start_at/end_at HH:MM → ISO 정규화
+    for t in valid:
+        for key in ("start_at", "end_at"):
+            v = t.get(key)
+            if v and _HHMM_RE.match(v):
+                t[key] = f"{date}T{v}:00"
 
     # repo 자동 채우기 — 토픽에 repo가 없으면 부모 세션에서 가져옴
     session_row = conn.execute(
