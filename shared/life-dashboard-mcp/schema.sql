@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS daily_stats (
     repos TEXT,
     first_session TEXT,
     last_session_end TEXT,
+    summary TEXT,
     updated_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
