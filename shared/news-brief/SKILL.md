@@ -35,6 +35,25 @@ AI 관련 서브레딧 8개(r/ClaudeAI, r/MachineLearning, r/LocalLLaMA, r/singu
 
 **하루 1회 상한:** 크론·태스크 합산으로 reddit-hot은 하루 1회만 전송. 당일 이미 발송됐으면 스킵.
 
+**중복 체크 절차 (실행 전 필수):**
+```bash
+# 오늘 날짜 기준으로 reddit-hot-stuart 실행 이력 확인
+TODAY=$(TZ=Asia/Seoul date +%Y-%m-%d)
+minions cron run list --format json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+items = data if isinstance(data, list) else []
+for item in items:
+    if item.get('cron_id') == 'reddit-hot-stuart':
+        for run in item.get('runs', []):
+            if run.get('date') == '$TODAY' and run.get('status') == 'completed' and not run.get('skipped_at'):
+                print('ALREADY_SENT')
+                break
+"
+```
+- 출력이 `ALREADY_SENT`면 즉시 종료 (빈 메시지도 발송하지 않는다)
+- 출력이 없으면 실행 진행
+
 #### 절차
 
 1. `reddit-hot.py --subs references/reddit-hot-subs.txt` 실행
