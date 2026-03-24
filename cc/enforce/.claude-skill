@@ -1,0 +1,6 @@
+{
+  "name": "enforce",
+  "version": "1.0.0",
+  "description": "반복 교정을 훅으로 전환 — correction 로그 스캔 + 훅 후보 제안",
+  "entrypoint": "SKILL.md"
+}

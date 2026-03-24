@@ -22,11 +22,12 @@ _infra/       — 빌드/설치/동기화 스크립트
 
 ## 스킬 분류
 
-### Claude Code 전용 (4개 스킬 + 1개 규칙묶음) — `cc/` 디렉토리
+### Claude Code 전용 (5개 스킬 + 1개 규칙묶음) — `cc/` 디렉토리
 
 | 이름 | 유형 | 설명 |
 |------|------|------|
 | correction-memory | 스킬 | 교정 기억 — 실수 반복 방지 3계층 메모리 |
+| enforce | 스킬 | 반복 교정 → 훅 전환 제안 — correction 로그 스캔 + 훅 코드 초안 |
 | global-rules | 규칙 | 글로벌 규칙 묶음 — 세션 자동 로드 (SKILL.md 없음) |
 | reddit-fetch | 스킬 | Reddit 포스트/댓글 조회 + 검색 |
 | work-digest | 스킬 | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |

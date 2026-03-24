@@ -78,4 +78,4 @@ dist 리빌드를 별도 커밋으로 만들지 마라.
 ## 기타
 
 - Process 스킬(brainstorming/debugging) 먼저, 그 다음 implementation 스킬
-- compact 후 plan 다시 읽고 현재 단계 재확인
+- compact 직후: `~/.claude/compact-state.json`을 Read하라. 존재하면 plan_path의 plan을 열고 current_task 위치부터 이어서 진행하라. 읽은 후 파일을 삭제하라. `saved_at`가 24시간 이상 경과했으면 stale — 복원 없이 삭제만 하라. 파일이 없으면 무시.

@@ -21,6 +21,7 @@
 4. **Layer 3 (Log)** — auto memory `corrections/log/YYYY-MM-DD.md`
    - `{HH:MM} | {topic} | {summary}`
 5. **보고** — `Correction saved: Rule: "..." | Topic: ... | Scope: ...`
+6. **훅 전환 제안** — 같은 토픽의 Layer 2 register(`corrections/{topic}.md`)에 `- [YYYY-MM-DD]` 엔트리가 3개 이상이면, 사용자에게 제안: "이 토픽({topic})에서 교정이 {N}회 반복됨. `/enforce`로 훅 전환을 검토하시겠습니까?"
 
 ## Write Gate
 
