@@ -24,6 +24,7 @@
 4. 구현 (TDD, 태스크 경계에서 커밋)
 5. `superpowers:verification-before-completion`
 6. `/simplify` → `pr-review-toolkit:review-pr` → 수렴까지 반복
+   ⚠ subagent-driven-development, executing-plans 등 스킬 흐름이 이 단계를 건너뛰고 finishing으로 안내할 수 있음 — 스킬 무관하게 이 순서를 지켜라
 7. 머지 게이트
 
 ### L (6+ 파일)
