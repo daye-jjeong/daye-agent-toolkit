@@ -85,6 +85,55 @@
       "category": "Open-source",
       "priority": "medium",
       "note": "RSSHub proxy; may need self-hosted instance if rate-limited"
+    },
+    {
+      "name": "GeekNews (긱뉴스)",
+      "url": "https://news.hada.io/rss/news",
+      "category": "AI-Tech",
+      "priority": "high",
+      "note": "한국 개발/AI 뉴스 큐레이션. 속보성 높음"
+    },
+    {
+      "name": "Lenny's Newsletter",
+      "url": "https://www.lennysnewsletter.com/feed",
+      "category": "Business",
+      "priority": "medium",
+      "note": "PM/테크 뉴스레터. AI 소식 포함"
+    },
+    {
+      "name": "Chamath Palihapitiya",
+      "url": "https://chamath.substack.com/feed",
+      "category": "Business",
+      "priority": "medium",
+      "note": "VC/마켓 관점 AI 분석. 주간 What I Read This Week"
+    },
+    {
+      "name": "Ali Afridi (SandHill.io)",
+      "url": "https://www.sandhill.io/feed",
+      "category": "Business",
+      "priority": "medium",
+      "note": "VC 700+ 인사이트 큐레이션. AI 뉴스 비중 높음"
+    },
+    {
+      "name": "빌더조 (Builder Josh)",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCxj3eVTAv9KLdrowXcuCFDQ",
+      "category": "AI-Tech",
+      "priority": "medium",
+      "note": "한국어 AI 뉴스/딸깍쇼. 속보성 빠름"
+    },
+    {
+      "name": "Species | Documenting AGI",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCEENWVBdvDy-QWfuQoXC9HQ",
+      "category": "Models",
+      "priority": "medium",
+      "note": "AI 리스크/AGI 다큐멘터리. 딥 인사이트"
+    },
+    {
+      "name": "Mobitar (모비타)",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCAwT-7B6StW_xzXPku6v7MQ",
+      "category": "Other",
+      "priority": "low",
+      "note": "도발적 AI 관점. 새로운 시각 제공"
     }
   ],
   "fallback_keywords": [

@@ -17,6 +17,19 @@ https://techcrunch.com/tag/artificial-intelligence/feed/
 https://www.theverge.com/ai-artificial-intelligence/rss/index.xml
 https://arstechnica.com/tag/artificial-intelligence/feed/
 
+# AI-Tech (high priority)
+https://news.hada.io/rss/news
+
+# Business — 뉴스레터 (medium priority)
+https://www.lennysnewsletter.com/feed
+https://chamath.substack.com/feed
+https://www.sandhill.io/feed
+
 # Community — AI·테크 섹션 배치 (reddit은 제외)
 https://hnrss.org/frontpage
 https://www.producthunt.com/feed
+
+# YouTube 채널 (medium~low priority)
+https://www.youtube.com/feeds/videos.xml?channel_id=UCxj3eVTAv9KLdrowXcuCFDQ
+https://www.youtube.com/feeds/videos.xml?channel_id=UCEENWVBdvDy-QWfuQoXC9HQ
+https://www.youtube.com/feeds/videos.xml?channel_id=UCAwT-7B6StW_xzXPku6v7MQ
