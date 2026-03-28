@@ -33,6 +33,25 @@ def _week_range(reference_date: str, weeks_ago: int = 0) -> tuple[str, str]:
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
+def _entity_counts(conn, start: str, end: str) -> dict[str, int]:
+    """Count entity mentions in a date range."""
+    return dict(conn.execute(
+        """SELECT entity, COUNT(*) as cnt FROM article_entities ae
+           JOIN articles a ON ae.article_id = a.id
+           WHERE a.date BETWEEN ? AND ?
+           GROUP BY entity""",
+        (start, end),
+    ).fetchall())
+
+
+def _section_counts(conn, start: str, end: str) -> dict[str, int]:
+    """Count articles per section in a date range."""
+    return dict(conn.execute(
+        "SELECT section, COUNT(*) FROM articles WHERE date BETWEEN ? AND ? GROUP BY section",
+        (start, end),
+    ).fetchall())
+
+
 def extract_signals(db_path: str | None = None, reference_date: str | None = None) -> dict:
     """Extract weekly signals from archived articles."""
     conn = get_connection(db_path)
@@ -44,22 +63,8 @@ def extract_signals(db_path: str | None = None, reference_date: str | None = Non
     this_start, this_end = _week_range(reference_date, 0)
     last_start, last_end = _week_range(reference_date, 1)
 
-    # 1. Keyword surges
-    this_entities = dict(conn.execute(
-        """SELECT entity, COUNT(*) as cnt FROM article_entities ae
-           JOIN articles a ON ae.article_id = a.id
-           WHERE a.date BETWEEN ? AND ?
-           GROUP BY entity""",
-        (this_start, this_end),
-    ).fetchall())
-
-    last_entities = dict(conn.execute(
-        """SELECT entity, COUNT(*) as cnt FROM article_entities ae
-           JOIN articles a ON ae.article_id = a.id
-           WHERE a.date BETWEEN ? AND ?
-           GROUP BY entity""",
-        (last_start, last_end),
-    ).fetchall())
+    this_entities = _entity_counts(conn, this_start, this_end)
+    last_entities = _entity_counts(conn, last_start, last_end)
 
     keyword_surges = []
     for entity, cnt in this_entities.items():
@@ -70,8 +75,7 @@ def extract_signals(db_path: str | None = None, reference_date: str | None = Non
             keyword_surges.append({"entity": entity, "this_week": cnt, "last_week": prev, "ratio": round(cnt / prev, 1)})
     keyword_surges.sort(key=lambda x: x["this_week"], reverse=True)
 
-    # 2. New entities (not seen in past 4 weeks)
-    four_weeks_ago = (datetime.strptime(reference_date, "%Y-%m-%d") - timedelta(days=28)).strftime("%Y-%m-%d")
+    four_weeks_ago = _week_range(reference_date, 4)[0]
     old_entities = set(row[0] for row in conn.execute(
         """SELECT DISTINCT entity FROM article_entities ae
            JOIN articles a ON ae.article_id = a.id
@@ -81,26 +85,16 @@ def extract_signals(db_path: str | None = None, reference_date: str | None = Non
 
     new_entities = sorted(set(this_entities.keys()) - old_entities)
 
-    # 3. High coverage stories (coverage 3+)
     high_coverage = [dict(row) for row in conn.execute(
         """SELECT headline, url, source, coverage, score
            FROM articles WHERE date BETWEEN ? AND ? AND coverage >= 3
-           ORDER BY coverage DESC, score DESC""",
+           ORDER BY coverage DESC, score DESC LIMIT 30""",
         (this_start, this_end),
     ).fetchall()]
 
-    # 4. Section distribution
-    this_sections = dict(conn.execute(
-        "SELECT section, COUNT(*) FROM articles WHERE date BETWEEN ? AND ? GROUP BY section",
-        (this_start, this_end),
-    ).fetchall())
+    this_sections = _section_counts(conn, this_start, this_end)
+    last_sections = _section_counts(conn, last_start, last_end)
 
-    last_sections = dict(conn.execute(
-        "SELECT section, COUNT(*) FROM articles WHERE date BETWEEN ? AND ? GROUP BY section",
-        (last_start, last_end),
-    ).fetchall())
-
-    # 5. Top articles by score
     top_articles = [dict(row) for row in conn.execute(
         """SELECT headline, url, source, section, tag, score, coverage, date
            FROM articles WHERE date BETWEEN ? AND ?

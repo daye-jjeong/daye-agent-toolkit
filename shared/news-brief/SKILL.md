@@ -1,6 +1,6 @@
 ---
 name: news-brief
-description: 뉴스 수집 · 요약 · 알림 — 데일리 신문(RSS 4개 소스 → HTML), AI 속보 알림(keyword scoring), Reddit AI 서브레딧 핫 포스트, CC/OpenClaw 활용 사례 검색. 뉴스 정리, 신문 만들어, breaking alert, 레딧 핫, 속보, RSS 피드, 밍밍 데일리, 뉴스 브리핑, reddit-hot, CC 활용 사례, claude code 사례, openclaw 사례 등의 요청에 사용.
+description: 뉴스 수집 · 요약 · 알림 · AI 예측 — 데일리 신문(RSS 4개 소스 → HTML), AI 속보 알림(keyword scoring), Reddit AI 서브레딧 핫 포스트, CC/OpenClaw 활용 사례 검색, 주간 AI 산업 예측(시그널 추출 + 자가개선 루프). 뉴스 정리, 신문 만들어, breaking alert, 레딧 핫, 속보, RSS 피드, 밍밍 데일리, 뉴스 브리핑, reddit-hot, CC 활용 사례, claude code 사례, openclaw 사례, AI 예측, forecast, 주간 예측 등의 요청에 사용.
 metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
@@ -84,6 +84,53 @@ Claude Code, OpenClaw, Claude 스킬 등의 실전 활용 사례를 Reddit에서
    - 포스트 내용 1-2문장 요약 (어떤 활용인지 구체적으로)
    - 댓글 핵심 반응/팁 1-2문장
 
+### 주간 AI 예측
+
+뉴스페이퍼 아카이브 데이터 기반 AI 산업 주간 예측. 자가개선 루프 포함.
+
+- DB: `~/.local/share/news-brief/forecast.db`
+- 크론: 매주 월요일 09:00 KST (`0 9 * * 1`)
+
+#### 아카이브 (매일 자동)
+
+뉴스페이퍼 생성 후 enriched JSON을 DB에 적재:
+
+```bash
+python3 {baseDir}/scripts/archive.py --input /tmp/enriched.json
+```
+
+#### 주간 예측 절차 (크론 에이전트용)
+
+1. 검증 데이터 추출:
+   ```bash
+   python3 {baseDir}/scripts/forecast.py verify > /tmp/forecast_verify.json
+   ```
+2. `/tmp/forecast_verify.json`의 각 prediction을 검토. 해당 기간 기사 목록을 근거로 hit/miss/expired 판정:
+   ```bash
+   python3 {baseDir}/scripts/forecast.py update-status --id <id> --status hit|miss|expired --verification "판정 근거"
+   ```
+3. 분석:
+   ```bash
+   python3 {baseDir}/scripts/forecast.py analyze --week <YYYY-Wnn> > /tmp/forecast_analyze.json
+   ```
+4. 시그널 추출:
+   ```bash
+   python3 {baseDir}/scripts/forecast.py signals > /tmp/forecast_signals.json
+   ```
+5. `forecast_analyze.json`의 `bias_notes`와 `weekly_trend`를 참고하여 과거 편향 인지
+6. 시그널 + 과거 교훈을 기반으로 예측 3~5개 생성 (claim, confidence 0.0-1.0, reasoning, deadline)
+7. 예측을 DB에 저장 (forecast.py의 save_predictions 함수 또는 직접 SQL)
+8. 리포트 포맷팅:
+   ```bash
+   python3 {baseDir}/scripts/forecast.py report \
+     --week <YYYY-Wnn> \
+     --signals /tmp/forecast_signals.json \
+     --verify /tmp/forecast_verify.json \
+     --analyze /tmp/forecast_analyze.json \
+     --predictions /tmp/forecast_predictions.json
+   ```
+9. 결과를 텔레그램으로 전송
+
 ## Output
 
 | 산출물 | 경로 | 설명 |
@@ -92,6 +139,8 @@ Claude Code, OpenClaw, Claude 스킬 등의 실전 활용 사례를 Reddit에서
 | 속보 텍스트 | stdout | breaking-alert.py 감지 결과 |
 | Reddit 핫 | stdout | reddit-hot.py 알림 결과 |
 | CC 활용 사례 | stdout | reddit-cc-showcase.py 검색 결과 |
+| 주간 예측 | stdout | forecast.py report 포맷 결과 |
+| 예측 DB | `~/.local/share/news-brief/forecast.db` | 기사 아카이브 + 예측 + 개선 로그 |
 
 ## 시간 표시
 
@@ -120,6 +169,9 @@ Claude Code, OpenClaw, Claude 스킬 등의 실전 활용 사례를 Reddit에서
 | `seen_cache.py` | 알림 dedup 캐시 (library) |
 | `kst_utils.py` | KST 시간 변환 유틸 (library) |
 | `html_source.py` | Non-RSS 블로그 HTML 스크래핑 (library) |
+| `forecast_db.py` | 예측 DB 연결 + 스키마 초기화 (library) |
+| `archive.py` | enriched 신문 JSON → forecast DB 적재 |
+| `forecast.py` | 주간 예측 파이프라인 (signals/verify/analyze/report) |
 
 **상세 (플래그, 예시)**: `references/scripts-detail.md` 참고
 

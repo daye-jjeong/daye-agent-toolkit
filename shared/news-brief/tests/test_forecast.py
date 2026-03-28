@@ -8,6 +8,49 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 from forecast_db import get_connection, init_db
 from forecast import extract_signals, list_pending_verifications, update_prediction_status, save_predictions, compute_analysis, format_report
+from archive import archive_newspaper
+
+SAMPLE_ENRICHED = {
+    "date": "2026-03-28",
+    "highlight": "테스트 하이라이트",
+    "sections": [
+        {
+            "title": "🤖 AI·테크",
+            "items": [
+                {
+                    "headline": "Anthropic Claude 4 발표",
+                    "url": "https://example.com/claude4",
+                    "source": "anthropic.com",
+                    "tag": "Models",
+                    "published": "2026-03-28 10:00 KST",
+                    "summary": "새로운 모델이 출시되었다.",
+                    "why": "성능이 크게 향상되었기 때문",
+                },
+                {
+                    "headline": "OpenAI GPT-5 루머",
+                    "url": "https://example.com/gpt5",
+                    "source": "techcrunch.com",
+                    "tag": "Models",
+                    "published": "2026-03-28 11:00 KST",
+                    "summary": "GPT-5 출시 루머가 돌고 있다.",
+                },
+            ],
+        },
+        {
+            "title": "🌏 국제",
+            "items": [
+                {
+                    "headline": "EU AI 규제 강화",
+                    "url": "https://example.com/eu-ai",
+                    "source": "reuters.com",
+                    "tag": "국제",
+                    "published": "2026-03-28 09:00 KST",
+                    "summary": "EU가 AI 규제를 강화한다.",
+                },
+            ],
+        },
+    ],
+}
 
 
 def _seed_articles(conn: sqlite3.Connection):
@@ -301,3 +344,51 @@ def test_report_format():
     assert "62" in report  # 62.5% accuracy
     assert "claude" in report
     assert "New prediction" in report
+
+
+def test_full_pipeline_flow(tmp_path):
+    """Integration test: archive → signals → save predictions → verify → update → analyze → report."""
+    db_path = str(tmp_path / "test.db")
+
+    # 1. Archive
+    json_path = tmp_path / "enriched.json"
+    json_path.write_text(json.dumps(SAMPLE_ENRICHED, ensure_ascii=False))
+    count = archive_newspaper(str(json_path), db_path)
+    assert count == 3
+
+    # 2. Signals
+    signals = extract_signals(db_path, reference_date="2026-03-28")
+    assert "keyword_surges" in signals
+    assert "top_articles" in signals
+
+    # 3. Save predictions
+    preds = [
+        {"claim": "Test prediction A", "confidence": 0.7, "reasoning": "Signal based", "deadline": "2026-03-27"},
+        {"claim": "Test prediction B", "confidence": 0.5, "reasoning": "Weak signal", "deadline": "2026-04-05"},
+    ]
+    save_predictions(db_path, week="2026-W13", signal_json=json.dumps(signals), predictions=preds)
+
+    # 4. Verify (only A should appear — deadline passed)
+    pending = list_pending_verifications(db_path, today="2026-03-28")
+    assert len(pending) == 1
+    assert pending[0]["prediction"]["claim"] == "Test prediction A"
+
+    # 5. Update status
+    pred_id = pending[0]["prediction"]["id"]
+    update_prediction_status(db_path, pred_id, "hit", "Confirmed by articles")
+
+    # 6. Analyze
+    analysis = compute_analysis(db_path, week="2026-W13")
+    assert analysis["overall"]["hits"] == 1
+    assert analysis["overall"]["total_judged"] == 1
+
+    # 7. Report
+    report = format_report(
+        week="2026-W13",
+        verify_results=[{"prediction": {"claim": "Test A", "confidence": 0.7, "status": "hit"}}],
+        analysis=analysis,
+        signals=signals,
+        new_predictions=[preds[1]],
+    )
+    assert "2026-W13" in report
+    assert "HIT" in report

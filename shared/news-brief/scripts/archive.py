@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sqlite3
 import sys
 import os
 
@@ -68,26 +67,23 @@ def archive_newspaper(input_path: str, db_path: str | None = None) -> int:
             headline = item.get("headline", "")
             title = item.get("title", headline)
 
-            try:
-                cursor = conn.execute(
-                    """INSERT OR IGNORE INTO articles
-                       (date, title, headline, url, source, section, tag, score, coverage, summary)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        date,
-                        title,
-                        headline,
-                        url,
-                        item.get("source", ""),
-                        section_title,
-                        item.get("tag", ""),
-                        item.get("score"),
-                        item.get("coverage", 1),
-                        item.get("summary", ""),
-                    ),
-                )
-            except sqlite3.IntegrityError:
-                continue
+            cursor = conn.execute(
+                """INSERT OR IGNORE INTO articles
+                   (date, title, headline, url, source, section, tag, score, coverage, summary)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    date,
+                    title,
+                    headline,
+                    url,
+                    item.get("source", ""),
+                    section_title,
+                    item.get("tag", ""),
+                    item.get("score"),
+                    item.get("coverage", 1),
+                    item.get("summary", ""),
+                ),
+            )
 
             if cursor.rowcount == 0:
                 continue
@@ -96,10 +92,11 @@ def archive_newspaper(input_path: str, db_path: str | None = None) -> int:
             inserted += 1
 
             entity_text = headline or title
-            for entity in extract_entities(entity_text):
-                conn.execute(
+            entity_rows = [(article_id, e) for e in extract_entities(entity_text)]
+            if entity_rows:
+                conn.executemany(
                     "INSERT OR IGNORE INTO article_entities (article_id, entity) VALUES (?, ?)",
-                    (article_id, entity),
+                    entity_rows,
                 )
 
     conn.commit()
