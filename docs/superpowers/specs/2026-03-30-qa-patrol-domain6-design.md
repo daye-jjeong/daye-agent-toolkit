@@ -13,15 +13,70 @@ dy-minions-squad는 크론/태스크/배달의 실행 기록을 여러 테이블
 
 ### 원인
 
-대부분의 쓰기 경로에서 **상태 변경(UPDATE)과 감사 로그(INSERT)가 같은 트랜잭션이 아니다.** 감사 로그 쓰기가 try-catch로 감싸져 있어 실패해도 console.warn만 남기고 넘어간다. 이 구조적 취약점을 코드 수정 없이 사후 검증으로 보완한다.
+두 가지 층위의 문제가 있다:
+
+1. **코드 결함**: `updateTaskStatus()`와 `syncParentStatus()`가 상태를 변경하면서 `logStatusEvent()`를 호출하지 않는다. 전용 함수(`startTask`, `doneTask`, `submitTask`, `unblockTask`)는 이벤트를 남기지만, 범용 함수와 부모 자동 승격 경로는 빠져 있다.
+2. **구조적 취약점**: 이벤트를 남기는 경로에서도 상태 변경(UPDATE)과 감사 로그(INSERT)가 같은 트랜잭션이 아니다. 감사 로그 쓰기가 try-catch로 감싸져 있어 실패해도 console.warn만 남기고 넘어간다.
+
+이 설계는 (1)을 코드 수정으로 해결하고, (2)를 사후 검증으로 보완한다.
 
 ## 설계 원칙
 
-1. **Domain 6은 "기록의 정합성"만 본다.** "시스템이 동작했는가"는 기존 Domain 1-5의 영역.
-2. **lookback은 12시간.** 기본 패트롤이 10:00/20:00에 돌므로, 이전 패트롤 이후 구간을 커버.
-3. **디버깅 추적 체인을 보장한다.** 크론 실행 → job → 세션 → 배달까지 FK로 연결되어야 함.
+1. **근본 수정 우선.** 이벤트를 안 남기는 코드 경로를 먼저 고친다.
+2. **Domain 6은 나머지 구조적 취약점의 사후 검증.** 코드를 고쳐도 try-catch 삼킴 패턴은 남아있으므로, 패트롤이 이를 감시한다.
+3. **lookback은 12시간.** 기본 패트롤이 10:00/20:00에 돌므로, 이전 패트롤 이후 구간을 커버.
+4. **디버깅 추적 체인을 보장한다.** 크론 실행 → job → 세션 → 배달까지 FK로 연결되어야 함.
 
 ## 변경 범위
+
+### Part 1: 태스크 상태 이벤트 근본 수정 (dy-minions-squad)
+
+| 대상 | 변경 |
+|------|------|
+| `src/core/workspace/tasks.ts` — `updateTaskStatus()` | `saveTask()` 후 `logStatusEvent()` 호출 추가 |
+| `src/core/workspace/tasks.ts` — `syncParentStatus()` | 반환 타입을 `Set<string>` → `Map<string, { from: TaskStatus; to: TaskStatus }>`로 변경. 호출측에서 map을 순회하며 `logStatusEvent()` 호출 |
+
+#### `updateTaskStatus` 수정
+
+```ts
+// saveTask(task) 직후, reject 로직 전에 추가:
+try {
+    await logStatusEvent(ticketId, fromStatus, newStatus, opts?.caller ?? "system");
+} catch (err) {
+    console.warn(`[tasks] logStatusEvent failed for ${ticketId}: ${normalizeError(err)}`);
+}
+```
+
+#### `syncParentStatus` 수정
+
+현재 `syncParentStatus`는 동기 함수이고 `Set<string>`을 반환한다. `logStatusEvent`는 async이므로 함수 내부에서 직접 호출하지 않는다.
+
+**반환 타입 변경:**
+```ts
+type ParentStatusChange = { from: TaskStatus; to: TaskStatus };
+
+function syncParentStatus(file: TasksFile, parentId?: string): Map<string, ParentStatusChange> {
+    // 기존 dirty Set 대신 Map 반환
+    // key: ticket_id, value: { from, to }
+}
+```
+
+**호출측(`startTask`, `doneTask`, `updateTaskStatus` 등)에서 이벤트 기록:**
+```ts
+const changes = syncParentStatus(file, task.parent_id);
+if (changes.size > 0) {
+    saveDirtyTasks(file, new Set(changes.keys()));
+    for (const [id, { from, to }] of changes) {
+        try {
+            await logStatusEvent(id, from, to, "system", "child status sync");
+        } catch (err) {
+            console.warn(`[tasks] parent logStatusEvent failed for ${id}: ${normalizeError(err)}`);
+        }
+    }
+}
+```
+
+### Part 2: qa-patrol Domain 6 (dy-minions-squad)
 
 | 대상 | 변경 |
 |------|------|
@@ -37,12 +92,15 @@ dy-minions-squad는 크론/태스크/배달의 실행 기록을 여러 테이블
 ### 데이터 소스
 
 ```
-minions cron run list --format json
-minions task list --format json --status IN_PROGRESS,REVIEW_READY,DONE
-minions delivery list --format json
+minions cron run list --format json     # 6-1 전체
+minions task list --json                # 6-2 전체
+minions delivery list --json            # 6-3a, 6-3b, 6-3c
+minions delivery events <id> --json     # 6-3a (sent 이벤트 존재 여부)
+minions thread list <task-id> --json    # 6-2a (status_change 이벤트 존재 여부)
+minions queue list --json               # 6-4a, 6-4b, 6-4c
 ```
 
-추가로 DB 직접 조회가 필요한 체크는 `minions db query` 또는 해당 CLI 서브커맨드 사용.
+6-4 크로스 테이블 체크는 CLI 출력의 FK 필드(`job_id`, `session_id`, `delivery_id`)를 조인하여 검증. `minions db query` CLI는 존재하지 않으므로, 에이전트가 CLI 출력을 크로스체크한다.
 
 ### 6-1. 크론 로그 완결성
 
@@ -65,7 +123,7 @@ minions delivery list --format json
 
 | ID | 체크 | 조건 | 심각도 | 근거 |
 |----|------|------|--------|------|
-| 6-2a | 상태 이벤트 누락 | `tasks.status` IN (`DONE`, `IN_PROGRESS`, `REVIEW_READY`) AND 해당 상태로의 전이에 대한 `thread_messages`(tag=`status_change`) 없음 | P2 | `saveDirtyTasks`와 `logStatusEvent`가 별도 호출. 후자 실패 시 삼켜짐. |
+| 6-2a | 상태 이벤트 누락 | `tasks.status` IN (`DONE`, `IN_PROGRESS`, `REVIEW_READY`) AND 해당 상태로의 전이에 대한 `thread_messages`(tag=`status_change`) 없음 | P2 | Part 1 수정 후에도 try-catch 삼킴 패턴이 남아있어 `logStatusEvent` 실패 시 이벤트 누락 가능. 사후 감지. |
 | 6-2b | 부모 태스크 started_at 누락 | `status` IN (`IN_PROGRESS`, `REVIEW_READY`, `DONE`) AND `started_at IS NULL` | P3 | `syncParentStatus`가 부모를 IN_PROGRESS로 올릴 때 started_at을 안 건드림. depth > 0인 부모 태스크에서 발생. |
 | 6-2c | 완료 태스크 session_id 누락 | `status='DONE'` AND `session_id IS NULL` | P2 | `updateTaskExecutionMeta`가 사후에 채우는데, 호출 안 되면 세션 추적 불가. |
 | 6-2d | 성공인데 work_report 없음 | `status='DONE'` AND `outcome='success'` AND `work_report IS NULL` | P3 | `force: true` 또는 `batchChildren` 경로에서 발생 가능. 의도적일 수 있어 P3. |
