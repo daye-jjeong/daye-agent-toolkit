@@ -19,6 +19,10 @@
 2. master/main이면 → **수정하지 마라**. worktree부터 생성.
 3. worktree 브랜치면 → 진행.
 
+### 의존성 설치
+
+worktree 생성 후, `package-lock.json`(또는 `yarn.lock`, `pnpm-lock.yaml`)이 있으면 `npm ci`(또는 동등 명령)를 실행하라. LSP 타입 분석이 동작하려면 node_modules가 필요하다. symlink로는 tsconfig 경로 별칭이 해석되지 않는다.
+
 ### 삭제 안전
 
 worktree를 삭제할 때:
