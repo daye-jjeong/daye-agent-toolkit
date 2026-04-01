@@ -26,6 +26,19 @@ def _hhmm_to_min(t: str) -> int:
         return 0
 
 
+def _ts_to_min(ts: str) -> int | None:
+    """ISO datetime 또는 'HH:MM' → 분. 유효하지 않으면 None."""
+    if not ts:
+        return None
+    if len(ts) >= 16:
+        ts = ts[11:16]
+    try:
+        h, m = int(ts[:2]), int(ts[3:5])
+        return h * 60 + m
+    except (ValueError, IndexError):
+        return None
+
+
 def _min_to_hhmm(m: int) -> str:
     """분 → 'HH:MM'. 810 → '13:30'."""
     return f"{m // 60:02d}:{m % 60:02d}"
@@ -57,18 +70,15 @@ def prep(sessions, topics=None):
 
             sorted_topics = sorted(ts, key=lambda x: x.get("topic_order", 0))
             for t in sorted_topics:
-                # start_at이 있으면 실제 시간, 없으면 순차 배치
-                topic_start_at = t.get("start_at", "")
-                if topic_start_at and len(topic_start_at) >= 16:
-                    start_min = _hhmm_to_min(topic_start_at[11:16])
-                else:
+                start_min = _ts_to_min(t.get("start_at", ""))
+                if start_min is None:
                     start_min = cursor_min
 
-                # wall-clock duration: end_at - start_at 우선, 없으면 active time 폴백
-                topic_end_at = t.get("end_at", "")
-                if topic_end_at and len(topic_end_at) >= 16:
-                    end_min = _hhmm_to_min(topic_end_at[11:16])
-                    dur = max(end_min - start_min, 1)
+                end_min = _ts_to_min(t.get("end_at", ""))
+                if end_min is not None:
+                    if end_min <= start_min:
+                        end_min += 1440  # 자정 넘김
+                    dur = end_min - start_min
                 else:
                     dur = t.get("duration_estimate_min") or 30
 
