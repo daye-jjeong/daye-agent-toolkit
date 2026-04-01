@@ -74,13 +74,7 @@ def prep(sessions, topics=None):
                 if start_min is None:
                     start_min = cursor_min
 
-                end_min = _ts_to_min(t.get("end_at", ""))
-                if end_min is not None:
-                    if end_min <= start_min:
-                        end_min += 1440  # 자정 넘김
-                    dur = end_min - start_min
-                else:
-                    dur = t.get("duration_estimate_min") or 30
+                dur = t.get("duration_estimate_min") or 30
 
                 items.append({
                     "repo":     (t.get("repo") or "?").split("/")[-1],
