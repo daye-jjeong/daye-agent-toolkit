@@ -260,7 +260,7 @@ def get_session_topics(conn: sqlite3.Connection, date: str) -> list[dict]:
     """해당 날짜의 모든 session_topics 조회 (부모 session 메타 포함)."""
     rows = conn.execute("""
         SELECT st.*, s.source as s_source, s.status, s.has_commits, s.has_tests,
-               s.start_at, s.duration_min, s.token_total
+               s.start_at as sess_start_at, s.duration_min, s.token_total
         FROM session_topics st
         JOIN sessions s USING (source, session_id, date)
         WHERE st.date = ?
