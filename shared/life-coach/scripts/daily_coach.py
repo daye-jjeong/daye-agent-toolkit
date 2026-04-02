@@ -18,7 +18,7 @@ sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals, \
     query_exercises, query_symptoms, query_meals, query_check_ins, query_expiring_pantry, \
     get_mistake_trends, get_coaching_entry, get_pending_tasks, get_open_followups, \
-    get_session_topics, update_daily_summary
+    get_session_topics, update_daily_summary, get_tasks
 
 _WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
@@ -146,6 +146,7 @@ def get_today_data(conn, date_str: str) -> dict:
         "repos": json.loads(stats["repos"]) if stats["repos"] else {},
         "sessions": sessions,
         "topics": get_session_topics(conn, date_str),
+        "tasks": get_tasks(conn, date_str),
         "token_total": sum(s.get("token_total") or 0 for s in sessions),
         "behavioral_signals": today_signals,
         "repeated_patterns": repeated,

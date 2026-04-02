@@ -47,6 +47,15 @@ def group_topics_by_repo(topics: list[dict]) -> dict[str, list[dict]]:
     return groups
 
 
+def group_tasks_by_repo(tasks: list[dict]) -> dict[str, list[dict]]:
+    """tasks를 repo 단축명 기준으로 그룹핑."""
+    groups: dict[str, list[dict]] = {}
+    for t in tasks:
+        repo = (t.get("repo") or "?").split("/")[-1]
+        groups.setdefault(repo, []).append(t)
+    return groups
+
+
 def dedup_sessions(sessions: list) -> list:
     """session_id prefix 기준 중복 제거. full UUID가 short prefix를 포함하면 full 우선."""
     seen = {}

@@ -214,6 +214,35 @@ def _build_topic_items(topics: list[dict]) -> str:
     return "".join(items)
 
 
+def _build_task_items(tasks: list[dict]) -> str:
+    """tasks 기준 작업 표시."""
+    items = []
+    for t in tasks:
+        tag = t.get("tag") or "기타"
+        tag_color = TAG_COLORS.get(tag, "#707070")
+        summary = _esc(t.get("summary") or "(요약 없음)")
+        status = t.get("status", "completed")
+        status_badge = _status_badge(status)
+        dur = t.get("duration_min", 0)
+        meta_parts = []
+        if dur:
+            meta_parts.append(f"{dur}m")
+        project_name = t.get("project_name")
+        if project_name:
+            meta_parts.append(project_name)
+        meta_str = f' <span class="work-meta">({", ".join(meta_parts)})</span>' if meta_parts else ""
+        follow_up = t.get("follow_up", "")
+        follow_html = f' <span class="follow-up">→ {_esc(follow_up)}</span>' if follow_up else ""
+        items.append(
+            f'<div class="work-item">'
+            f'{status_badge}'
+            f'<span class="sess-tag" style="color:{tag_color}">[{tag}]</span> '
+            f'<span class="work-summary">{summary}{meta_str}{follow_html}</span>'
+            f'</div>'
+        )
+    return "".join(items)
+
+
 def _build_work_items(sessions: list[dict], topics: list[dict] | None = None) -> str:
     """토픽별(우선) 또는 세션별 작업 표시."""
     if topics:
@@ -403,7 +432,34 @@ def validate_report(html: str, data: dict) -> list[dict]:
 
 
 def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] | None = None) -> str:
-    """레포별 작업. topics 있으면 토픽 기준, 없으면 세션 원문."""
+    """레포별 작업. tasks 우선 → topics 폴백 → 세션 원문."""
+    # tasks가 있으면 tasks 기반 렌더링
+    tasks = data.get("tasks", [])
+    if tasks:
+        from _helpers import group_tasks_by_repo
+        task_repos = group_tasks_by_repo(tasks)
+        rows = []
+        for repo, ts in sorted(task_repos.items()):
+            inner_html = _build_task_items(ts)
+            rows.append(
+                f'<div class="repo-group">'
+                f'<div class="repo-name">{_esc(repo)}</div>'
+                f'{inner_html}'
+                f'</div>'
+            )
+        if not rows:
+            return ""
+        legend = (
+            '<div class="status-legend">'
+            '<span style="color:#7ABD7E">✓</span> 완료 '
+            '<span style="color:#888">◦</span> 진행중 '
+            '<span style="color:#E07B5A">✕</span> 블로커 '
+            '<span style="color:#F0C040">→</span> 후속필요'
+            '</div>'
+        )
+        return f'<div class="section"><h3>레포별 작업</h3>{legend}{"".join(rows)}</div>'
+
+    # 기존 topics/sessions 폴백
     sessions = data.get("sessions", [])
     topics = data.get("topics", [])
     if not sessions and not topics:
