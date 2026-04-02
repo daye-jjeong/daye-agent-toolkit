@@ -30,6 +30,7 @@ from db import (
     upsert_coaching_entry, upsert_task_suggestion,
     update_task_resolution, update_followup_resolution,
     get_coaching_entry, get_pending_tasks, get_open_followups,
+    upsert_tasks, upsert_project,
 )
 
 KST = timezone(timedelta(hours=9))
@@ -346,6 +347,40 @@ def cmd_update_topics(args):
         conn.close()
 
 
+def cmd_update_tasks(args):
+    """하루치 tasks 전체 교체."""
+    try:
+        tasks = json.loads(args.tasks)
+    except json.JSONDecodeError as e:
+        print(f"Error: --tasks is not valid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(tasks, list) or not tasks:
+        print("Error: --tasks must be a non-empty JSON array", file=sys.stderr)
+        sys.exit(1)
+
+    conn = get_conn()
+    try:
+        # project 연결 처리
+        for t in tasks:
+            project_name = t.pop("project", None)
+            if project_name:
+                t["project_id"] = upsert_project(conn, project_name, repo=t.get("repo"))
+
+        upsert_tasks(conn, args.date, tasks)
+        update_daily_stats(conn, args.date)
+        conn.commit()
+        count = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE date = ?", (args.date,)
+        ).fetchone()[0]
+        print(f"Updated {count} tasks for {args.date}", file=sys.stderr)
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: DB operation failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        conn.close()
+
+
 def cmd_save_coaching(args):
     conn = get_conn()
 
@@ -453,6 +488,10 @@ def main():
     p_topics.add_argument("--date", required=True)
     p_topics.add_argument("--topics", required=True, help='JSON array: [{"tag":"..","summary":"..","repo":".."}]')
 
+    p_tasks = sub.add_parser("update-tasks", help="Replace daily tasks")
+    p_tasks.add_argument("--date", required=True)
+    p_tasks.add_argument("--tasks", required=True, help='JSON array: [{"tag":"..","summary":"..","repo":"..","segments":[...],"project":".."}]')
+
     p_coaching = sub.add_parser("save-coaching", help="Save coaching entry")
     p_coaching.add_argument("--date", required=True)
     p_coaching.add_argument("--period", required=True, choices=["daily", "weekly"])
@@ -491,6 +530,7 @@ def main():
         "unsummarized": cmd_unsummarized,
         "update-summary": cmd_update_summary,
         "update-topics": cmd_update_topics,
+        "update-tasks": cmd_update_tasks,
         "save-coaching": cmd_save_coaching,
         "save-task": cmd_save_task,
         "previous-coaching": cmd_previous_coaching,

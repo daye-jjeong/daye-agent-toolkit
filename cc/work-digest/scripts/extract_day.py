@@ -133,10 +133,45 @@ def _run_scanner():
                        capture_output=True, timeout=30)
 
 
+_NOISE_PREFIXES = ("<task-notification", "Base directory for this skill:")
+
+
+def _clean_hint(messages: list[str]) -> str:
+    """첫 의미있는 사용자 메시지에서 hint 추출."""
+    for m in messages:
+        if any(m.startswith(p) for p in _NOISE_PREFIXES):
+            continue
+        if m.startswith("/") and len(m) < 20:  # /exit, /clear 등
+            continue
+        return m[:60].replace("\n", " ").strip()
+    return ""
+
+
+def flatten_by_repo(session_segments: list[dict]) -> dict[str, list[dict]]:
+    """세션별 segments → 레포별 시간순 flat list."""
+    by_repo: dict[str, list[dict]] = {}
+    for s in session_segments:
+        repo = (s.get("repo") or "unknown").split("/")[-1]
+        for seg in s.get("segments", []):
+            by_repo.setdefault(repo, []).append({
+                "sid": s["session_id"],
+                "start": seg["start"],
+                "end": seg["end"],
+                "dur": seg["duration_min"],
+                "hint": _clean_hint(seg.get("message_texts", [])),
+                "files": seg.get("file_names", []),
+            })
+    # 레포별 시간순 정렬
+    for segs in by_repo.values():
+        segs.sort(key=lambda x: x["start"])
+    return by_repo
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=datetime.now(KST).strftime("%Y-%m-%d"))
     ap.add_argument("--no-scan", action="store_true", help="scanner 생략")
+    ap.add_argument("--flat", action="store_true", help="레포별 시간순 flat list 출력")
     args = ap.parse_args()
 
     if not args.no_scan:
@@ -166,7 +201,11 @@ def main():
             "segments": merged,
         })
 
-    json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
+    if args.flat:
+        flat = flatten_by_repo(output)
+        json.dump(flat, sys.stdout, ensure_ascii=False, indent=2)
+    else:
+        json.dump(output, sys.stdout, ensure_ascii=False, indent=2)
     print()
     print(f"[extract_day] {args.date}: {len(output)} sessions, {sum(len(s['segments']) for s in output)} segments", file=sys.stderr)
 

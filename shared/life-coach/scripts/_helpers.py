@@ -38,13 +38,18 @@ def to_h(t: str) -> float:
     return h + m / 60
 
 
-def group_topics_by_repo(topics: list[dict]) -> dict[str, list[dict]]:
-    """토픽을 repo 단축명 기준으로 그룹핑."""
+def group_by_repo(items: list[dict]) -> dict[str, list[dict]]:
+    """items(topics/tasks)를 repo 단축명 기준으로 그룹핑."""
     groups: dict[str, list[dict]] = {}
-    for t in topics:
+    for t in items:
         repo = (t.get("repo") or "unknown").split("/")[-1]
         groups.setdefault(repo, []).append(t)
     return groups
+
+
+# 호환 alias
+group_topics_by_repo = group_by_repo
+group_tasks_by_repo = group_by_repo
 
 
 def dedup_sessions(sessions: list) -> list:
