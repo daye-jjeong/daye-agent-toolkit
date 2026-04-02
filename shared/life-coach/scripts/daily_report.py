@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from timeline_html import build, timeline_section_html
 from _helpers import (
     WEEKDAY, TAG_COLORS, esc_html as _esc, fmt_tokens as _fmt_tokens, md_to_html,
-    group_sessions_by_repo_branch, has_meaningful_branches, group_topics_by_repo,
+    group_sessions_by_repo_branch, has_meaningful_branches, group_topics_by_repo, group_tasks_by_repo,
 )
 
 # ── Section builders ──────────────────────────────────────────────────────────
@@ -435,7 +435,6 @@ def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] |
     """레포별 작업. tasks 우선 → topics 폴백 → 세션 원문."""
     tasks = data.get("tasks", [])
     if tasks:
-        from _helpers import group_tasks_by_repo
         task_repos = group_tasks_by_repo(tasks)
         rows = []
         for repo, ts in sorted(task_repos.items()):

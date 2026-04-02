@@ -110,4 +110,5 @@ def test_tasks_with_project():
     conn.commit()
     result = get_tasks(conn, "2026-03-31")
     assert result[0]["project_id"] == pid
+    assert result[0]["project_name"] == "Juliet"
     conn.close()

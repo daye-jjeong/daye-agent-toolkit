@@ -47,7 +47,7 @@ def _migrate(conn: sqlite3.Connection):
 
     # tasks + projects 테이블 마이그레이션
     existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    if "projects" not in existing:
+    if "projects" not in existing or "tasks" not in existing:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS projects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,9 +150,12 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
     task_rows = conn.execute(
         "SELECT tag FROM tasks WHERE date = ?", (date_str,)
     ).fetchall()
-    topic_rows = conn.execute(
-        "SELECT tag FROM session_topics WHERE date = ?", (date_str,)
-    ).fetchall() if not task_rows else []
+    try:
+        topic_rows = conn.execute(
+            "SELECT tag FROM session_topics WHERE date = ?", (date_str,)
+        ).fetchall() if not task_rows else []
+    except sqlite3.OperationalError:
+        topic_rows = []
 
     tags: dict[str, int] = {}
     tag_source = task_rows or topic_rows
