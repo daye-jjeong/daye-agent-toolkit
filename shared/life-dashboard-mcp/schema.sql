@@ -97,6 +97,37 @@ CREATE INDEX IF NOT EXISTS idx_session_topics_date ON session_topics(date);
 CREATE INDEX IF NOT EXISTS idx_session_topics_tag ON session_topics(tag);
 CREATE INDEX IF NOT EXISTS idx_session_topics_fk ON session_topics(source, session_id, date);
 
+-- ── Projects ──────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    repo TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    UNIQUE(name, repo)
+);
+
+-- ── Tasks (replaces session_topics) ───────────
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    repo TEXT,
+    segments TEXT NOT NULL DEFAULT '[]',
+    duration_min INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'completed',
+    follow_up TEXT,
+    project_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_date ON tasks(date);
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,

@@ -45,6 +45,38 @@ def _migrate(conn: sqlite3.Connection):
     except Exception:
         pass
 
+    # tasks + projects 테이블 마이그레이션
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "projects" not in existing:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                repo TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                UNIQUE(name, repo)
+            );
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                repo TEXT,
+                segments TEXT NOT NULL DEFAULT '[]',
+                duration_min INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'completed',
+                follow_up TEXT,
+                project_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (project_id) REFERENCES projects(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_tasks_date ON tasks(date);
+            CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+        """)
+        conn.commit()
+
     # daily_stats: summary column
     try:
         ds_cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_stats)").fetchall()}
@@ -114,14 +146,18 @@ def update_daily_stats(conn: sqlite3.Connection, date_str: str):
         conn.execute("DELETE FROM daily_stats WHERE date = ?", (date_str,))
         return
 
-    # tag_breakdown: 토픽 기준 우선, 없으면 sessions.tag 폴백
+    # tag_breakdown: tasks 우선 → session_topics 폴백 → sessions.tag 폴백
+    task_rows = conn.execute(
+        "SELECT tag FROM tasks WHERE date = ?", (date_str,)
+    ).fetchall()
     topic_rows = conn.execute(
         "SELECT tag FROM session_topics WHERE date = ?", (date_str,)
-    ).fetchall()
+    ).fetchall() if not task_rows else []
 
     tags: dict[str, int] = {}
-    if topic_rows:
-        for r in topic_rows:
+    tag_source = task_rows or topic_rows
+    if tag_source:
+        for r in tag_source:
             tag = r["tag"] or "기타"
             tags[tag] = tags.get(tag, 0) + 1
     else:
@@ -265,6 +301,66 @@ def get_session_topics(conn: sqlite3.Connection, date: str) -> list[dict]:
         JOIN sessions s USING (source, session_id, date)
         WHERE st.date = ?
         ORDER BY s.start_at, st.topic_order
+    """, (date,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_project(conn: sqlite3.Connection, name: str, repo: str | None = None) -> int:
+    """project를 가져오거나 없으면 생성. id 반환."""
+    row = conn.execute(
+        "SELECT id FROM projects WHERE name = ? AND repo IS ?", (name, repo)
+    ).fetchone()
+    if row:
+        conn.execute(
+            "UPDATE projects SET updated_at = datetime('now','localtime') WHERE id = ?",
+            (row["id"],),
+        )
+        return row["id"]
+    cursor = conn.execute(
+        "INSERT INTO projects (name, repo) VALUES (?, ?)", (name, repo)
+    )
+    return cursor.lastrowid
+
+
+def get_projects(conn: sqlite3.Connection, status: str | None = None) -> list[dict]:
+    """프로젝트 목록 조회. status 필터 가능."""
+    if status:
+        rows = conn.execute("SELECT * FROM projects WHERE status = ? ORDER BY updated_at DESC", (status,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_tasks(conn: sqlite3.Connection, date: str, tasks: list[dict]):
+    """하루치 tasks 전체 교체 (DELETE + INSERT)."""
+    conn.execute("DELETE FROM tasks WHERE date = ?", (date,))
+    for t in tasks:
+        tag = t.get("tag", "기타")
+        if tag not in _VALID_TAGS:
+            tag = "기타"
+        summary = t.get("summary", "")
+        if not summary:
+            continue
+        segments = t.get("segments", [])
+        segments_json = json.dumps(segments, ensure_ascii=False) if isinstance(segments, list) else segments
+        duration_min = t.get("duration_min", 0) or 0
+        conn.execute("""
+            INSERT INTO tasks (date, tag, summary, repo, segments, duration_min, status, follow_up, project_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            date, tag, summary, t.get("repo"), segments_json, duration_min,
+            t.get("status", "completed"), t.get("follow_up"), t.get("project_id"),
+        ))
+
+
+def get_tasks(conn: sqlite3.Connection, date: str) -> list[dict]:
+    """해당 날짜의 모든 tasks 조회."""
+    rows = conn.execute("""
+        SELECT t.*, p.name as project_name
+        FROM tasks t
+        LEFT JOIN projects p ON t.project_id = p.id
+        WHERE t.date = ?
+        ORDER BY t.id
     """, (date,)).fetchall()
     return [dict(r) for r in rows]
 
