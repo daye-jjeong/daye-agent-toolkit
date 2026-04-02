@@ -319,7 +319,7 @@ def upsert_project(conn: sqlite3.Connection, name: str, repo: str | None = None)
     cursor = conn.execute(
         "INSERT INTO projects (name, repo) VALUES (?, ?)", (name, repo)
     )
-    return cursor.lastrowid
+    return cursor.lastrowid  # type: ignore[return-value]
 
 
 def get_projects(conn: sqlite3.Connection, status: str | None = None) -> list[dict]:

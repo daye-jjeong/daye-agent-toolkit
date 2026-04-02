@@ -44,8 +44,28 @@ def _min_to_hhmm(m: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
-def prep(sessions, topics=None):
-    """타임라인 데이터 생성. topics 있으면 세션별로 토픽을 순차 배치."""
+def prep(sessions, topics=None, tasks=None):
+    """타임라인 데이터 생성. tasks 우선 → topics 폴백 → sessions 폴백."""
+    if tasks:
+        items = []
+        for t in tasks:
+            segments = t.get("segments", [])
+            if isinstance(segments, str):
+                import json as _json
+                segments = _json.loads(segments)
+            tag = t.get("tag") or "기타"
+            repo = (t.get("repo") or "?").split("/")[-1]
+            summary = (t.get("summary") or "")[:100]
+            for seg in segments:
+                items.append({
+                    "repo": repo,
+                    "tag": tag,
+                    "start": seg.get("start", "00:00"),
+                    "duration": seg.get("dur", 30),
+                    "summary": summary,
+                })
+        return sorted(items, key=lambda x: x["start"]) if items else []
+
     if topics:
         # eval 세션 제외
         topics = [t for t in topics if t.get("tag") != "eval"]
@@ -138,7 +158,7 @@ def build(data: dict, weekly: bool) -> tuple[str, list]:
             "date":       date_str,
             "label":      f'{dt.month}/{dt.day}({WEEKDAY[dt.weekday()]})',
             "work_hours": data.get("work_hours", 0),
-            "sessions":   prep(data.get("sessions", []), topics=data.get("topics")),
+            "sessions":   prep(data.get("sessions", []), topics=data.get("topics"), tasks=data.get("tasks")),
         }]
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
