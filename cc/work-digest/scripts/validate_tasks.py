@@ -12,10 +12,9 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"))
-from db import get_conn
+from db import get_conn, _VALID_TAGS
 
 KST = timezone(timedelta(hours=9))
-_VALID_TAGS = {"코딩", "디버깅", "리서치", "리뷰", "ops", "설정", "문서", "설계", "리팩토링", "기타"}
 
 
 def validate(date_str: str, fix: bool = False) -> list[str]:

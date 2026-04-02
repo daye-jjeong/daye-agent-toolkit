@@ -51,8 +51,7 @@ def prep(sessions, topics=None, tasks=None):
         for t in tasks:
             segments = t.get("segments", [])
             if isinstance(segments, str):
-                import json as _json
-                segments = _json.loads(segments)
+                segments = json.loads(segments)
             tag = t.get("tag") or "기타"
             repo = (t.get("repo") or "?").split("/")[-1]
             summary = (t.get("summary") or "")[:100]

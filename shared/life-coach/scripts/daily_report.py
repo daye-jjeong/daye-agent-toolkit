@@ -433,7 +433,6 @@ def validate_report(html: str, data: dict) -> list[dict]:
 
 def _build_repos_detail(data: dict, repo_summaries: dict[str, str | list[str]] | None = None) -> str:
     """레포별 작업. tasks 우선 → topics 폴백 → 세션 원문."""
-    # tasks가 있으면 tasks 기반 렌더링
     tasks = data.get("tasks", [])
     if tasks:
         from _helpers import group_tasks_by_repo
