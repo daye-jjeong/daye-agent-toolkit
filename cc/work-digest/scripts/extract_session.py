@@ -26,6 +26,7 @@ IDLE_THRESHOLD_SEC = 300  # 5분
 
 def extract(jsonl_path: str, target_date: str | None = None) -> dict:
     messages = []
+    assistant_texts = []
     file_edits = []
     all_timestamps = []
 
@@ -70,19 +71,24 @@ def extract(jsonl_path: str, target_date: str | None = None) -> dict:
                 if text:
                     messages.append({"ts": hhmm, "text": text})
 
-            # file edits (Edit/Write tool calls)
+            # assistant text + file edits
             if entry_type == "assistant":
                 msg = entry.get("message", {})
                 content = msg.get("content", []) if isinstance(msg, dict) else []
                 if isinstance(content, list):
                     for block in content:
-                        if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        if not isinstance(block, dict):
                             continue
-                        tool = block.get("name", "")
-                        if tool in ("Edit", "Write"):
-                            fp = block.get("input", {}).get("file_path", "")
-                            if fp:
-                                file_edits.append({"ts": hhmm, "file": fp.split("/")[-1]})
+                        if block.get("type") == "text":
+                            text = block.get("text", "").strip()[:200]
+                            if text:
+                                assistant_texts.append({"ts": hhmm, "text": text})
+                        elif block.get("type") == "tool_use":
+                            tool = block.get("name", "")
+                            if tool in ("Edit", "Write"):
+                                fp = block.get("input", {}).get("file_path", "")
+                                if fp:
+                                    file_edits.append({"ts": hhmm, "file": fp.split("/")[-1]})
 
     if not all_timestamps:
         return {"messages": [], "file_edits": [], "idle_gaps": [], "active_minutes": 0, "wall_minutes": 0}
@@ -125,6 +131,7 @@ def extract(jsonl_path: str, target_date: str | None = None) -> dict:
         dur = max(1, int((seg_e - seg_s).total_seconds() / 60))
 
         seg_msgs = [m for m in messages if s_hhmm <= m["ts"] <= e_hhmm]
+        seg_asst = [a for a in assistant_texts if s_hhmm <= a["ts"] <= e_hhmm]
         seg_files = [f for f in file_edits if s_hhmm <= f["ts"] <= e_hhmm]
 
         if seg_msgs or seg_files:  # 빈 구간 제거
@@ -133,6 +140,7 @@ def extract(jsonl_path: str, target_date: str | None = None) -> dict:
                 "end": e_hhmm,
                 "duration_min": dur,
                 "messages": seg_msgs,
+                "assistant_texts": seg_asst,
                 "file_edits": seg_files,
             })
 
