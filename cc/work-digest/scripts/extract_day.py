@@ -39,6 +39,7 @@ def merge_segments(segments):
             merged[-1]["end"] = s["end"]
             merged[-1]["duration_min"] += s["duration_min"]
             merged[-1]["messages"] = merged[-1]["messages"] + s["messages"]
+            merged[-1]["assistant_texts"] = merged[-1].get("assistant_texts", []) + s.get("assistant_texts", [])
             merged[-1]["file_edits"] = merged[-1]["file_edits"] + s["file_edits"]
         else:
             merged.append(dict(s))
@@ -49,6 +50,7 @@ def merge_segments(segments):
             final[-1]["end"] = seg["end"]
             final[-1]["duration_min"] += seg["duration_min"]
             final[-1]["messages"] = final[-1]["messages"] + seg["messages"]
+            final[-1]["assistant_texts"] = final[-1].get("assistant_texts", []) + seg.get("assistant_texts", [])
             final[-1]["file_edits"] = final[-1]["file_edits"] + seg["file_edits"]
         else:
             final.append(seg)
@@ -153,12 +155,14 @@ def flatten_by_repo(session_segments: list[dict]) -> dict[str, list[dict]]:
     for s in session_segments:
         repo = (s.get("repo") or "unknown").split("/")[-1]
         for seg in s.get("segments", []):
+            asst = seg.get("assistant_texts", [])
             by_repo.setdefault(repo, []).append({
                 "sid": s["session_id"],
                 "start": seg["start"],
                 "end": seg["end"],
                 "dur": seg["duration_min"],
                 "hint": _clean_hint(seg.get("message_texts", [])),
+                "context": [a[:200] for a in asst[:3]],
                 "files": seg.get("file_names", []),
             })
     # 레포별 시간순 정렬
@@ -191,6 +195,8 @@ def main():
         # messages를 요약용으로 정리
         for seg in merged:
             seg["message_texts"] = [m["text"] for m in seg["messages"][:20]]
+            raw_asst = seg.pop("assistant_texts", [])
+            seg["assistant_texts"] = [a["text"] if isinstance(a, dict) else a for a in raw_asst[:3]]
             seg["file_names"] = list(dict.fromkeys(f["file"] for f in seg["file_edits"]))[:15]
             del seg["messages"]
             del seg["file_edits"]
