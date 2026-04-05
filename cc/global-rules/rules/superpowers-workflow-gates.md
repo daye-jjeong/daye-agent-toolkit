@@ -50,19 +50,20 @@ worktree를 삭제할 때:
 4. 구현 (TDD, 태스크 경계에서 커밋)
 5. `superpowers:verification-before-completion`
 6. `/simplify` → `pr-review-toolkit:review-pr` → 수렴까지 반복
+   ⚠ **순차 실행 필수** — simplify가 코드를 수정한 후 pr-review가 수정된 코드를 봐야 한다. 병렬 실행 금지.
    ⚠ subagent-driven-development, executing-plans 등 스킬 흐름이 이 단계를 건너뛰고 finishing으로 안내할 수 있음 — 스킬 무관하게 이 순서를 지켜라
 7. 머지 게이트
 8. `claude-md-management:revise-claude-md` → 이번 작업에서 CLAUDE.md에 반영할 변경사항이 있으면 업데이트
 
 ### L (6+ 파일)
 
-S/M과 동일 + 2번과 3번 사이에 `codex-cli` exec 모드로 plan 교차 리뷰.
+S/M과 동일 + 2번과 3번 사이에 `codex-cli` adversarial 모드로 plan 교차 리뷰.
 
 ## 머지 게이트
 
 모든 규모에서 머지 전 필수:
 
-1. **simplify + pr-review 수렴** — `/simplify` → `pr-review-toolkit:review-pr` 반복. 수렴 전에 머지 옵션을 제시하지 마라.
+1. **simplify + pr-review 수렴** — `/simplify` 완료 후 → `pr-review-toolkit:review-pr` 순차 반복. 병렬 실행 금지 (simplify가 코드를 수정하므로 reviewer는 수정 후 코드를 봐야 함). 수렴 전에 머지 옵션을 제시하지 마라.
 2. **divergence 체크** — `git log HEAD..master --oneline`으로 확인. master에 새 커밋 있으면 rebase 먼저.
 3. **변경 요약** — 파일 목록 + 뭘 바꿨는지 + 효과
 4. **사용자 승인** — 승인 없이 머지하지 마라

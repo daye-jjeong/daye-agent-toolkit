@@ -53,6 +53,31 @@ if [[ "$MODE" == "review" ]]; then
 
 	"$CODEX_BIN" "${ARGS[@]}"
 
+elif [[ "$MODE" == "adversarial" ]]; then
+	# Adversarial review: challenges design decisions, tradeoffs, failure modes
+	ARGS=("review")
+
+	[[ -n "$MODEL" ]] && ARGS+=("-c" "model=\"$MODEL\"")
+	[[ -n "$BASE" ]] && ARGS+=("--base" "$BASE")
+	[[ -n "$COMMIT" ]] && ARGS+=("--commit" "$COMMIT")
+
+	if [[ -z "$BASE" && -z "$COMMIT" ]]; then
+		ARGS+=("--uncommitted")
+	fi
+
+	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	ADV_PROMPT_FILE="${SCRIPT_DIR}/adversarial-prompt.md"
+	if [[ ! -f "$ADV_PROMPT_FILE" ]]; then
+		echo "Error: adversarial prompt not found: $ADV_PROMPT_FILE" >&2
+		exit 1
+	fi
+
+	COMBINED="$(cat "$ADV_PROMPT_FILE")"
+	[[ -n "$PROMPT" ]] && COMBINED="${COMBINED}"$'\n\n'"Additional focus: ${PROMPT}"
+	ARGS+=("$COMBINED")
+
+	"$CODEX_BIN" "${ARGS[@]}"
+
 elif [[ "$MODE" == "exec" ]]; then
 	ARGS=("exec")
 
@@ -81,6 +106,6 @@ elif [[ "$MODE" == "exec" ]]; then
 
 	"$CODEX_BIN" "${ARGS[@]}" - < "$TMPFILE"
 else
-	echo "Error: Unknown mode '$MODE'. Use 'review' or 'exec'." >&2
+	echo "Error: Unknown mode '$MODE'. Use 'review', 'adversarial', or 'exec'." >&2
 	exit 1
 fi
