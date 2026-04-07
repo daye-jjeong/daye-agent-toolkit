@@ -55,16 +55,6 @@ if [[ "$MODE" == "review" ]]; then
 
 elif [[ "$MODE" == "adversarial" ]]; then
 	# Adversarial review: challenges design decisions, tradeoffs, failure modes
-	ARGS=("review")
-
-	[[ -n "$MODEL" ]] && ARGS+=("-c" "model=\"$MODEL\"")
-	[[ -n "$BASE" ]] && ARGS+=("--base" "$BASE")
-	[[ -n "$COMMIT" ]] && ARGS+=("--commit" "$COMMIT")
-
-	if [[ -z "$BASE" && -z "$COMMIT" ]]; then
-		ARGS+=("--uncommitted")
-	fi
-
 	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 	ADV_PROMPT_FILE="${SCRIPT_DIR}/adversarial-prompt.md"
 	if [[ ! -f "$ADV_PROMPT_FILE" ]]; then
@@ -72,11 +62,32 @@ elif [[ "$MODE" == "adversarial" ]]; then
 		exit 1
 	fi
 
-	COMBINED="$(cat "$ADV_PROMPT_FILE")"
-	[[ -n "$PROMPT" ]] && COMBINED="${COMBINED}"$'\n\n'"Additional focus: ${PROMPT}"
-	ARGS+=("$COMBINED")
+	ADV_PROMPT="$(cat "$ADV_PROMPT_FILE")"
+	[[ -n "$PROMPT" ]] && ADV_PROMPT="${ADV_PROMPT}"$'\n\n'"Additional focus: ${PROMPT}"
 
-	"$CODEX_BIN" "${ARGS[@]}"
+	if [[ -n "$FILE" ]]; then
+		# File specified: use exec mode with adversarial prompt
+		if [[ ! -f "$FILE" ]]; then
+			echo "Error: File not found: $FILE" >&2
+			exit 1
+		fi
+		ARGS=("exec")
+		[[ -n "$MODEL" ]] && ARGS+=("-m" "$MODEL")
+		ARGS+=("--sandbox" "read-only")
+		ARGS+=("Read and analyze this file: $(realpath "$FILE")"$'\n\n'"${ADV_PROMPT}")
+		"$CODEX_BIN" "${ARGS[@]}"
+	else
+		# No file: use codex review with adversarial prompt
+		ARGS=("review")
+		[[ -n "$MODEL" ]] && ARGS+=("-c" "model=\"$MODEL\"")
+		[[ -n "$BASE" ]] && ARGS+=("--base" "$BASE")
+		[[ -n "$COMMIT" ]] && ARGS+=("--commit" "$COMMIT")
+		if [[ -z "$BASE" && -z "$COMMIT" ]]; then
+			ARGS+=("--uncommitted")
+		fi
+		ARGS+=("$ADV_PROMPT")
+		"$CODEX_BIN" "${ARGS[@]}"
+	fi
 
 elif [[ "$MODE" == "exec" ]]; then
 	ARGS=("exec")
@@ -89,22 +100,19 @@ elif [[ "$MODE" == "exec" ]]; then
 		exit 1
 	fi
 
-	# Build prompt via temp file to avoid ARG_MAX for large files
-	TMPFILE=$(mktemp)
-	trap 'rm -f "$TMPFILE"' EXIT
-
+	FULL_PROMPT=""
 	if [[ -n "$FILE" ]]; then
 		if [[ ! -f "$FILE" ]]; then
 			echo "Error: File not found: $FILE" >&2
 			exit 1
 		fi
-		printf 'File: %s\n```\n' "$FILE" > "$TMPFILE"
-		cat "$FILE" >> "$TMPFILE"
-		printf '\n```\n\n' >> "$TMPFILE"
+		FULL_PROMPT="Read and analyze this file: $(realpath "$FILE")"
+		[[ -n "$PROMPT" ]] && FULL_PROMPT="${FULL_PROMPT}"$'\n\n'"${PROMPT}"
+	else
+		FULL_PROMPT="$PROMPT"
 	fi
-	[[ -n "$PROMPT" ]] && printf '%s\n' "$PROMPT" >> "$TMPFILE"
 
-	"$CODEX_BIN" "${ARGS[@]}" - < "$TMPFILE"
+	"$CODEX_BIN" "${ARGS[@]}" "$FULL_PROMPT"
 else
 	echo "Error: Unknown mode '$MODE'. Use 'review', 'adversarial', or 'exec'." >&2
 	exit 1
