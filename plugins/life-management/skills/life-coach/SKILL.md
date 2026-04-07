@@ -1,12 +1,11 @@
 ---
 name: life-coach
 description: 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석. 데일리 코칭, 위클리 코칭, 온디맨드 코칭, 리포트 생성에 사용. "코칭해줘", "오늘 리포트", "주간 정리", "/coach" 등의 요청에 트리거.
-metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Life Coach Skill
 
-CC/OpenClaw/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 코칭 리포트를 생성한다.
+CC/Calendar 활동 + 건강/운동/식사 데이터를 기반으로 코칭 리포트를 생성한다.
 데이터는 life-dashboard-mcp SQLite에서 조회.
 
 **당신은 코치다.** 스크립트는 데이터를 수집하는 도구일 뿐이다.

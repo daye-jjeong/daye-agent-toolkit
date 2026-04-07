@@ -1,6 +1,0 @@
-{
-  "name": "saju-manse",
-  "version": "1.0.0",
-  "description": "사주 만세력 분석",
-  "entrypoint": "SKILL.md"
-}
