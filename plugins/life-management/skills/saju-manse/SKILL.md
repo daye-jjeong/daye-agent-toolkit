@@ -8,7 +8,6 @@ description: 사주팔자 분석 — 오행, 용신, 대운/세운
 
 **Version:** 0.1.0
 **Updated:** 2026-02-03
-**Compatibility:** Clawdbot >= 1.0.0
 **Status:** Experimental
 
 ## Input checklist (ask if missing)

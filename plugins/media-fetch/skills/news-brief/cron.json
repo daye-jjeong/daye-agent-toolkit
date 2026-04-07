@@ -13,7 +13,8 @@
 		"target": "breaking-alert",
 		"reason": "cron: breaking-alert",
 		"instructions": "news-brief 스킬의 '속보 알림' 섹션을 따르세요. 출력이 없으면 아무것도 하지 마세요.",
-		"recipients": ["daye"]
+		"recipients": ["daye"],
+		"review_exempt": true
 	},
 	{
 		"name": "reddit-hot",

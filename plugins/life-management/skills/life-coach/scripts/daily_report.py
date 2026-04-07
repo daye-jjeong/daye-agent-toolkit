@@ -579,7 +579,8 @@ def _build_followup_section(data: dict) -> str:
             desc = _esc(f.get("description", ""))
             days = f.get("days_open", 0)
             repo = _esc(f.get("origin_repo") or "?")
-            items += f'<div class="work-item"><span class="work-summary">[{days}일] {repo} — {desc}</span></div>'
+            prefix = f'[{days}일] {repo}'
+            items += f'<div class="work-item"><span class="follow-chain-prefix">{prefix}</span> <span class="work-summary">{desc}</span></div>'
         sections.append(f'<div class="followup-group"><div class="followup-label">🔗 미해소 체인 ({len(chain_followups)}건)</div>{items}</div>')
 
     if pending_tasks:
@@ -733,6 +734,7 @@ h1{font-size:20px;font-weight:700;color:#F0F0F0;margin-bottom:6px}
 .follow-up{color:#F0C040;font-size:11px;font-style:italic}
 .followup-group{margin-bottom:10px}
 .followup-label{font-size:12px;font-weight:600;color:#AAA;margin-bottom:4px}
+.follow-chain-prefix{font-size:11px;color:#888;flex-shrink:0;min-width:90px}
 .work-meta{font-size:10px;color:var(--mu);font-weight:400}
 .src-tag{flex-shrink:0;font-weight:600;font-size:10px;opacity:0.8}
 .sess-tag{flex-shrink:0;font-weight:600;font-size:11px}
