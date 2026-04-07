@@ -1,10 +1,35 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "daye-agent-toolkit",
-  "version": "1.0.0",
-  "description": "Daye's personal agent toolkit - general-purpose skills for Claude Code and OpenClaw",
+  "version": "2.0.0",
+  "description": "Daye's personal agent toolkit - CC plugins for life management, finance, dev tools, media",
   "owner": {
     "name": "Daye Jeong"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "life-management",
+      "description": "건강/생활/코칭 관련 스킬 모음 — health-tracker, life-coach, pantry-manager, saju-manse",
+      "source": "./plugins/life-management",
+      "category": "lifestyle"
+    },
+    {
+      "name": "finance",
+      "description": "금융/소비 관련 스킬 모음 — spending-manager, investment-manager, banksalad-import",
+      "source": "./plugins/finance",
+      "category": "finance"
+    },
+    {
+      "name": "dev-tools",
+      "description": "개발 워크플로우 스킬 + 훅 — codex-cli, gemini-cli, correction-memory, enforce, work-digest, self-profile, dashboard-content-design, stop-slop-kr",
+      "source": "./plugins/dev-tools",
+      "category": "development"
+    },
+    {
+      "name": "media-fetch",
+      "description": "외부 콘텐츠 수집 — reddit-fetch, youtube-fetch, news-brief",
+      "source": "./plugins/media-fetch",
+      "category": "media"
+    }
+  ]
 }
