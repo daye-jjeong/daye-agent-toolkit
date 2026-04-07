@@ -1,49 +1,15 @@
 # daye-agent-toolkit Makefile
 # Usage:
-#   make install       # 플러그인 등록 + rules 심링크
-#   make clean         # 등록 해제 + 심링크 제거
+#   make install       # 스킬 + 규칙 심링크
+#   make clean         # 심링크 제거
 #   make status        # 설치 상태 확인
 
 REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+SKILLS_DIR := $(HOME)/.claude/skills
 RULES_DIR := $(HOME)/.claude/rules
-SETTINGS := $(HOME)/.claude/settings.json
-MARKETPLACE_NAME := daye-agent-toolkit
-PLUGINS := life-management finance dev-tools media-fetch
 
-# --- Python scripts (define blocks must be before targets) ---
-
-define ENABLE_PY
-import json, os
-p = os.path.expanduser('$(SETTINGS)')
-d = json.load(open(p))
-ep = d.setdefault('enabledPlugins', {})
-for name in '$(PLUGINS)'.split():
-    key = f'{name}@$(MARKETPLACE_NAME)'
-    ep[key] = True
-    print(f'  ✓ {key}')
-json.dump(d, open(p, 'w'), indent=2, ensure_ascii=False)
-endef
-export ENABLE_PY
-
-define CLEAN_PY
-import json, os
-p = os.path.expanduser('$(SETTINGS)')
-d = json.load(open(p)) if os.path.exists(p) else {}
-ep = d.get('enabledPlugins', {})
-for name in '$(PLUGINS)'.split():
-    key = f'{name}@$(MARKETPLACE_NAME)'
-    if key in ep:
-        del ep[key]
-        print(f'  ✓ removed {key}')
-m = d.get('extraKnownMarketplaces', {})
-if '$(MARKETPLACE_NAME)' in m:
-    del m['$(MARKETPLACE_NAME)']
-    print('  ✓ marketplace removed')
-json.dump(d, open(p, 'w'), indent=2, ensure_ascii=False)
-endef
-export CLEAN_PY
-
-# --- Targets ---
+# Discover skills from plugin structure (parent dir names of SKILL.md)
+SKILL_DIRS := $(patsubst %/SKILL.md,%,$(wildcard plugins/*/skills/*/SKILL.md))
 
 .PHONY: install clean status help
 
@@ -51,24 +17,23 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: _register-marketplace _enable-plugins _symlink-rules ## Install plugins + rules
+install: _symlink-skills _symlink-rules ## Install skills + rules
 	@echo ""
-	@echo "Done. Run 'make status' to verify."
+	@echo "Done. $(words $(SKILL_DIRS)) skills + $$(find rules -name '*.md' | wc -l | tr -d ' ') rules installed."
+	@echo "Run 'make status' to verify."
 
-_register-marketplace:
-	@echo "=== Register local marketplace ==="
-	@python3 -c "\
-import json, os; \
-p = os.path.expanduser('$(SETTINGS)'); \
-d = json.load(open(p)) if os.path.exists(p) else {}; \
-m = d.setdefault('extraKnownMarketplaces', {}); \
-m['$(MARKETPLACE_NAME)'] = {'source': {'source': 'directory', 'path': '$(REPO_DIR)'}}; \
-json.dump(d, open(p, 'w'), indent=2, ensure_ascii=False); \
-print('  ✓ $(MARKETPLACE_NAME) registered (path: $(REPO_DIR))')"
-
-_enable-plugins:
-	@echo "=== Enable plugins ==="
-	@python3 -c "$$ENABLE_PY"
+_symlink-skills:
+	@echo "=== Symlink skills ==="
+	@mkdir -p $(SKILLS_DIR)
+	@for skill_path in $(SKILL_DIRS); do \
+		name=$$(basename $$skill_path); \
+		dest="$(SKILLS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then rm "$$dest"; \
+		elif [ -e "$$dest" ]; then echo "  ⚠ SKIPPED $$name (exists, not symlink)"; continue; \
+		fi; \
+		ln -s "$(REPO_DIR)/$$skill_path" "$$dest"; \
+		echo "  ✓ $$name"; \
+	done
 
 _symlink-rules:
 	@echo "=== Symlink rules ==="
@@ -83,9 +48,13 @@ _symlink-rules:
 		echo "  ✓ $$name"; \
 	done
 
-clean: ## Remove plugins + rules
-	@echo "=== Disable plugins ==="
-	@python3 -c "$$CLEAN_PY"
+clean: ## Remove skills + rules symlinks
+	@echo "=== Remove skill symlinks ==="
+	@for skill_path in $(SKILL_DIRS); do \
+		name=$$(basename $$skill_path); \
+		dest="$(SKILLS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then rm "$$dest"; echo "  ✓ removed $$name"; fi; \
+	done
 	@echo ""
 	@echo "=== Remove rules symlinks ==="
 	@for rule_file in $$(find rules -name '*.md' 2>/dev/null); do \
@@ -93,26 +62,15 @@ clean: ## Remove plugins + rules
 		dest="$(RULES_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then rm "$$dest"; echo "  ✓ removed $$name"; fi; \
 	done
-	@echo ""
-	@echo "Note: Plugin hooks are auto-deregistered when plugins are disabled."
 
 status: ## Show installation status
-	@echo "=== Marketplace ==="
-	@python3 -c "\
-import json, os; \
-p = os.path.expanduser('$(SETTINGS)'); \
-d = json.load(open(p)) if os.path.exists(p) else {}; \
-m = d.get('extraKnownMarketplaces', {}); \
-print('  ✓ registered' if '$(MARKETPLACE_NAME)' in m else '  ✗ not registered')"
-	@echo ""
-	@echo "=== Plugins ==="
-	@python3 -c "\
-import json, os; \
-p = os.path.expanduser('$(SETTINGS)'); \
-d = json.load(open(p)) if os.path.exists(p) else {}; \
-ep = d.get('enabledPlugins', {}); \
-plugins = '$(PLUGINS)'.split(); \
-[print(f'  ✓ {n}' if ep.get(f'{n}@$(MARKETPLACE_NAME)') else f'  ✗ {n}') for n in plugins]"
+	@echo "=== Skills ($(words $(SKILL_DIRS))) ==="
+	@for skill_path in $(SKILL_DIRS); do \
+		name=$$(basename $$skill_path); \
+		dest="$(SKILLS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then echo "  ✓ $$name"; \
+		else echo "  ✗ $$name (not installed)"; fi; \
+	done
 	@echo ""
 	@echo "=== Rules ==="
 	@for rule_file in $$(find rules -name '*.md' 2>/dev/null); do \
