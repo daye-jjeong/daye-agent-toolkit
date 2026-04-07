@@ -20,7 +20,7 @@ from db import get_conn, get_coach_state, set_coach_state, get_repeated_signals,
     get_mistake_trends, get_coaching_entry, get_pending_tasks, get_open_followups, \
     get_session_topics, update_daily_summary, get_tasks
 
-_WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
+_WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "plugins" / "dev-tools" / "skills" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
 from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGRAM_MAX_CHARS
 

@@ -1,110 +1,114 @@
 # daye-agent-toolkit
 
-개인 범용 스킬 전용 레포. Claude Code 중심, shared/ 스킬은 OpenClaw에서도 사용 가능.
-외부 마켓플레이스 플러그인도 `skills.json`으로 선언적 관리.
+개인 범용 에이전트 툴킷. Claude Code 플러그인 구조로 스킬/훅/규칙을 관리.
 
 ## 접근 방식
 
-| 환경 | 접근 방식 |
-|------|-----------|
-| Claude Code (로컬) | `make install-cc` → 스킬(`~/.claude/skills/`) + 규칙(`~/.claude/rules/`) symlink |
-| OpenClaw | shared/ 스킬을 심링크 또는 복사하여 사용 |
+`make install` → 로컬 마켓플레이스 등록 + 플러그인 활성화 + 규칙 심링크
 
 ## 디렉토리 구조
 
 ```
-cc/           — Claude Code 전용 스킬 + 규칙
-shared/       — CC + OpenClaw 양쪽 스킬
-docs/plans/   — 디자인 문서 + 구현 plan
-_infra/       — 빌드/설치/동기화 스크립트
-.claude/rules/ — 프로젝트 레벨 규칙 오버라이드
+plugins/          — CC 플러그인 (4개 플러그인, 18개 스킬)
+rules/            — 글로벌 규칙 (~/.claude/rules/에 심링크)
+mcp/              — MCP 서버 (life-dashboard 등)
+codex/            — Codex CLI 전용 설정
+docs/plans/       — 디자인 문서 + 구현 plan
+.claude/rules/    — 프로젝트 레벨 규칙 오버라이드
 ```
 
-## 스킬 분류
+## 플러그인 분류
 
-### Claude Code 전용 (5개 스킬 + 1개 규칙묶음) — `cc/` 디렉토리
+### life-management (4개 스킬)
 
-| 이름 | 유형 | 설명 |
-|------|------|------|
-| correction-memory | 스킬 | 교정 기억 — 실수 반복 방지 3계층 메모리 |
-| enforce | 스킬 | 반복 교정 → 훅 전환 제안 — correction 로그 스캔 + 훅 코드 초안 |
-| global-rules | 규칙 | 글로벌 규칙 묶음 — 세션 자동 로드 (SKILL.md 없음) |
-| reddit-fetch | 스킬 | Reddit 포스트/댓글 조회 + 검색 |
-| work-digest | 스킬 | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
-| youtube-fetch | 스킬 | YouTube 메타데이터 + 자막 추출 |
+| 스킬 | 설명 |
+|------|------|
+| health-tracker | 운동/증상/PT/건강체크인/식사 트래킹 + 루틴 추천 + 분석 |
+| life-coach | 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석 |
+| pantry-manager | 식재료 관리 자동화 |
+| saju-manse | 사주팔자 분석 |
 
-### Claude Code + OpenClaw 양쪽 (12개) — `shared/` 디렉토리
+### finance (3개 스킬)
 
 | 스킬 | 설명 |
 |------|------|
 | banksalad-import | 뱅크샐러드 → life-dashboard SQLite DB import |
-| codex-cli | Codex CLI 래퍼 — 코드 리뷰, 범용 질문을 Codex(OpenAI)에게 위임 |
-| gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
-| health-tracker | 운동/증상/PT/건강체크인/식사 트래킹 + 루틴 추천 + 분석 |
 | investment-manager | 투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신 |
-| life-coach | 통합 라이프 코칭 — 작업 패턴 + 건강/운동/식사 분석 |
-| news-brief | 키워드 뉴스 브리핑 |
-| pantry-manager | 식재료 관리 자동화 |
-| saju-manse | 사주팔자 분석 |
-| self-profile | 업무 데이터 기반 자기 프로파일링 |
 | spending-manager | 소비 분석 — 카테고리 요약, 추세, 미분류 정리, 예산 관리 |
+
+### dev-tools (8개 스킬 + 훅)
+
+| 스킬 | 설명 |
+|------|------|
+| codex-cli | Codex CLI 래퍼 — 코드 리뷰, 범용 질문을 Codex(OpenAI)에게 위임 |
+| correction-memory | 교정 기억 — 실수 반복 방지 3계층 메모리 |
+| dashboard-content-design | 산업용 모니터링 대시보드 컨텐츠 구조 설계 |
+| enforce | 반복 교정 → 훅 전환 제안 — correction 로그 스캔 + 훅 코드 초안 |
+| gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
+| self-profile | 업무 데이터 기반 자기 프로파일링 |
 | stop-slop-kr | 한국어 AI 말투 교정 — 번역체, 아첨, 상투어 제거 |
+| work-digest | 일일 작업 다이제스트 — CC 세션 로그 + 요약 + 알림 |
 
-## skills.json 매니페스트
+### media-fetch (3개 스킬)
 
-디렉토리 기반 자동 탐색. `cc/`, `shared/`의 스킬을 자동으로 발견하므로 개별 목록 불필요.
-`plugins`로 외부 플러그인 선언.
+| 스킬 | 설명 |
+|------|------|
+| news-brief | 키워드 뉴스 브리핑 |
+| reddit-fetch | Reddit 포스트/댓글 조회 + 검색 |
+| youtube-fetch | YouTube 메타데이터 + 자막 추출 |
+
+## marketplace.json
+
+`.claude-plugin/marketplace.json`이 로컬 마켓플레이스를 정의. `make install`이 이를 `~/.claude/settings.json`에 등록.
 
 ## 규칙 시스템
 
-스킬과 별도로, `rules/*.md` 파일은 모든 CC 세션에 자동 로드되는 행동 규칙.
+`rules/*.md` 파일은 모든 CC 세션에 자동 로드되는 행동 규칙.
 
 ### 규칙 소스
 
 | 경로 | 설명 |
 |------|------|
-| `cc/global-rules/rules/` | 프로젝트 무관 글로벌 규칙 (6개) |
-| `cc/correction-memory/rules/` | 교정 프로토콜 자동 적용 |
-| `shared/stop-slop-kr/rules/` | 한국어 톤 규칙 |
+| `rules/global/` | 프로젝트 무관 글로벌 규칙 |
+| `rules/correction/` | 교정 프로토콜 자동 적용 |
+| `rules/tone/` | 한국어 톤 규칙 |
 | `.claude/rules/` | 프로젝트 레벨 오버라이드 (git-tracked) |
 
 ### 동작
 
-- `make install-cc` → `cc/*/rules/*.md`, `shared/*/rules/*.md`를 `~/.claude/rules/`에 심링크
-- 동일 basename 충돌 시 CONFLICT 경고 + skip
+- `make install` → `rules/**/*.md`를 `~/.claude/rules/`에 심링크
+- 기존 파일(심링크 아닌)이 있으면 SKIP
 - `.claude/rules/`는 프로젝트별 오버라이드 (예: worktree 명령어 변경)
 
 ## 스킬 포맷
 
-- `<category>/<skill-name>/SKILL.md` — 스킬 본문 (공통, 150줄 이내)
-- `<category>/<skill-name>/references/` — 상세 문서 (SKILL.md에서 포인터 참조)
-- `<category>/<skill-name>/.claude-skill` — Claude Code 메타데이터 (cc/, shared/만)
-- `<category>/<skill-name>/rules/` — 세션 자동 로드 규칙 (`~/.claude/rules/`에 심링크)
+- `plugins/<plugin>/skills/<skill-name>/SKILL.md` — 스킬 본문 (150줄 이내)
+- `plugins/<plugin>/skills/<skill-name>/references/` — 상세 문서 (SKILL.md에서 포인터 참조)
+- `plugins/<plugin>/.claude-plugin/plugin.json` — 플러그인 메타데이터
+- `plugins/<plugin>/hooks/hooks.json` — 훅 정의 (해당 플러그인에 훅이 있을 때)
 
 ### SKILL.md frontmatter 필드
 
 | 필드 | 필수 | 설명 |
 |------|------|------|
 | `name` | Y | 스킬 식별자 |
-| `description` | Y | 한줄 설명. CC: 트리거링용이므로 구체적으로 (제한 없음). OpenClaw: 시스템 프롬프트 주입이므로 50자 이내 권장. |
+| `description` | Y | 한줄 설명. 트리거링용이므로 구체적으로. |
 | `user-invocable` | N | `false`면 슬래시 커맨드 비노출 (내부 스킬) |
 | `disable-model-invocation` | N | `true`면 모델 프롬프트에서 제외 (cron/수동 전용) |
 
 ## 새 스킬 추가 절차
 
-1. 카테고리 디렉토리에 `<skill-name>/` 생성 (`cc/` 또는 `shared/`)
+1. 해당 플러그인 디렉토리에 `skills/<skill-name>/` 생성
 2. `SKILL.md` 작성 (frontmatter + 150줄 이내)
 3. 상세 내용은 `references/`로 분리
-4. `.claude-skill` 추가
-5. `make install-cc` 실행
-6. 커밋 + push
+4. `make install` 실행
+5. 커밋 + push
 
 ## scripts/ 규칙
 
 - stdlib만 사용 (외부 패키지 금지)
 - bash 또는 python3
-- 개별 스킬은 자체 `{baseDir}/scripts/`를 SKILL.md에서 참조
-- `_infra/scripts/`는 레포 인프라 전용 (Makefile에서 호출, SKILL.md에서 참조하지 않음)
+- 개별 스킬은 자체 `scripts/`를 SKILL.md에서 참조
 
 ## 방침
 

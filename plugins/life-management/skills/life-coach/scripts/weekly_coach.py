@@ -18,7 +18,7 @@ _MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / 
 sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins, get_repeated_signals, get_mistake_trends, get_open_followups, get_coaching_entry
 
-_WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent / "cc" / "work-digest" / "scripts"
+_WD_SCRIPTS = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "plugins" / "dev-tools" / "skills" / "work-digest" / "scripts"
 sys.path.insert(0, str(_WD_SCRIPTS))
 from _common import send_telegram, format_tokens, WEEKDAYS_KO, TAG_ICONS, TELEGRAM_MAX_CHARS
 

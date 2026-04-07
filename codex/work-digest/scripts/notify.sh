@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORK_DIGEST_DIR="$(dirname "$SCRIPT_DIR")"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 CONF_FILE="${TELEGRAM_CONF_PATH:-$WORK_DIGEST_DIR/telegram.conf}"
-FALLBACK_CONF="$REPO_ROOT/cc/work-digest/telegram.conf"
+FALLBACK_CONF="$REPO_ROOT/plugins/dev-tools/skills/work-digest/telegram.conf"
 
 if [ ! -f "$CONF_FILE" ] && [ -f "$FALLBACK_CONF" ]; then
   CONF_FILE="$FALLBACK_CONF"

@@ -1030,9 +1030,9 @@ def main():
     date_str = raw.get("date", "unknown")
     try:
         import subprocess as _sp
-        # shared/life-coach → repo root → cc/work-digest
-        repo_root = Path(__file__).resolve().parent.parent.parent.parent
-        validate_script = repo_root / "cc" / "work-digest" / "scripts" / "validate_topics.py"
+        # life-coach scripts → repo root → dev-tools/work-digest
+        repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent.parent
+        validate_script = repo_root / "plugins" / "dev-tools" / "skills" / "work-digest" / "scripts" / "validate_topics.py"
         if validate_script.exists():
             vr = _sp.run([sys.executable, str(validate_script), "--fix", "--date", date_str],
                          capture_output=True, text=True, timeout=30)

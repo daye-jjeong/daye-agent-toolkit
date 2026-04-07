@@ -174,7 +174,7 @@
 
 ### Quick Run
 ```bash
-cd /Users/dayejeong/git_workplace/daye-agent-toolkit/shared/news-brief
+cd plugins/media-fetch/skills/news-brief
 
 # Activate venv
 source venv/bin/activate
@@ -208,12 +208,12 @@ jobs:
           python-version: '3.9'
       
       - name: Install dependencies
-        working-directory: ./shared/news-brief
+        working-directory: ./plugins/media-fetch/skills/news-brief
         run: |
           python -m pip install pytest
 
       - name: Run regression tests
-        working-directory: ./shared/news-brief
+        working-directory: ./plugins/media-fetch/skills/news-brief
         run: |
           python -m pytest tests/test_enrich_regression.py -v --junitxml=junit.xml
 
@@ -222,7 +222,7 @@ jobs:
         if: always()
         with:
           name: test-results
-          path: shared/news-brief/junit.xml
+          path: plugins/media-fetch/skills/news-brief/junit.xml
 ```
 
 ---
