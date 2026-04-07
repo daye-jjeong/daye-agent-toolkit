@@ -1,0 +1,5 @@
+{
+  "name": "dev-tools",
+  "version": "1.0.0",
+  "description": "개발 워크플로우 스킬 + 훅 — codex-cli, gemini-cli, correction-memory, enforce, work-digest, self-profile, dashboard-content-design, stop-slop-kr"
+}

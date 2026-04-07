@@ -1,0 +1,5 @@
+{
+  "name": "media-fetch",
+  "version": "1.0.0",
+  "description": "외부 콘텐츠 수집 — reddit-fetch, youtube-fetch, news-brief"
+}
