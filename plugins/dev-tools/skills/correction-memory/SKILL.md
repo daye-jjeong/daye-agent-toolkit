@@ -66,7 +66,7 @@ $ARGUMENTS를 파싱하여 모드 결정:
 
 ## 자동 트리거
 
-교정 감지 → 자동 저장은 `{baseDir}/rules/correction-protocol.md`가 담당.
+교정 감지 → 자동 저장은 `rules/correction/correction-protocol.md`가 담당.
 `make install` 시 `~/.claude/rules/`에 자동 symlink되어 매 세션 자동 로드된다.
 스킬의 search/review/stats 모드는 수동 호출용.
 
