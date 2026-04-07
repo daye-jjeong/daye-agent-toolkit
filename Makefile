@@ -10,6 +10,41 @@ SETTINGS := $(HOME)/.claude/settings.json
 MARKETPLACE_NAME := daye-agent-toolkit
 PLUGINS := life-management finance dev-tools media-fetch
 
+# --- Python scripts (define blocks must be before targets) ---
+
+define ENABLE_PY
+import json, os
+p = os.path.expanduser('$(SETTINGS)')
+d = json.load(open(p))
+ep = d.setdefault('enabledPlugins', {})
+for name in '$(PLUGINS)'.split():
+    key = f'{name}@$(MARKETPLACE_NAME)'
+    ep[key] = True
+    print(f'  ✓ {key}')
+json.dump(d, open(p, 'w'), indent=2, ensure_ascii=False)
+endef
+export ENABLE_PY
+
+define CLEAN_PY
+import json, os
+p = os.path.expanduser('$(SETTINGS)')
+d = json.load(open(p)) if os.path.exists(p) else {}
+ep = d.get('enabledPlugins', {})
+for name in '$(PLUGINS)'.split():
+    key = f'{name}@$(MARKETPLACE_NAME)'
+    if key in ep:
+        del ep[key]
+        print(f'  ✓ removed {key}')
+m = d.get('extraKnownMarketplaces', {})
+if '$(MARKETPLACE_NAME)' in m:
+    del m['$(MARKETPLACE_NAME)']
+    print('  ✓ marketplace removed')
+json.dump(d, open(p, 'w'), indent=2, ensure_ascii=False)
+endef
+export CLEAN_PY
+
+# --- Targets ---
+
 .PHONY: install clean status help
 
 help: ## Show available targets
@@ -33,17 +68,7 @@ print('  ✓ $(MARKETPLACE_NAME) registered (path: $(REPO_DIR))')"
 
 _enable-plugins:
 	@echo "=== Enable plugins ==="
-	@python3 -c "\
-import json, os; \
-p = os.path.expanduser('$(SETTINGS)'); \
-d = json.load(open(p)); \
-ep = d.setdefault('enabledPlugins', {}); \
-plugins = '$(PLUGINS)'.split(); \
-for name in plugins: \
-    key = f'{name}@$(MARKETPLACE_NAME)'; \
-    ep[key] = True; \
-    print(f'  ✓ {key}'); \
-json.dump(d, open(p, 'w'), indent=2, ensure_ascii=False)"
+	@python3 -c "$$ENABLE_PY"
 
 _symlink-rules:
 	@echo "=== Symlink rules ==="
@@ -60,18 +85,7 @@ _symlink-rules:
 
 clean: ## Remove plugins + rules
 	@echo "=== Disable plugins ==="
-	@python3 -c "\
-import json, os; \
-p = os.path.expanduser('$(SETTINGS)'); \
-d = json.load(open(p)) if os.path.exists(p) else {}; \
-ep = d.get('enabledPlugins', {}); \
-plugins = '$(PLUGINS)'.split(); \
-for name in plugins: \
-    key = f'{name}@$(MARKETPLACE_NAME)'; \
-    if key in ep: del ep[key]; print(f'  ✓ removed {key}'); \
-m = d.get('extraKnownMarketplaces', {}); \
-if '$(MARKETPLACE_NAME)' in m: del m['$(MARKETPLACE_NAME)']; print('  ✓ marketplace removed'); \
-json.dump(d, open(p, 'w'), indent=2, ensure_ascii=False)"
+	@python3 -c "$$CLEAN_PY"
 	@echo ""
 	@echo "=== Remove rules symlinks ==="
 	@for rule_file in $$(find rules -name '*.md' 2>/dev/null); do \
