@@ -21,8 +21,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# life-dashboard-mcp의 db 모듈 import
-_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+# life-dashboard MCP의 db 모듈 import
+_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"
 sys.path.insert(0, str(_DASHBOARD_DIR))
 from db import get_conn  # noqa: E402
 

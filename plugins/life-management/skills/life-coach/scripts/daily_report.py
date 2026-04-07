@@ -379,7 +379,7 @@ def validate_report(html: str, data: dict) -> list[dict]:
 
     # 5. 건강 데이터: eval 시간대 겹침 (주 기준)
     try:
-        _mcp = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+        _mcp = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"
         sys.path.insert(0, str(_mcp))
         from db import get_conn as _get_conn
         conn = _get_conn()
@@ -788,7 +788,7 @@ def _build_week_trend_chart(data: dict) -> str:
 
     # DB에서 최근 8일 sessions 직접 조회 (daily_stats는 부정확할 수 있음)
     try:
-        _mcp = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+        _mcp = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"
         import sys as _sys
         _sys.path.insert(0, str(_mcp))
         from db import get_conn

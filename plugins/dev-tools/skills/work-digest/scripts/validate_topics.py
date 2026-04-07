@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract_day import find_transcripts, merge_segments
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"))
 from extract_session import extract
 from db import get_conn
 

@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-_MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+_MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"
 sys.path.insert(0, str(_MCP_DIR))
 from db import open_conn, upsert_pantry_item
 

@@ -11,7 +11,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent / "shared" / "life-dashboard-mcp"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"))
 from db import get_conn, _VALID_TAGS
 
 KST = timezone(timedelta(hours=9))

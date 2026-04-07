@@ -12,7 +12,7 @@ from collect import _collect_from_conn
 def _create_test_db() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    schema_path = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp" / "schema.sql"
+    schema_path = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard" / "schema.sql"
     conn.executescript(schema_path.read_text())
     return conn
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""life-dashboard-mcp DB module — SQLite access layer."""
+"""life-dashboard DB module — SQLite access layer."""
 
 import json
 import re

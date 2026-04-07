@@ -1,5 +1,5 @@
 ---
-name: life-dashboard-mcp
+name: life-dashboard
 description: 공유 SQLite DB MCP 서버 — 활동·건강·금융·식재료 통합 저장소
 user-invocable: false
 disable-model-invocation: true

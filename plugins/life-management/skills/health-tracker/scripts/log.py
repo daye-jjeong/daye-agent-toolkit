@@ -15,7 +15,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+_DASHBOARD_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"
 sys.path.insert(0, str(_DASHBOARD_DIR))
 from db import get_conn, insert_exercise, insert_symptom, insert_meal
 

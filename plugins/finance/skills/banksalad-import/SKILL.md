@@ -27,7 +27,7 @@ description: 뱅크샐러드 → life-dashboard SQLite DB 금융 데이터 impor
 
 ## 출력
 
-DB: `~/life-dashboard/data.db` (life-dashboard-mcp 공유)
+DB: `~/life-dashboard/data.db` (life-dashboard MCP 공유)
 
 | 테이블 | 용도 | Dedup |
 |--------|------|-------|
@@ -53,8 +53,8 @@ python {baseDir}/scripts/import_banksalad.py --latest --dry-run
 
 ## 의존성
 
-- `life-dashboard-mcp/db.py` — DB 연결 + 스키마 초기화
-- `life-dashboard-mcp/schema.sql` — finance 테이블 정의 포함
+- `mcp/life-dashboard/db.py` — DB 연결 + 스키마 초기화
+- `mcp/life-dashboard/schema.sql` — finance 테이블 정의 포함
 
 ## SQL 쿼리 예시
 

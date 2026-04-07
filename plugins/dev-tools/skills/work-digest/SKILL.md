@@ -61,12 +61,12 @@ python3 {baseDir}/scripts/active_session_scanner.py
 
 ```bash
 # 미요약 세션 확인
-python3 {baseDir}/../../shared/life-dashboard-mcp/activity_writer.py unsummarized --date <DATE>
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py unsummarized --date <DATE>
 ```
 
 미요약 세션마다 태그+요약+status를 생성하여 저장:
 ```bash
-python3 {baseDir}/../../shared/life-dashboard-mcp/activity_writer.py update-summary \
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py update-summary \
     --session-id <SID> --date <DATE> --tag "태그" --summary "요약" \
     --status completed
 ```
@@ -100,7 +100,7 @@ extract_day.py `--flat` 출력과 기존 projects 목록을 참고하여 task를
 python3 {baseDir}/scripts/extract_day.py --date <DATE> --no-scan --flat
 
 # 기존 projects 목록 (LLM에 함께 전달)
-python3 -c "import sys; sys.path.insert(0,'{baseDir}/../../shared/life-dashboard-mcp'); from db import get_conn, get_projects; print([{'id':p['id'],'name':p['name'],'repo':p['repo']} for p in get_projects(get_conn(), 'active')])"
+python3 -c "import sys; sys.path.insert(0,'{baseDir}/../../../../mcp/life-dashboard'); from db import get_conn, get_projects; print([{'id':p['id'],'name':p['name'],'repo':p['repo']} for p in get_projects(get_conn(), 'active')])"
 ```
 
 **핵심 원칙: task = 사용자가 한 일의 기능 단위. 세션이 아니라 segment 단위로 사고.**
@@ -136,7 +136,7 @@ python3 -c "import sys; sys.path.insert(0,'{baseDir}/../../shared/life-dashboard
 ### Step 5: 저장 + 검증
 
 ```bash
-python3 {baseDir}/../../shared/life-dashboard-mcp/activity_writer.py update-tasks \
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py update-tasks \
     --date <DATE> --tasks '<JSON array>'
 
 python3 {baseDir}/scripts/validate_tasks.py --date <DATE>
@@ -165,7 +165,7 @@ task 목록을 위에서 아래로 읽으며 확인:
 
 병합 시:
 ```bash
-python3 {baseDir}/../../shared/life-dashboard-mcp/activity_writer.py update-tasks \
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py update-tasks \
     --date <DATE> --tasks '<병합된 JSON array>'
 ```
 

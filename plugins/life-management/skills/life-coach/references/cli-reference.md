@@ -21,7 +21,7 @@ python3 {baseDir}/scripts/weekly_coach.py --json --date <DATE> 2>/dev/null > /tm
 ### 2-1. 이전 코칭 참조
 
 ```bash
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py previous-coaching --date <DATE>
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py previous-coaching --date <DATE>
 ```
 
 ## Phase 3: 저장 + 리포트
@@ -29,7 +29,7 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py previous-coaching --d
 ### 3-1. 코칭 저장
 
 ```bash
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-coaching \
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py save-coaching \
     --date <DATE> --period daily \
     --content /tmp/coaching_<DATE>.md \
     --sections '{"summary":"...","structure_review":"...","coaching":"...","question":"..."}'
@@ -39,15 +39,15 @@ python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-coaching \
 
 ```bash
 # 태스크 제안 저장
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py save-task \
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py save-task \
     --date <DATE> --description "태스크 설명" --estimated-min 30 --priority 1 --source-type coaching
 
 # 태스크 해소
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py resolve-task \
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py resolve-task \
     --id <TASK_ID> --status done --date <DATE> --method auto
 
 # Follow-up 해소
-python3 {baseDir}/../life-dashboard-mcp/activity_writer.py resolve-followup \
+python3 {baseDir}/../../../../mcp/life-dashboard/activity_writer.py resolve-followup \
     --id <CHAIN_ID> --status resolved --date <DATE> --note "해소 사유"
 ```
 

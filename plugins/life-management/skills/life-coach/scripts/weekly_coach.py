@@ -14,7 +14,7 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-_MCP_DIR = Path(__file__).resolve().parent.parent.parent / "life-dashboard-mcp"
+_MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"
 sys.path.insert(0, str(_MCP_DIR))
 from db import get_conn, get_coach_state, query_exercises, query_symptoms, query_meals, query_check_ins, get_repeated_signals, get_mistake_trends, get_open_followups, get_coaching_entry
 
