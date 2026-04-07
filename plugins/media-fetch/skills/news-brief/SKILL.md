@@ -1,7 +1,6 @@
 ---
 name: news-brief
-description: 뉴스 수집 · 요약 · 알림 · AI 예측 — 데일리 신문(RSS 4개 소스 → HTML), AI 속보 알림(keyword scoring), Reddit AI 서브레딧 핫 포스트, CC/OpenClaw 활용 사례 검색, 주간 AI 산업 예측(시그널 추출 + 자가개선 루프). 뉴스 정리, 신문 만들어, breaking alert, 레딧 핫, 속보, RSS 피드, 밍밍 데일리, 뉴스 브리핑, reddit-hot, CC 활용 사례, claude code 사례, openclaw 사례, AI 예측, forecast, 주간 예측 등의 요청에 사용.
-metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
+description: 뉴스 수집 · 요약 · 알림 · AI 예측 — 데일리 신문(RSS 4개 소스 → HTML), AI 속보 알림(keyword scoring), Reddit AI 서브레딧 핫 포스트, CC 활용 사례 검색, 주간 AI 산업 예측(시그널 추출 + 자가개선 루프). 뉴스 정리, 신문 만들어, breaking alert, 레딧 핫, 속보, RSS 피드, 밍밍 데일리, 뉴스 브리핑, reddit-hot, CC 활용 사례, claude code 사례, AI 예측, forecast, 주간 예측 등의 요청에 사용.
 ---
 
 # News Brief Skill
@@ -66,9 +65,9 @@ for item in items:
    - 포스트 내용 1-2문장 요약
    - 댓글 핵심 반응 1-2문장
 
-### CC/OpenClaw 활용 사례
+### CC 활용 사례
 
-Claude Code, OpenClaw, Claude 스킬 등의 실전 활용 사례를 Reddit에서 검색하여 다이제스트로 요약한다.
+Claude Code, Claude 스킬 등의 실전 활용 사례를 Reddit에서 검색하여 다이제스트로 요약한다.
 
 - 검색 쿼리 목록: `references/cc-showcase-queries.txt`
 
@@ -163,7 +162,7 @@ python3 {baseDir}/scripts/archive.py --input /tmp/enriched.json
 | `enrich.py` | 영어→한국어 번역 + 요약(why) 추가 |
 | `breaking-alert.py` | 속보 알림 (tiered keyword + word boundary) |
 | `reddit-hot.py` | Reddit 핫 포스트 알림 (AI 서브레딧, upvote 필터) |
-| `reddit-cc-showcase.py` | CC/OpenClaw 활용 사례 검색 (Reddit search API) |
+| `reddit-cc-showcase.py` | CC 활용 사례 검색 (Reddit search API) |
 | `fetch_weather.py` | 날씨 + 옷차림 (Open-Meteo) |
 | `render_newspaper.py` | JSON → 신문 스타일 HTML |
 | `seen_cache.py` | 알림 dedup 캐시 (library) |
@@ -186,4 +185,4 @@ python3 {baseDir}/scripts/archive.py --input /tmp/enriched.json
 | `references/*_feeds.txt` | 소스별 RSS 피드 목록 |
 | `references/*_keywords.txt` | 소스별 키워드 필터 |
 | `references/reddit-hot-subs.txt` | Reddit 핫 구독 서브레딧 목록 |
-| `references/cc-showcase-queries.txt` | CC/OpenClaw 활용 사례 검색 쿼리 |
+| `references/cc-showcase-queries.txt` | CC 활용 사례 검색 쿼리 |

@@ -28,7 +28,7 @@
 		"schedule": "0 10,16 * * *",
 		"target": "cc-showcase",
 		"reason": "cron: cc-showcase",
-		"instructions": "news-brief 스킬의 'CC/OpenClaw 활용 사례' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요.",
+		"instructions": "news-brief 스킬의 'CC 활용 사례' 절차를 따르세요. 출력이 없으면 아무것도 하지 마세요.",
 		"recipients": ["daye"]
 	},
 	{
