@@ -1,6 +1,0 @@
-{
-  "name": "investment-manager",
-  "version": "1.0.0",
-  "description": "투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신",
-  "entrypoint": "SKILL.md"
-}
