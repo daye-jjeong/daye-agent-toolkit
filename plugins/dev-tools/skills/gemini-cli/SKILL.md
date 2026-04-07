@@ -1,7 +1,6 @@
 ---
 name: gemini-cli
 description: Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출
-metadata: {"openclaw":{"requires":{"bins":["gemini","python3"]}}}
 ---
 
 # Gemini CLI

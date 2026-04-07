@@ -1,7 +1,6 @@
 ---
 name: work-digest
 description: 일일 작업 다이제스트 — CC 세션 자동 기록 + 데이터 준비 파이프라인. 세션 수집, 요약, task 분해를 담당한다. "오늘 뭐 했지?", "작업 정리", "요약해줘" 등의 요청이나, life-coach 등 다른 스킬이 데이터 준비를 필요로 할 때 사용.
-metadata: {"openclaw":{"requires":{"bins":["python3"]}}}
 ---
 
 # Work Digest Skill

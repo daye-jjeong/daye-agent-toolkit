@@ -1,7 +1,6 @@
 ---
 name: codex-cli
 description: Codex CLI 래퍼 — 코드 리뷰, 범용 질문을 Codex(OpenAI)에게 위임
-metadata: {"openclaw":{"requires":{"bins":["codex","python3"]}}}
 ---
 
 # Codex CLI
