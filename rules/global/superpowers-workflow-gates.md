@@ -12,7 +12,7 @@
 
 ## 파이프라인
 1. `superpowers:brainstorming` → design
-2. (L: 6+파일) `codex-cli` 스킬 adversarial 모드 → design 검증
+2. (L: 6+파일) `/codex:adversarial-review` + `codex-cli` 프롬프트 → design 검증
 3. `superpowers:writing-plans` → plan
 4. worktree → 5. 구현(TDD, 태스크 경계 커밋) → 6. `superpowers:verification-before-completion`
 7. `/simplify` → `pr-review-toolkit:review-pr` 순차 반복(병렬 금지, 수렴 전 머지 금지)
@@ -21,7 +21,7 @@
 
 ## 구현 위임
 - **Claude subagent** (`superpowers:subagent-driven-development`): 기본. implementer는 `model: "sonnet"` 우선
-- **Codex** (`codex:rescue`): adversarial 리뷰, 디버깅 난항, 세컨드 오피니언
+- **Codex** (`codex:rescue`): 디버깅 난항, 세컨드 오피니언. adversarial은 `/codex:adversarial-review`
 
 ## 머지 게이트
 simplify+review 수렴 → `git log HEAD..master` divergence 확인(rebase) → 변경 요약 + 사용자 승인

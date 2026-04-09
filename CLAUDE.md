@@ -40,7 +40,7 @@ docs/plans/       — 디자인 문서 + 구현 plan
 
 | 스킬 | 설명 |
 |------|------|
-| codex-cli | Codex CLI 래퍼 — 코드 리뷰, 범용 질문을 Codex(OpenAI)에게 위임 |
+| codex-cli | 프로젝트 맞춤 adversarial 프롬프트 — 공식 /codex:adversarial-review에 focus text 전달 |
 | correction-memory | 교정 기억 — 실수 반복 방지 3계층 메모리 |
 | enforce | 반복 교정 → 훅 전환 제안 — correction 로그 스캔 + 훅 코드 초안 |
 | gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |

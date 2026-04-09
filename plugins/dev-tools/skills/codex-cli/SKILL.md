@@ -1,83 +1,27 @@
 ---
 name: codex-cli
-description: Codex CLI 래퍼 — 코드 리뷰, adversarial 설계 리뷰, 범용 질문을 Codex(OpenAI)에게 위임. "Codex로 리뷰해줘", "Codex adversarial", "코덱스한테 물어봐" 등 사용자가 Codex를 명시할 때 사용.
+description: Project-specific adversarial review prompt for Codex. Adds Korean attack axes (SoT layer violations, minimal scope violations) on top of the official /codex:adversarial-review. Use when the user asks for "설계 리뷰" or "프로젝트 adversarial".
 ---
 
-# Codex CLI
+# Codex Adversarial — 프로젝트 맞춤 프롬프트
 
-Codex CLI를 통해 코드 리뷰 및 범용 질문을 OpenAI 모델에게 위임합니다.
-
-## When to Use
-
-- **사용자가 "Codex"를 명시적으로 언급할 때만** 사용
-- Claude가 자의적으로 Codex를 호출하지 않음
-- 주 용도: 코드 리뷰 (다른 모델의 시각으로 검증)
-- 부 용도: 범용 질문
+공식 `/codex:adversarial-review`에 프로젝트 특화 공격 축을 추가하는 래퍼.
 
 ## Usage
 
-### Review Mode — 코드 리뷰 (기본)
+1. `{baseDir}/references/adversarial-prompt.md`를 읽는다
+2. 그 내용을 focus text로 `/codex:adversarial-review`에 전달한다
 
-```bash
-# 현재 uncommitted 변경사항 리뷰
-{baseDir}/scripts/call.sh --mode review
-
-# 특정 브랜치 대비 리뷰
-{baseDir}/scripts/call.sh --mode review --base main
-
-# 특정 커밋 리뷰
-{baseDir}/scripts/call.sh --mode review --commit abc123
-
-# 커스텀 리뷰 지시
-{baseDir}/scripts/call.sh --mode review "보안 취약점 위주로 봐줘"
+```
+/codex:adversarial-review [프롬프트 내용을 focus text로 붙여넣기]
 ```
 
-### Adversarial Review Mode — 설계 반박 리뷰
+## 프롬프트 커스터마이징
 
-일반 review와 달리 **설계 결정/트레이드오프/실패 모드를 공격**하는 리뷰. 버그/스타일 지적이 아니라 "왜 A 대신 B를 안 골랐나"를 묻는다.
+공격 축을 바꾸려면 `references/adversarial-prompt.md`를 편집.
 
-```bash
-# 현재 uncommitted 변경사항을 adversarial로 리뷰
-{baseDir}/scripts/call.sh --mode adversarial
+## 범용 Codex 명령
 
-# plan 단계에서 설계 검토
-{baseDir}/scripts/call.sh --mode adversarial --base main
-
-# 특정 초점 추가
-{baseDir}/scripts/call.sh --mode adversarial "추상화 수준이 적절한지 공격해줘"
-
-# 특정 파일을 adversarial 리뷰 (exec 모드로 자동 전환)
-{baseDir}/scripts/call.sh --mode adversarial --file docs/specs/design.md
-```
-
-프롬프트 본체는 `scripts/adversarial-prompt.md`에 있음. 성향을 바꾸려면 그 파일을 편집.
-`--file` 사용 시 Codex가 샌드박스에서 파일을 직접 읽으므로 대용량 파일도 문제없다.
-
-### Exec Mode — 범용 질문
-
-```bash
-{baseDir}/scripts/call.sh --mode exec "이 프로젝트 구조 분석해줘"
-{baseDir}/scripts/call.sh --mode exec --file src/app.tsx "이 파일 최적화 방안"
-```
-
-### Options
-
-- `--mode review|adversarial|exec` — 모드 선택 (기본: review)
-- `--base BRANCH` — review 모드에서 비교 대상 브랜치
-- `--commit SHA` — review 모드에서 특정 커밋 리뷰
-- `--file PATH` — exec 모드에서 파일 컨텍스트 포함
-- `--model MODEL` — 모델 지정 (기본: codex config.toml의 모델)
-
-## Post-Processing
-
-Codex 결과를 받은 후:
-- **리뷰 결과** → 요약해서 사용자에게 전달
-- **Critical/Important 이슈** → Claude가 수정 여부를 판단하고 제안
-- Codex의 제안을 무조건 수용하지 않음 — Claude가 검증 후 적용
-
-## Prerequisites
-
-Codex CLI 설치 필요:
-```bash
-npm install -g @openai/codex
-```
+- `/codex:review` — 일반 코드 리뷰
+- `/codex:adversarial-review` — 범용 adversarial (이 스킬 없이도 사용 가능)
+- `/codex:rescue` — 태스크 위임
