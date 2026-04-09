@@ -71,40 +71,41 @@
 
 (13번째 룰 `superpowers-workflow-gates`는 v0에서 이미 처리됨. 위는 v6 시점의 추가 변경)
 
-## pre-work.md 초안
+## pre-work.md 초안 (확정)
 
 ```markdown
 # Pre-Work
 
-## Trigger 1: 코드 수정 직전 (모든 작업)
+코드를 수정하거나 조사 결과를 구현으로 옮길 때 적용.
+
+## Trigger 1: 코드 수정 직전
 - 대상 시스템 현재 상태 확인 (설정, 환경변수, 브랜치, 배포 상태)
 - 가정 명시 + 실제 값 검증 ("X가 Y일 것이다" → 확인)
 - 이미 구현된 것 재발명 금지, 존재 패턴 무시 금지
 - 확신 없으면 "이렇게 이해했는데 맞나요?"로 물어라
 
-(item 1 "관련 파일 먼저 읽어라"는 CC 본체와 중복으로 제거)
-
 ## Trigger 2: 조사 → 구현 전환 (긴 조사 후)
-조사/점검 결과를 구현할 때 기억에 의존하지 마라:
+조사 결과를 구현할 때 기억에 의존하지 마라:
 1. 구현 전: 발견사항을 체크리스트 테이블로 정리 + 사용자 확인
 2. 구현 중: 체크리스트 referring하며 항목별 반영
 3. 구현 후: 체크리스트 vs 산출물 1:1 대조
 
-Why: 컨텍스트 길어지면 누락 발생 (예: loop-audit 4건 누락 사례)
+Why: 컨텍스트 길어지면 누락. 사례: loop-audit 4건 누락
 ```
 
-## superpowers-workflow-gates 추가 section (learning-loop 흡수)
+(before-starting의 item 1 "관련 파일 먼저 읽어라"는 CC 본체와 중복으로 제거)
 
-step 7 인근에 추가:
+## superpowers-workflow-gates learning-loop 흡수 (확정)
+
+step 7의 sub-bullet로 흡수 (trigger와 action 인접):
+
 ```markdown
-### 리뷰 학습 루프 (step 7 후)
-simplify + pr-review에서 수정 2개+ 발견 시 반복 패턴을 auto memory `patterns.md`에 기록.
-형식: `- [YYYY-MM-DD] {패턴}: {구현 시 해야 할 것}`
-대상:
-- schema enum 추가 → 모든 레이어(workspace 시그니처, CLI cast)에 타입 전파
-- 헬퍼 함수 추출 → 단위 테스트 함께 작성
-- 필터/판단 로직 → 3곳+ 사용 시 헬퍼 추출
-- 기타 2회+ 반복된 리뷰 지적
+## 파이프라인
+...
+7. `/simplify` → `pr-review-toolkit:review-pr` 순차 반복 (병렬 금지). 수렴 전 머지 옵션 금지
+   - **학습 루프**: 수정 2개+ 발견 시 반복 패턴을 auto memory `patterns.md`에 `- [YYYY-MM-DD] {패턴}: {구현 시 해야 할 것}` 형식으로 기록. 대상: schema enum 추가 → 모든 레이어(workspace 시그니처, CLI cast)에 타입 전파, 헬퍼 추출 → 단위 테스트 함께, 필터/판단 로직 → 3곳+ 사용 시 헬퍼 추출, 기타 2회+ 반복된 리뷰 지적
+8. 머지 게이트
+...
 ```
 
 ## review.md (리네임 only, 압축)
