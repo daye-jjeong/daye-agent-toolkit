@@ -1,111 +1,39 @@
 # Superpowers Workflow
 
 ## 세션 시작
+`git worktree list` → 진행 중 worktree + 미완료 plan 있으면 이어하기 제안.
 
-1. `git worktree list` → 진행중 worktree + 미완료 plan 있으면 이어하기 제안
-2. orphan worktree 감지: `git merge-base --is-ancestor <commit> HEAD`로 머지 완료된 worktree 삭제 제안
-3. 새 작업이면 규모 판단 후 워크플로우 진행
+## Worktree (모든 구현 작업)
+- 모든 구현은 worktree에서. read-only 탐색만 예외
+- `superpowers:using-git-worktrees` 사용. 브랜치명: `fix/xxx`, `feat/xxx`. Agent 도구 `isolation: "worktree"` 금지
+- **편집 전 게이트**: `git branch --show-current`이 master/main이면 수정 거부, worktree부터 만들어라
+- worktree 생성 후 `npm ci`(또는 lockfile 명령)
+- 삭제 시 메인 레포로 `cd` 먼저, `worktree remove + branch -d + push`는 한 체인
 
-## Worktree
+### 합리화 거부
+"작은 수정/빨리 테스트/이미 진행 중/merge 후 추가/조사 중 수정 필요" — 전부 거부. 규모 무관, 수정 전 worktree 생성.
 
-모든 구현 작업은 worktree에서 시작. 규모 무관. 예외: read-only 탐색.
-
-`superpowers:using-git-worktrees` 스킬로 생성. 기능명 기반 브랜치(`fix/xxx`, `feat/xxx`). Agent 도구의 `isolation: "worktree"`는 사용하지 마라 — 랜덤 ID 이름이라 식별 불가.
-
-### 편집 전 게이트
-
-**Edit/Write 도구로 소스 파일을 수정하기 직전:**
-1. `git branch --show-current` 실행
-2. master/main이면 → **수정하지 마라**. worktree부터 생성.
-3. worktree 브랜치면 → 진행.
-
-### 의존성 설치
-
-worktree 생성 후, `package-lock.json`(또는 `yarn.lock`, `pnpm-lock.yaml`)이 있으면 `npm ci`(또는 동등 명령)를 실행하라. LSP 타입 분석이 동작하려면 node_modules가 필요하다. symlink로는 tsconfig 경로 별칭이 해석되지 않는다.
-
-### 삭제 안전
-
-worktree를 삭제할 때:
-1. **`cd <메인 레포 경로>` 먼저** — CWD가 worktree 안이면 삭제 후 모든 명령 실패
-2. 패턴: `cd /path/to/repo && git worktree remove <path> && git branch -d <branch>`
-3. 삭제와 후속 명령(branch -d, push)은 **하나의 체인**으로 실행
-
-### 합리화 패턴 (전부 거부)
-
-- "작은 수정이라 괜찮다" → 규모 무관
-- "빨리 테스트해야 하니까" → worktree에서 빌드
-- "이미 흐름이 진행됐으니 그냥" → stash 후 worktree 전환
-- "merge 후 추가 수정이라" → 새 worktree 생성
-- "조사하다가 수정이 필요해졌다" → 수정 전에 worktree 생성
-
-## 규모별 파이프라인
-
-작업 시작 전 반드시 규모를 판단하고 사용자에게 알려라. 단순 rename/이동은 파일 수 많아도 하위 티어 적용 가능.
-
-### S/M 공통 파이프라인
-
-1. `superpowers:brainstorming` → 디자인 합의 + spec 작성
-2. `superpowers:writing-plans` → plan 생성 (스킬 내장 리뷰어가 자동 검증)
-3. worktree 생성
-4. 구현 (TDD, 태스크 경계에서 커밋)
-5. `superpowers:verification-before-completion`
-6. `/simplify` → `pr-review-toolkit:review-pr` → 수렴까지 반복
-   ⚠ **순차 실행 필수** — simplify가 코드를 수정한 후 pr-review가 수정된 코드를 봐야 한다. 병렬 실행 금지.
-   ⚠ subagent-driven-development, executing-plans 등 스킬 흐름이 이 단계를 건너뛰고 finishing으로 안내할 수 있음 — 스킬 무관하게 이 순서를 지켜라
-7. 머지 게이트
-8. `claude-md-management:revise-claude-md` → 이번 작업에서 CLAUDE.md에 반영할 변경사항이 있으면 업데이트
-
-### L (6+ 파일)
-
-S/M과 동일 + 2번과 3번 사이에 `codex-cli` adversarial 모드로 plan 교차 리뷰.
+## 파이프라인
+1. `superpowers:brainstorming` → 디자인 합의
+2. `superpowers:writing-plans` → plan 생성
+3. (L: 6+ 파일) `codex-cli` adversarial 모드로 plan 교차 리뷰
+4. worktree 생성
+5. 구현 (TDD, 태스크 경계 커밋)
+6. `superpowers:verification-before-completion`
+7. `/simplify` → `pr-review-toolkit:review-pr` 순차 반복 (병렬 금지). 수렴 전 머지 옵션 금지
+8. 머지 게이트
+9. `claude-md-management:revise-claude-md`
 
 ## 머지 게이트
+1. simplify + pr-review 수렴
+2. `git log HEAD..master --oneline`로 divergence 확인. 새 커밋 있으면 rebase 먼저
+3. 변경 요약 (파일/내용/효과) + 사용자 승인 필수
 
-모든 규모에서 머지 전 필수:
-
-1. **simplify + pr-review 수렴** — `/simplify` 완료 후 → `pr-review-toolkit:review-pr` 순차 반복. 병렬 실행 금지 (simplify가 코드를 수정하므로 reviewer는 수정 후 코드를 봐야 함). 수렴 전에 머지 옵션을 제시하지 마라.
-2. **divergence 체크** — `git log HEAD..master --oneline`으로 확인. master에 새 커밋 있으면 rebase 먼저.
-3. **변경 요약** — 파일 목록 + 뭘 바꿨는지 + 효과
-4. **사용자 승인** — 승인 없이 머지하지 마라
-
-## 커밋 전략
-
-### worktree에서 (자유롭게)
-1. plan 태스크 1개 완료 + 테스트 통과 시
-2. simplify/pr-review 수렴 후
-3. 세션 종료/핸드오프 시 (WIP 커밋)
-4. 사용자가 명시적으로 요청 시
-
-파일 수정 직후, 루프 중간에는 커밋을 묻지 마라.
-
-### 머지 전 정리 (rebase -i)
-머지 게이트 진입 전 `git rebase -i`로 커밋 히스토리를 정리한다:
-- `fix:` 수정 커밋 → 관련 `feat:`/`refactor:` 커밋에 squash
-- `build: rebuild dist` → 마지막 커밋에 포함
-- 논리 단위별 커밋은 유지 (AI 리뷰어가 각 커밋의 의도를 파악할 수 있도록)
-
-dist 리빌드를 별도 커밋으로 만들지 마라.
-
-## 보고
-
-작업 중 항상 **현재 위치 + 다음 행동**을 함께 보고하라.
-
-- ❌ "커밋할까요?"
-- ✅ "태스크 2/4 완료, 테스트 통과. 커밋하고 태스크 3 진행할게."
-
-## 디버깅 루프 탈출
-
-같은 접근법으로 3회 이상 실패하면 해당 접근을 버리고 재시작하라. 같은 에러를 다른 방법으로 고치는 것도 "같은 접근"이다. 재시작 시:
-1. 현재까지의 시도와 실패 원인을 정리
-2. `git stash` 또는 `git checkout -- .`로 변경 초기화
-3. 다른 접근법으로 처음부터 시작
+## 커밋
+- worktree에서 자유롭게: 태스크 1개 완료, simplify/review 수렴 후, 핸드오프, 사용자 요청 시. 루프 중간엔 묻지 마라
+- 머지 전 `git rebase -i`로 정리: `fix:` squash, dist 리빌드는 마지막 커밋에 포함
 
 ## 핸드오프
-
-이전 세션: WIP 커밋 + plan 진행 상태 업데이트
-새 세션: worktree 감지 → plan 읽기 → `git log -5` → 이어서 진행
-
-## 기타
-
-- Process 스킬(brainstorming/debugging) 먼저, 그 다음 implementation 스킬
-- compact 직후: `~/.claude/compact-state.json`을 Read하라. 존재하면 plan_path의 plan을 열고 current_task 위치부터 이어서 진행하라. 읽은 후 파일을 삭제하라. `saved_at`가 24시간 이상 경과했으면 stale — 복원 없이 삭제만 하라. 파일이 없으면 무시.
+- 이전 세션: WIP 커밋 + plan 진행 상태 업데이트
+- 새 세션: worktree 감지 → plan 읽기 → `git log -5` → 이어서
+- compact 직후: `~/.claude/compact-state.json` 있으면 plan_path 열고 current_task 위치부터. 24h+ stale이면 삭제만
