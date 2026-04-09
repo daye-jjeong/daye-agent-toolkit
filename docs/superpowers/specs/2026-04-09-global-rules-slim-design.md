@@ -1,150 +1,219 @@
-# Global Rules Slim Design (v2, post-Codex review)
+# Global Rules Slim Design (v6)
 
 **Date**: 2026-04-09
-**Goal**: 글로벌 룰 13개를 압축하여 system prompt burn 절감
+**Goal**: 글로벌 룰 13개를 압축/통합/흡수하여 system prompt burn 절감
 **Priority**: Burn reduction (1순위)
-**Compression mode**: **Pure compression only** — redundancy/headers/duplicate why 제거. 행동 유도 디테일(concrete commands, retrieval cue 예시)은 보존
-**Codex review**: `tmp/codex-rules-slim-review.md` 5건 모두 반영
+**Compression mode**: Pure compression (header/Why/duplicate 제거. concrete commands, retrieval cue 보존)
+**Iteration**: v1 → v2 (Codex review) → v3-v5 (협의) → **v6 (현재)**
 
-## 배경
+## 변경 이력 요약
 
-CC는 `~/.claude/rules/*.md`를 매 세션 system prompt에 자동 로드. 현재 13개 룰 = 약 9,950 bytes ≈ 2,490 토큰. Anthropic 가이드라인은 CLAUDE.md/룰 합산 < 2,000 토큰 권장. 살짝 초과.
+| 버전 | 핵심 변경 |
+|---|---|
+| v1 | 모든 룰 in-place 압축 + review 통합 + 일반화 (Moderate) |
+| v2 (Codex) | 통합/일반화 모두 거부, pure compression only |
+| v3 | review-learning-loop, completion-and-commits를 superpowers에 흡수 |
+| v4 (사용자: review 패턴) | review.md 신규 생성 (multipass + learning-loop), completion 흡수 유지 |
+| v5 (사용자: 분리 추가) | + pre-work.md, verification.md (completion 흡수 취소) |
+| **v6 (사용자: 흡수 vs 합치기 구분)** | learning-loop는 superpowers 흡수 (단일 트리거), pre-work만 합치기, verification 분리 유지 |
 
-이 작업 전 burn 정리 누적: 58,632 → 45,105 (−23.1%). 본 작업은 보수적으로 추가 −500~−700 토큰 목표.
+## 원칙
+
+| 액션 | 기준 | 이유 |
+|---|---|---|
+| **흡수 (Absorb)** | 트리거가 단일 컨텍스트 (특히 superpowers 파이프라인) | 트리거-액션 같은 파일 → silent fail 없음 |
+| **합치기 (Merge)** | 같은 토픽 + 다중 컨텍스트 룰들. 명시적 trigger 마커로 silent fail 회피 | 토픽 응집 + ad-hoc 컨텍스트 커버 |
+| **분리 유지** | 단일 룰 + 합칠 짝 없음, 또는 다중 컨텍스트인데 관련 룰 없음 | 명료성 보존 |
+| **압축** | 모든 룰. CC 본체 중복, header 계층, Why 섹션 제거 | 토큰 절감 |
+
+**Compression 보존 원칙** (Codex #4):
+- 보존: action item, 실행 가능한 구체 명령(`tsc --noEmit`), 행동 retrieval cue 예시(`workspace 시그니처, CLI cast`)
+- 제거: 헤더 계층, 중복 설명, Why 섹션 헤더(인라인 한 줄 유지), CC 본체와 명백히 중복되는 항목
 
 ## Scope
 
 **In scope**:
-- toolkit `rules/global/`, `rules/correction/`, `rules/tone/` 12개 파일 in-place 압축 (헤더/중복/Why 섹션 제거만)
-- `~/.claude/rules/correction-20260404-2100-checklist-before-impl.md` (standalone) 압축
+- toolkit `rules/global/`, `rules/correction/`, `rules/tone/` 압축
+- `~/.claude/rules/correction-20260404-...` 압축 (standalone, toolkit 외)
+- 합치기 1건: `pre-work.md` ← `before-starting` + `checklist-before-impl`
+- 흡수 1건: `review-learning-loop` → `superpowers-workflow-gates` step 7 인근
+- 리네임 2건: `completion-and-commits` → `verification`, `review-multipass` → `review`
 
-**Out of scope** (Codex #2, #5):
-- **룰 통합/머지** (review.md 통합 포함). 모든 룰 별도 유지
-- **구체 → 일반화 변환** (`tsc --noEmit`, `workspace/CLI` 예시 등). 모두 그대로 유지
-- 룰 파일 rename / restructure
+**Out of scope**:
+- review-multipass와 review-learning-loop의 하나의 review.md 통합 (Codex #1: 트리거 다름)
+- `tsc --noEmit`, `workspace/CLI` 예시의 일반화 (Codex #4: retrieval cue 손실)
+- compiled slim layer (future option, Codex #2)
+- 룰 카테고리 재정렬, 디렉토리 재구조화
 - 새 룰 추가
-- toolkit 외 다른 프로젝트의 `.claude/rules/`
-- CC 본체나 superpowers plugin 수정
-- `superpowers-workflow-gates.md` (이미 처리됨)
+- toolkit 외 다른 프로젝트 `.claude/rules/`
+- CC 본체 / superpowers plugin 수정
+- `superpowers-workflow-gates.md`의 추가 압축 (이미 v0에서 5405 → 2032B 처리)
+- toolkit 자체 CLAUDE.md (118줄), `~/.claude/CLAUDE.md` 검토
 
-**Future options** (별건):
-- **Compiled slim layer**: source verbose 유지 + install 단계에서 runtime artifact 생성. burn 문제는 전달 계층 문제이므로 SoT 직접 변형 대신 layer 분리가 더 깨끗 (Codex #2)
-- 1차 압축 후에도 burn 목표 미달 시 재검토
+## v6 액션 매트릭스
 
-## 접근 (Pure compression)
-
-**압축 원칙**:
-- 제거 가능: 헤더 계층 (`### Subheader` → 인라인), 중복 설명, `## Why` 섹션 헤더(문장은 1줄 인라인 유지), CC 본체와 명백히 중복되는 항목
-- **보존**: 모든 action item, 실행 가능한 구체 명령(`tsc --noEmit` 등), 행동 retrieval cue 예시(`workspace 시그니처, CLI cast` 등), 단일 why 문장, 핵심 트리거 조건
-
-**이유** (Codex #4): 룰은 API 문서가 아니라 행동 유도 장치. 구체 명령은 실행 cue, 구체 예시는 retrieval cue. 일반화하면 해석을 요구하게 되어 행동성 손실.
-
-## 13개 룰 액션 매트릭스 (v2)
-
-| # | 룰 | 현재 | 액션 | 후 (보수) |
+| # | 룰 | 현재 | v6 액션 | 결과 파일 |
 |---|---|---|---|---|
-| 1 | `before-starting.md` | 658B | 압축: header `## 확인 항목` 제거, 마지막 문장 보존, item 1 유지 | ~480B |
-| 2 | `completion-and-commits.md` | 404B | 압축: header 정리, Why 인라인. **`tsc --noEmit` 그대로** | ~330B |
-| 3 | `correction-20260404-...checklist-before-impl.md` | 427B | 압축: 사례 ("loop-audit") 한 줄로 | ~310B |
-| 4 | `correction-protocol.md` | 1724B | 압축: Trigger 예시 절반, 저장 절차 detail 트림. 핵심 6단계 보존 | ~1100B |
-| 5 | `long-running-backoff.md` | 340B | 약간 압축: 한 줄로 | ~250B |
-| 6 | `memory-lifecycle.md` | 1077B | 압축: header 정리, 예외 섹션 인라인 | ~700B |
-| 7 | `minimal-scope.md` | 336B | 약간 압축 | ~280B |
-| 8 | `review-multipass.md` | 456B | 압축: Why 인라인. **별도 유지** (Codex #1) | ~340B |
-| 9 | `review-learning-loop.md` | 658B | 압축: Why 인라인. **`workspace 시그니처/CLI cast` 예시 보존** | ~520B |
-| 10 | `session-split.md` | 346B | 약간 압축 | ~280B |
-| 11 | `superpowers-workflow-gates.md` | 2032B | (이미 처리됨, 변경 없음) | 2032B |
-| 12 | `tdd-on-new-functions.md` | 743B | 압축: header 인라인, Exempt 단축 | ~550B |
-| 13 | `tone-kr.md` | 561B | 압축: 예시 절반 | ~430B |
+| 1 | `before-starting.md` | 658B | **합치기 → pre-work.md** | (삭제) |
+| 2 | `checklist-before-impl.md` (=`correction-20260404-...`) | 427B | **리네임 + 합치기 → pre-work.md** | (삭제) |
+| 3 | `pre-work.md` | (신규) | 두 룰 합본 + 명시적 trigger 마커 | **신규 ~700B** |
+| 4 | `completion-and-commits.md` | 404B | **리네임 → verification.md** + 압축 | `verification.md` ~330B |
+| 5 | `correction-protocol.md` | 1724B | 압축 (Trigger 예시 절반, 절차 detail 트림) | ~1100B |
+| 6 | `long-running-backoff.md` | 340B | 약간 압축 | ~250B |
+| 7 | `memory-lifecycle.md` | 1077B | 압축 | ~700B |
+| 8 | `minimal-scope.md` | 336B | 약간 압축 | ~280B |
+| 9 | `review-multipass.md` | 456B | 압축 + 리네임 → `review.md` | `review.md` ~340B |
+| 10 | `review-learning-loop.md` | 658B | **흡수 → superpowers step 7** | (삭제) |
+| 11 | `session-split.md` | 346B | 약간 압축 | ~280B |
+| 12 | `superpowers-workflow-gates.md` | 2032B | learning-loop section 흡수 (~+200B) | ~2230B |
+| 13 | `tdd-on-new-functions.md` | 743B | 압축 | ~550B |
+| 14 | `tone-kr.md` | 561B | 압축 (예시 절반) | ~430B |
 
-**합계**: 9,802B → 약 7,602B = **−2,200B (−22%)** ≈ **−550 토큰**
+(13번째 룰 `superpowers-workflow-gates`는 v0에서 이미 처리됨. 위는 v6 시점의 추가 변경)
 
-(v1 ~1,050 토큰 대비 절반. 보수적이지만 안전)
+## pre-work.md 초안
 
-## 통합/일반화 결정 (모두 거부)
+```markdown
+# Pre-Work
 
-| 후보 | v1 결정 | v2 결정 | 이유 |
-|---|---|---|---|
-| review-multipass + review-learning-loop → review.md | MERGE | **거부** | Codex #1: 트리거 다름 (리뷰 중 vs 리뷰 후 2+ findings). silent fail 위험 |
-| `tsc --noEmit` → "타입 체커 (TS/Python/Go)" | 일반화 | **거부, 그대로** | Codex #4: 실행 명령 → 해석 요구로 손실 |
-| `workspace 시그니처/CLI cast` 예시 → 일반화 | 일반화 | **거부, 그대로** | Codex #4: retrieval cue. 구체 사례가 사고 패턴 trigger |
-| before-starting + correction-checklist | 별도 | **별도** | 트리거 시점 다름 |
-| long-running-backoff + session-split | 별도 | **별도** | 외부 작업 vs 내부 컨텍스트 |
-| memory-lifecycle + correction-protocol | 별도 | **별도** | 메모리 파일 vs 룰 파일 |
+## Trigger 1: 코드 수정 직전 (모든 작업)
+- 대상 시스템 현재 상태 확인 (설정, 환경변수, 브랜치, 배포 상태)
+- 가정 명시 + 실제 값 검증 ("X가 Y일 것이다" → 확인)
+- 이미 구현된 것 재발명 금지, 존재 패턴 무시 금지
+- 확신 없으면 "이렇게 이해했는데 맞나요?"로 물어라
 
-## 검증 (강화, Codex #3)
+(item 1 "관련 파일 먼저 읽어라"는 CC 본체와 중복으로 제거)
+
+## Trigger 2: 조사 → 구현 전환 (긴 조사 후)
+조사/점검 결과를 구현할 때 기억에 의존하지 마라:
+1. 구현 전: 발견사항을 체크리스트 테이블로 정리 + 사용자 확인
+2. 구현 중: 체크리스트 referring하며 항목별 반영
+3. 구현 후: 체크리스트 vs 산출물 1:1 대조
+
+Why: 컨텍스트 길어지면 누락 발생 (예: loop-audit 4건 누락 사례)
+```
+
+## superpowers-workflow-gates 추가 section (learning-loop 흡수)
+
+step 7 인근에 추가:
+```markdown
+### 리뷰 학습 루프 (step 7 후)
+simplify + pr-review에서 수정 2개+ 발견 시 반복 패턴을 auto memory `patterns.md`에 기록.
+형식: `- [YYYY-MM-DD] {패턴}: {구현 시 해야 할 것}`
+대상:
+- schema enum 추가 → 모든 레이어(workspace 시그니처, CLI cast)에 타입 전파
+- 헬퍼 함수 추출 → 단위 테스트 함께 작성
+- 필터/판단 로직 → 3곳+ 사용 시 헬퍼 추출
+- 기타 2회+ 반복된 리뷰 지적
+```
+
+## review.md (리네임 only, 압축)
+
+`review-multipass.md` → `review.md`. 내용 압축:
+```markdown
+# Code Review
+
+코드 리뷰는 최소 2 pass:
+- Pass 1: per-file (logic, omission, style)
+- Pass 2: cross-file (참조, 스케줄 시각, flag명, 분산 문서)
+
+single-pass는 cross-file 불일치를 silently ship.
+PR 머지엔 사용자 명시 승인 필수.
+```
+
+## verification.md (리네임 only, 압축)
+
+`completion-and-commits.md` → `verification.md`. 내용 압축:
+```markdown
+# Done Verification
+
+"done" 주장 전 필수:
+1. 관련 테스트 실행 + 통과
+2. `tsc --noEmit` (TypeScript 프로젝트)
+3. Cross-file 일관성 (참조, 스케줄, 플래그명, 분산 문서)
+
+검증 없는 완료 주장은 broken tests, type errors, cross-file 불일치를 숨긴다.
+```
+
+## 검증 (Codex #3 강화)
 
 작업 후 다음을 모두 통과해야 머지:
 
-### 1. Symlink target 검증
+### 1. Symlink 정합성
 ```bash
 for f in ~/.claude/rules/*.md; do
   echo "$f → $(readlink -f $f)"
-done | grep -v "/daye-agent-toolkit/" || echo OK
+done
 ```
-→ 모든 symlink가 toolkit main 트리(머지 후) 가리키는지. **머지 전 측정은 무의미** — symlink는 main을 가리키므로 worktree 변경이 반영 안 됨. 머지 후에만 측정.
+- 모든 link가 toolkit main을 가리켜야 함 (작업 머지 후)
+- pre-work.md, review.md, verification.md symlink 추가됨
+- before-starting, checklist-before-impl, review-learning-loop, review-multipass, completion-and-commits 옛 symlink는 삭제됨
 
-### 2. Broken symlink 없음
 ```bash
 find -L ~/.claude/rules -maxdepth 1 -type l ! -exec test -e {} \; -print
 ```
-→ empty output
+- empty (broken symlink 없음)
 
-### 3. Canary transcript regression (4개 시나리오)
-머지 후 새 세션에서 다음 4개 케이스 각각 1턴 실행, 응답에 룰 작동 흔적이 있는지 확인:
+### 2. **머지 전 측정 금지**
+~/.claude/rules/ symlink는 toolkit main을 가리키므로 worktree 변경은 머지 후에만 효과 측정 가능. 머지 전 cache_creation 비교는 무의미.
 
-| 시나리오 | 입력 | 기대 행동 | 룰 |
+### 3. Canary transcript regression (3 시나리오)
+
+| 시나리오 | 입력 | 기대 흔적 | 룰 |
 |---|---|---|---|
-| A. 리뷰 1 finding | "이 코드 한 군데 review해줘" | 2 pass 수행 (per-file + cross-file) | review-multipass |
-| B. 리뷰 2+ findings | "이 PR review해줘 (의도적으로 여러 이슈 있음)" | 2 pass + 패턴을 patterns.md에 기록 제안 | review-learning-loop |
-| C. TS 프로젝트 done 주장 | "이 변경 다 됐어, 끝났지?" | 테스트 + `tsc --noEmit` 실행 후에만 확정 | completion-and-commits |
-| D. 조사 → 구현 전환 | "이 시스템 조사하고 수정해줘" (긴 조사 후) | 발견사항을 체크리스트 테이블로 정리 + 사용자 확인 | correction-20260404 |
+| B | "이 PR review해줘 (의도적 여러 이슈)" | 2 pass + patterns.md 기록 제안 | review.md + superpowers learning section |
+| C | (TS 프로젝트) "이 변경 다 됐어?" | 테스트 + `tsc --noEmit` + cross-file 검증 후 done 보고 | verification.md |
+| D | 긴 조사 후 "이 시스템 조사하고 수정해줘" | 발견사항 체크리스트 테이블 작성 + 사용자 확인 | pre-work.md (Trigger 2) |
 
-→ 4개 모두 룰 작동 흔적 있어야 함. 누락 시 해당 룰 압축이 과했다는 신호 → revert 후 재압축.
+(A "한 군데 review" 시나리오는 인위적이라 제외)
+
+3개 모두 룰 작동 흔적 있어야 함. 누락 시 해당 룰 압축이 과했다는 신호 → revert 후 재압축.
 
 ### 4. cache_creation 측정
-머지 후 새 세션 첫 turn `cache_creation_input_tokens`이 45,105 → 약 44,500~44,600 떨어졌는지 확인. ~−500 토큰.
+머지 후 새 세션 첫 turn `cache_creation_input_tokens` 측정. 45,105 → 약 44,500~44,600 떨어졌는지 확인.
 
-### 5. self-review (보조)
-spec 작성자가 각 압축 파일을 fresh eyes로 한 번 더 읽고 action 보존 확인. **단독 검증으론 불충분** — 위 1~4가 main gate.
+### 5. Self-review (보조)
+Spec 작성자가 각 압축 파일을 fresh eyes로 한 번 더 읽고 action 보존 확인. **단독 검증으론 불충분** — 위 1~4가 main gate.
 
-## 위험과 완화 (v2)
+## 위험과 완화
 
 | 위험 | 완화 |
 |---|---|
-| 압축이 과해서 행동 손실 | (1) action item 100% 보존 원칙 (2) Canary regression A-D (3) 누락 시 revert |
-| 측정 오류 (worktree symlink) | 머지 후에만 측정. 머지 전 측정 명시적으로 금지 |
-| toolkit 다른 dirty 파일과 섞임 | worktree 분리 (`fix/global-rules-slim`) — 이미 만들어짐 |
-| Codex가 못 본 함정 | 압축본 적용 후 실제 사용 1-2일 모니터링. 이상 징후 시 revert |
+| 압축이 과해서 행동 손실 | (1) action item 100% 보존 (2) Canary B/C/D (3) 누락 시 revert |
+| 측정 오류 (worktree symlink) | 머지 후에만 측정. 머지 전 측정 명시적 금지 |
+| pre-work merge silent fail | 명시적 `## Trigger 1:` `## Trigger 2:` 마커 |
+| learning-loop 흡수로 ad-hoc 리뷰 시 학습 단계 누락 | 사용자가 ad-hoc 리뷰 거의 안 함. 손실 무시 |
+| toolkit 다른 dirty 파일과 섞임 | worktree 분리 (`fix/global-rules-slim`) |
+| Codex가 못 본 함정 | 머지 후 1-2일 모니터링. 이상 시 revert |
 
-## 예상 효과 (v2, 보수적)
+## 예상 효과 (v6, 보수적)
 
 | 항목 | 현재 | 후 (보수) | Δ |
 |---|---|---|---|
-| 룰 개수 | 13 | 13 (변경 없음) | 0 |
-| 총 텍스트 | 9,802B | ~7,602B | −2,200B (−22%) |
-| 토큰 추정 | ~2,450 | ~1,900 | −550 (−22%) |
-| `/memory` listing | 13줄 | 13줄 | 0 |
-| 첫 turn cache_creation | 45,105 | ~44,555 | −550 |
-| baseline 누적 | −23.1% | **−24.0%** | −0.9% |
+| 룰 파일 | 13 | **11** | −2 (3 삭제 + 1 신규) |
+| 총 텍스트 | 9,802B | ~7,200B | −2,600B (−27%) |
+| 토큰 추정 | ~2,450 | ~1,800 | **−650** |
+| `/memory` listing | 13줄 | 11줄 | −2줄 |
+| 첫 turn cache_creation | 45,105 | ~44,455 | −650 |
+| baseline 누적 | −23.1% | **−24.2%** | −1.1% |
 
-## v1 대비 변경 요약
+## v6 vs 다른 버전
 
-| 항목 | v1 | v2 |
-|---|---|---|
-| 통합 | review merge 1건 | 0건 |
-| 일반화 | tsc, 예시 일반화 | 0건 |
-| 압축 강도 | Moderate (~−42%) | Pure (~−22%) |
-| 검증 | eyeball + cache_creation | symlink target + canary 4 케이스 + cache_creation |
-| 예상 효과 | −1,050 토큰 | −550 토큰 |
-| 위험 | 중간 | 낮음 |
+| 항목 | v2 (Codex) | v3 | v4 | v5 | **v6** |
+|---|---|---|---|---|---|
+| review-multipass | 별도 | 별도 | review.md 통합 | review.md 통합 | **별도** (rename only) |
+| review-learning-loop | 별도 | superpowers 흡수 | review.md 통합 | review.md 통합 | **superpowers 흡수** |
+| completion-and-commits | 별도 | superpowers 흡수 | superpowers 흡수 | verification 분리 | **verification 분리** |
+| before-starting + checklist | 별도 | 별도 | 별도 | pre-work 합치기 | **pre-work 합치기** |
+| 룰 파일 | 13 | 11 | 12 | 11 | **11** |
+| 효과 (토큰) | −550 | −800 | −900 | −1,000 | **−650** |
+| 위험 | 낮음 | 낮음 | 중간 (silent fail) | 중간 | **낮음** (구조적 해결) |
 
-## Codex 5건 반영 매트릭스
+## 요약
 
-| # | Codex 지적 | v2 반영 |
-|---|---|---|
-| 1 | review.md 통합이 트리거 다른 두 룰 뭉갬 | review merge 취소, 별도 유지 |
-| 2 | Compiled slim layer가 진짜 해법 | Out of scope에 future option으로 명시 |
-| 3 | 검증 너무 약함, symlink target 미검증 | 검증 섹션 5단계로 강화. canary 4 케이스 추가. 머지 전 측정 금지 명시 |
-| 4 | 구체 → 일반화 = retrieval cue 손실 | tsc/workspace 예시 그대로 유지. "구체 보존" 압축 원칙으로 |
-| 5 | minimal-scope 위반, 작은 룰에 의미 리스크 | pure compression only로 축소 |
+- v6 = 사용자 원칙 ("흡수 if 단일 컨텍스트, 합치기 if 다중 컨텍스트") 정확 적용
+- review-learning-loop만 흡수 (단일 컨텍스트)
+- pre-work만 합치기 (multi-context, 같은 토픽)
+- review-multipass, verification은 분리 유지 (multi-context, 단일 룰)
+- 나머지 8개는 in-place pure compression
+- 위험 낮음, 효과 ~−650 토큰
