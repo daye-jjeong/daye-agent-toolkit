@@ -1,6 +1,6 @@
 ---
 name: saju-manse
-description: 사주팔자 분석 — 오행, 용신, 대운/세운
+description: Korean Four Pillars of Destiny (사주팔자) analysis — birth chart, five elements, favorable elements, major/annual luck cycles. Use when the user asks about saju, fortune telling, birth chart, 사주, 운세, 팔자, or compatibility analysis.
 ---
 
 # 사주/만세력 (Saju Manse)

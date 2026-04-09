@@ -1,6 +1,6 @@
 ---
 name: investment-manager
-description: 투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신
+description: Review investment portfolio status (KR/US stocks), check individual holdings, analyze risk exposure, and refresh price snapshots. Use when the user asks about investments, stocks, portfolio, 투자, 주식, 종목, returns, or asset allocation.
 ---
 
 # Investment Manager

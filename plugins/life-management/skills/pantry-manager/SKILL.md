@@ -1,6 +1,6 @@
 ---
 name: pantry-manager
-description: 식재료 관리 자동화 — 재고, 쇼핑리스트, 레시피 추천
+description: Track pantry inventory, generate shopping lists, and suggest recipes from available ingredients. Use when the user asks about groceries, fridge/pantry contents, expiration dates, meal planning, what to cook, or shopping lists. 식재료 관리 자동화.
 ---
 
 # Pantry Manager Skill

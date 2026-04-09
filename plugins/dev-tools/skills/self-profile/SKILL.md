@@ -1,6 +1,6 @@
 ---
 name: self-profile
-description: 업무 데이터 기반 자기 프로파일링 — 정량 분석 + 페르소나 생성
+description: Generate a quantitative self-profile from work session data — persona, strengths, improvement areas, and trend analysis over 30 days. Use when the user asks about their work patterns, productivity profile, 자기 분석, or wants a summary of how they work.
 ---
 
 # Self-Profile Skill

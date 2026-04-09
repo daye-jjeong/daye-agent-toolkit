@@ -1,6 +1,6 @@
 ---
 name: spending-manager
-description: 소비 분석 — 카테고리 요약, 추세, 미분류 정리, 예산 관리
+description: Analyze personal spending from bank transaction data — category summaries, monthly trends, top merchants, uncategorized cleanup, and budget tracking. Use when the user asks about expenses, spending habits, 소비, 지출, budget, or transaction history.
 ---
 
 # Spending Manager

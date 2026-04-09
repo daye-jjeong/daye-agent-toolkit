@@ -36,13 +36,12 @@ docs/plans/       — 디자인 문서 + 구현 plan
 | investment-manager | 투자 포트폴리오 현황, 종목 점검, 리스크 분석, 시세 갱신 |
 | spending-manager | 소비 분석 — 카테고리 요약, 추세, 미분류 정리, 예산 관리 |
 
-### dev-tools (8개 스킬 + 훅)
+### dev-tools (7개 스킬 + 훅)
 
 | 스킬 | 설명 |
 |------|------|
 | codex-cli | Codex CLI 래퍼 — 코드 리뷰, 범용 질문을 Codex(OpenAI)에게 위임 |
 | correction-memory | 교정 기억 — 실수 반복 방지 3계층 메모리 |
-| dashboard-content-design | 산업용 모니터링 대시보드 컨텐츠 구조 설계 |
 | enforce | 반복 교정 → 훅 전환 제안 — correction 로그 스캔 + 훅 코드 초안 |
 | gemini-cli | Gemini CLI 래퍼 — 디자인 위임, 코드 리뷰, 범용 LLM 호출 |
 | self-profile | 업무 데이터 기반 자기 프로파일링 |

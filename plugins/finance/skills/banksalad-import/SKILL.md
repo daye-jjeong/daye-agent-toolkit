@@ -1,6 +1,6 @@
 ---
 name: banksalad-import
-description: 뱅크샐러드 → life-dashboard SQLite DB 금융 데이터 import
+description: Import financial data from Banksalad (뱅크샐러드) export zip files into life-dashboard SQLite DB — transactions, investments, and loans. Use when the user mentions Banksalad, 뱅크샐러드, importing bank data, or syncing financial records.
 ---
 
 # Banksalad → Life Dashboard Import
