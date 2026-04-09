@@ -21,6 +21,7 @@
 5. 구현 (TDD, 태스크 경계 커밋)
 6. `superpowers:verification-before-completion`
 7. `/simplify` → `pr-review-toolkit:review-pr` 순차 반복 (병렬 금지). 수렴 전 머지 옵션 금지
+   - **학습 루프**: 수정 2개+ 발견 시 반복 패턴을 auto memory `patterns.md`에 `- [YYYY-MM-DD] {패턴}: {구현 시 해야 할 것}` 형식으로 기록. 대상: schema enum 추가 → 모든 레이어(workspace 시그니처, CLI cast)에 타입 전파, 헬퍼 추출 → 단위 테스트 함께, 필터/판단 로직 → 3곳+ 사용 시 헬퍼 추출, 기타 2회+ 반복된 리뷰 지적
 8. 머지 게이트
 9. `claude-md-management:revise-claude-md`
 
