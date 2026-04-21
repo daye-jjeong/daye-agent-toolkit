@@ -128,6 +128,44 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_date ON tasks(date);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 
+-- ── Todos (prospective, 사용자 관리 할일) ───────
+
+CREATE TABLE IF NOT EXISTS todos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    done_definition TEXT,
+    status TEXT NOT NULL DEFAULT 'backlog',
+    priority INTEGER,
+    project_id INTEGER,
+    parent_id INTEGER,
+    category TEXT,
+    quarter TEXT,
+    deadline TEXT,
+    estimated_min INTEGER,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    started_at TEXT,
+    done_at TEXT,
+    deferred_reason TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (parent_id) REFERENCES todos(id)
+);
+CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
+CREATE INDEX IF NOT EXISTS idx_todos_deadline ON todos(deadline);
+CREATE INDEX IF NOT EXISTS idx_todos_category ON todos(category);
+CREATE INDEX IF NOT EXISTS idx_todos_parent ON todos(parent_id);
+
+-- ── Daily Checkins (매일 아침/저녁 의식 기록) ──
+
+CREATE TABLE IF NOT EXISTS daily_checkins (
+    date TEXT PRIMARY KEY,
+    morning_wip_ids TEXT,
+    morning_intent TEXT,
+    evening_reflection TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
