@@ -422,6 +422,11 @@ def upsert_todo(conn: sqlite3.Connection, data: dict) -> int:
     """todos INSERT or UPDATE (id 있으면 UPDATE). id 반환.
 
     필수: title. 기본: status='backlog'.
+
+    주의: UPDATE 경로는 메타데이터만 수정 — status는 덮어쓰지 않는다.
+    상태 전환(backlog ↔ wip ↔ done ↔ blocked ↔ deferred)은 반드시
+    `update_todo_status`를 사용해야 WIP limit·Done 정의 의무·timestamp가
+    올바르게 enforce된다. INSERT 시에는 data['status']가 반영된다(기본 backlog).
     """
     if not data.get("title"):
         raise ValueError("title is required")
@@ -436,7 +441,6 @@ def upsert_todo(conn: sqlite3.Connection, data: dict) -> int:
             UPDATE todos SET
                 title = :title,
                 done_definition = :done_definition,
-                status = :status,
                 priority = :priority,
                 project_id = :project_id,
                 parent_id = :parent_id,
@@ -450,7 +454,6 @@ def upsert_todo(conn: sqlite3.Connection, data: dict) -> int:
             "id": todo_id,
             "title": data["title"],
             "done_definition": data.get("done_definition"),
-            "status": status,
             "priority": data.get("priority"),
             "project_id": data.get("project_id"),
             "parent_id": data.get("parent_id"),

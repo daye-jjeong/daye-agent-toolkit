@@ -125,6 +125,47 @@ def test_update_todo_status_timestamps():
     conn.close()
 
 
+def test_update_todo_status_wip_reentry_preserves_started_at():
+    """wip → blocked → wip 재전환 시 started_at 유지."""
+    from db import upsert_todo, update_todo_status, get_todo
+    conn = _setup_db()
+    tid = upsert_todo(conn, {"title": "t", "done_definition": "x"})
+    conn.commit()
+
+    update_todo_status(conn, tid, "wip")
+    conn.commit()
+    first_started = get_todo(conn, tid)["started_at"]
+    assert first_started is not None
+
+    update_todo_status(conn, tid, "blocked")
+    conn.commit()
+
+    update_todo_status(conn, tid, "wip")
+    conn.commit()
+    second_started = get_todo(conn, tid)["started_at"]
+    assert second_started == first_started  # 재진입에서도 원래 값 유지
+    conn.close()
+
+
+def test_upsert_todo_update_path_does_not_change_status():
+    """upsert_todo UPDATE는 메타데이터만 수정. status는 그대로 유지."""
+    from db import upsert_todo, update_todo_status, get_todo
+    conn = _setup_db()
+    tid = upsert_todo(conn, {"title": "t", "done_definition": "x"})
+    conn.commit()
+    update_todo_status(conn, tid, "wip")
+    conn.commit()
+    assert get_todo(conn, tid)["status"] == "wip"
+
+    # 메타 수정 + status='backlog' 시도 — UPDATE 경로는 status 무시
+    upsert_todo(conn, {"id": tid, "title": "new title", "status": "backlog"})
+    conn.commit()
+    t = get_todo(conn, tid)
+    assert t["title"] == "new title"
+    assert t["status"] == "wip"  # 상태 전환은 update_todo_status 전용
+    conn.close()
+
+
 def test_update_todo_status_deferred_reason():
     from db import upsert_todo, update_todo_status, get_todo
     conn = _setup_db()
