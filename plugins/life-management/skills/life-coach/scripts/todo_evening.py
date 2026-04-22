@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 sys.path.insert(0, str(REPO_ROOT / "mcp" / "life-dashboard"))
-from db import get_conn, get_tasks, get_daily_checkin, get_todos
+from db import get_conn, get_tasks, get_daily_checkin
 
 WORK_DIGEST_DIR = REPO_ROOT / "plugins" / "dev-tools" / "skills" / "work-digest" / "scripts"
 KST = ZoneInfo("Asia/Seoul")
