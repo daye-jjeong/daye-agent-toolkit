@@ -7,7 +7,7 @@
 모든 구현은 worktree에서. read-only 탐색만 예외.
 - `superpowers:using-git-worktrees` 사용. 브랜치명: `fix/xxx`, `feat/xxx`. Agent `isolation: "worktree"` 금지
 - **편집 전 게이트**: `git branch --show-current`이 master/main이면 수정 거부, worktree부터
-- worktree 생성 후 `npm ci`. 삭제 시 메인 레포로 `cd` 먼저
+- worktree 생성 후 `npm ci` → `code --add <worktree-absolute-path>` (LSP 진단 정상화). 삭제 시 메인 레포로 `cd` 먼저
 - 합리화("작은 수정/빨리 테스트/조사 중 수정") 전부 거부. 규모 무관
 
 ## 파이프라인
