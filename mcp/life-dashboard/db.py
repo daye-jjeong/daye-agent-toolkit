@@ -4,6 +4,7 @@
 import json
 import re
 import sqlite3
+import sys
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -85,6 +86,49 @@ def _migrate(conn: sqlite3.Connection):
             conn.commit()
     except Exception:
         pass
+
+    # todos + daily_checkins 테이블 마이그레이션
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "todos" not in existing:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS todos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                done_definition TEXT,
+                status TEXT NOT NULL DEFAULT 'backlog',
+                priority INTEGER,
+                project_id INTEGER,
+                parent_id INTEGER,
+                category TEXT,
+                quarter TEXT,
+                deadline TEXT,
+                estimated_min INTEGER,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                started_at TEXT,
+                done_at TEXT,
+                deferred_reason TEXT,
+                FOREIGN KEY (project_id) REFERENCES projects(id),
+                FOREIGN KEY (parent_id) REFERENCES todos(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
+            CREATE INDEX IF NOT EXISTS idx_todos_deadline ON todos(deadline);
+            CREATE INDEX IF NOT EXISTS idx_todos_category ON todos(category);
+            CREATE INDEX IF NOT EXISTS idx_todos_parent ON todos(parent_id);
+        """)
+        conn.commit()
+    if "daily_checkins" not in existing:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS daily_checkins (
+                date TEXT PRIMARY KEY,
+                morning_wip_ids TEXT,
+                morning_intent TEXT,
+                evening_reflection TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+        """)
+        conn.commit()
 
 
 @contextmanager
@@ -366,6 +410,295 @@ def get_tasks(conn: sqlite3.Connection, date: str) -> list[dict]:
         ORDER BY t.id
     """, (date,)).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Todos + Daily Checkins ───────────────────────────
+
+_VALID_TODO_STATUS = {"backlog", "wip", "done", "blocked", "deferred"}
+_WIP_LIMIT = 2
+
+
+def upsert_todo(conn: sqlite3.Connection, data: dict) -> int:
+    """todos INSERT or UPDATE (id 있으면 UPDATE). id 반환.
+
+    필수: title. 기본: status='backlog'.
+
+    주의: UPDATE 경로는 메타데이터만 수정 — status는 덮어쓰지 않는다.
+    상태 전환(backlog ↔ wip ↔ done ↔ blocked ↔ deferred)은 반드시
+    `update_todo_status`를 사용해야 WIP limit·Done 정의 의무·timestamp가
+    올바르게 enforce된다. INSERT 시에는 data['status']가 반영된다(기본 backlog).
+    """
+    if not data.get("title"):
+        raise ValueError("title is required")
+
+    status = data.get("status", "backlog")
+    if status not in _VALID_TODO_STATUS:
+        raise ValueError(f"invalid status: {status}")
+
+    if data.get("id"):
+        todo_id = data["id"]
+        conn.execute("""
+            UPDATE todos SET
+                title = :title,
+                done_definition = :done_definition,
+                priority = :priority,
+                project_id = :project_id,
+                parent_id = :parent_id,
+                category = :category,
+                quarter = :quarter,
+                deadline = :deadline,
+                estimated_min = :estimated_min,
+                notes = :notes
+            WHERE id = :id
+        """, {
+            "id": todo_id,
+            "title": data["title"],
+            "done_definition": data.get("done_definition"),
+            "priority": data.get("priority"),
+            "project_id": data.get("project_id"),
+            "parent_id": data.get("parent_id"),
+            "category": data.get("category"),
+            "quarter": data.get("quarter"),
+            "deadline": data.get("deadline"),
+            "estimated_min": data.get("estimated_min"),
+            "notes": data.get("notes"),
+        })
+        return todo_id
+
+    cursor = conn.execute("""
+        INSERT INTO todos (
+            title, done_definition, status, priority, project_id, parent_id,
+            category, quarter, deadline, estimated_min, notes
+        )
+        VALUES (
+            :title, :done_definition, :status, :priority, :project_id, :parent_id,
+            :category, :quarter, :deadline, :estimated_min, :notes
+        )
+    """, {
+        "title": data["title"],
+        "done_definition": data.get("done_definition"),
+        "status": status,
+        "priority": data.get("priority"),
+        "project_id": data.get("project_id"),
+        "parent_id": data.get("parent_id"),
+        "category": data.get("category"),
+        "quarter": data.get("quarter"),
+        "deadline": data.get("deadline"),
+        "estimated_min": data.get("estimated_min"),
+        "notes": data.get("notes"),
+    })
+    return cursor.lastrowid  # type: ignore[return-value]
+
+
+def get_todo(conn: sqlite3.Connection, todo_id: int) -> dict | None:
+    """단일 todo 반환. subtasks(JSON list)도 포함."""
+    row = conn.execute("""
+        SELECT t.*, p.name as project_name
+        FROM todos t
+        LEFT JOIN projects p ON t.project_id = p.id
+        WHERE t.id = ?
+    """, (todo_id,)).fetchone()
+    if not row:
+        return None
+    t = dict(row)
+    subtasks = conn.execute(
+        "SELECT id, title, status, done_at FROM todos WHERE parent_id = ? ORDER BY id",
+        (todo_id,),
+    ).fetchall()
+    t["subtasks"] = [dict(s) for s in subtasks]
+    return t
+
+
+def get_todos(
+    conn: sqlite3.Connection,
+    status: str | None = None,
+    category: str | None = None,
+    sort: str = "default",
+) -> list[dict]:
+    """todos 목록 조회. status/category 필터 지원.
+
+    sort="default": deadline 있는 것 먼저, 임박 순, priority 높은 순, created_at 순.
+    """
+    clauses = []
+    params: list = []
+    if status:
+        clauses.append("t.status = ?")
+        params.append(status)
+    if category:
+        clauses.append("t.category = ?")
+        params.append(category)
+    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+
+    if sort == "default":
+        order = """
+            ORDER BY
+                CASE WHEN t.deadline IS NULL THEN 1 ELSE 0 END,
+                t.deadline ASC,
+                CASE WHEN t.priority IS NULL THEN 99 ELSE t.priority END ASC,
+                t.created_at ASC
+        """
+    elif sort == "priority":
+        order = "ORDER BY CASE WHEN t.priority IS NULL THEN 99 ELSE t.priority END ASC, t.created_at ASC"
+    elif sort == "deadline":
+        order = "ORDER BY CASE WHEN t.deadline IS NULL THEN 1 ELSE 0 END, t.deadline ASC, t.created_at ASC"
+    else:
+        order = "ORDER BY t.id"
+
+    sql = f"""
+        SELECT t.*, p.name as project_name
+        FROM todos t
+        LEFT JOIN projects p ON t.project_id = p.id
+        {where}
+        {order}
+    """
+    rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_todo_status(
+    conn: sqlite3.Connection,
+    todo_id: int,
+    new_status: str,
+    reason: str | None = None,
+    force: bool = False,
+) -> None:
+    """status 전환 + 검증 + timestamp 자동 세팅.
+
+    규칙:
+    - WIP 전환: 이미 wip 2개면 거부 (force=True로 무시 가능, stderr 로그)
+    - WIP 전환: done_definition 없으면 거부
+    - backlog→wip: started_at 세팅
+    - *→done: done_at 세팅
+    - deferred: deferred_reason 저장
+    """
+    if new_status not in _VALID_TODO_STATUS:
+        raise ValueError(f"invalid status: {new_status}")
+
+    row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    if not row:
+        raise ValueError(f"todo {todo_id} not found")
+
+    if new_status == "wip":
+        if not row["done_definition"]:
+            raise ValueError(
+                f"todo {todo_id}: done_definition is required before WIP transition"
+            )
+        current_wip = conn.execute(
+            "SELECT COUNT(*) FROM todos WHERE status = 'wip' AND id != ?",
+            (todo_id,),
+        ).fetchone()[0]
+        if current_wip >= _WIP_LIMIT and not force:
+            raise ValueError(
+                f"WIP limit {_WIP_LIMIT} exceeded (current: {current_wip}). Use force=True to override."
+            )
+        if current_wip >= _WIP_LIMIT and force:
+            print(
+                f"[warn] WIP limit exceeded via force flag (now {current_wip + 1})",
+                file=sys.stderr,
+            )
+
+    fields = ["status = :status"]
+    params: dict = {"id": todo_id, "status": new_status}
+
+    # backlog/blocked → wip 전환: started_at 세팅 (wip/deferred에서 다시 wip로는 started_at 유지)
+    if new_status == "wip" and row["started_at"] is None:
+        fields.append("started_at = datetime('now','localtime')")
+
+    if new_status == "done":
+        fields.append("done_at = datetime('now','localtime')")
+
+    if new_status == "deferred":
+        fields.append("deferred_reason = :reason")
+        params["reason"] = reason
+
+    set_clause = ", ".join(fields)
+    conn.execute(f"UPDATE todos SET {set_clause} WHERE id = :id", params)
+
+
+def get_overdue_todos(conn: sqlite3.Connection, as_of_date: str) -> list[dict]:
+    """deadline이 as_of_date 이전이고 status NOT IN (done, deferred)인 todos."""
+    rows = conn.execute("""
+        SELECT t.*, p.name as project_name
+        FROM todos t
+        LEFT JOIN projects p ON t.project_id = p.id
+        WHERE t.deadline IS NOT NULL
+          AND DATE(t.deadline) < DATE(?)
+          AND t.status NOT IN ('done', 'deferred')
+        ORDER BY t.deadline ASC
+    """, (as_of_date,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_due_this_week_todos(conn: sqlite3.Connection, as_of_date: str) -> list[dict]:
+    """deadline이 as_of_date+1 ~ as_of_date+7인 todos (오늘 제외)."""
+    rows = conn.execute("""
+        SELECT t.*, p.name as project_name
+        FROM todos t
+        LEFT JOIN projects p ON t.project_id = p.id
+        WHERE t.deadline IS NOT NULL
+          AND DATE(t.deadline) > DATE(?)
+          AND DATE(t.deadline) <= DATE(?, '+7 days')
+          AND t.status NOT IN ('done', 'deferred')
+        ORDER BY t.deadline ASC
+    """, (as_of_date, as_of_date)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_daily_checkin(
+    conn: sqlite3.Connection,
+    date: str,
+    *,
+    morning_wip_ids: list[int] | None = None,
+    morning_intent: str | None = None,
+    evening_reflection: str | None = None,
+) -> None:
+    """daily_checkin upsert. 제공된 필드만 UPDATE (COALESCE)."""
+    wip_json = json.dumps(morning_wip_ids) if morning_wip_ids is not None else None
+    conn.execute("""
+        INSERT INTO daily_checkins (date, morning_wip_ids, morning_intent, evening_reflection)
+        VALUES (:date, :wip, :intent, :reflection)
+        ON CONFLICT(date) DO UPDATE SET
+            morning_wip_ids = COALESCE(excluded.morning_wip_ids, morning_wip_ids),
+            morning_intent = COALESCE(excluded.morning_intent, morning_intent),
+            evening_reflection = COALESCE(excluded.evening_reflection, evening_reflection),
+            updated_at = datetime('now','localtime')
+    """, {
+        "date": date,
+        "wip": wip_json,
+        "intent": morning_intent,
+        "reflection": evening_reflection,
+    })
+
+
+def get_daily_checkin(conn: sqlite3.Connection, date: str) -> dict | None:
+    """daily_checkin 조회. morning_wip_ids 무결성 검증 (missing_wip_ids 분리)."""
+    row = conn.execute(
+        "SELECT * FROM daily_checkins WHERE date = ?", (date,)
+    ).fetchone()
+    if not row:
+        return None
+    ck = dict(row)
+
+    wip_raw = ck.get("morning_wip_ids")
+    wip_ids = json.loads(wip_raw) if wip_raw else []
+    missing: list[int] = []
+    valid: list[int] = []
+    if wip_ids:
+        placeholders = ",".join("?" * len(wip_ids))
+        existing = {
+            r[0]
+            for r in conn.execute(
+                f"SELECT id FROM todos WHERE id IN ({placeholders})", wip_ids
+            ).fetchall()
+        }
+        for tid in wip_ids:
+            if tid in existing:
+                valid.append(tid)
+            else:
+                missing.append(tid)
+    ck["morning_wip_ids"] = valid
+    ck["missing_wip_ids"] = missing
+    return ck
 
 
 def get_coach_state(conn: sqlite3.Connection) -> dict:
