@@ -109,6 +109,14 @@ docs/plans/       — 디자인 문서 + 구현 plan
 - bash 또는 python3
 - 개별 스킬은 자체 `scripts/`를 SKILL.md에서 참조
 
+## 스킬 자동 개선
+
+대화 중 스킬에 개선할 만한 부분이 보이면 사용자에게 한 번 물어보고, 동의하면 알아서 업데이트한다. 작은 개선(SKILL.md 섹션 추가, 규칙 한 줄 추가 등)은 별도 todo로 쌓지 말고 즉시 처리.
+
+- 코드 변경은 worktree에서
+- feedback memory와 SKILL.md 둘 다 반영 — memory는 즉시 효과, SKILL.md는 타 세션/에이전트까지 적용
+- 머지 후 보고
+
 ## 방침
 
 - cube-claude-skills는 건드리지 않음
