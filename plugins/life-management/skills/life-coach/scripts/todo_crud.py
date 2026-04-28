@@ -26,6 +26,16 @@ def _print_json(obj) -> None:
     sys.stdout.write("\n")
 
 
+def _positive_int(s: str) -> int:
+    try:
+        n = int(s)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be a positive integer (got {s!r})")
+    if n <= 0:
+        raise argparse.ArgumentTypeError(f"must be > 0 (got {n})")
+    return n
+
+
 def cmd_add(args):
     if args.estimated_min is None and not args.skip_estimated:
         print("error: --estimated-min N or --skip-estimated required", file=sys.stderr)
@@ -91,9 +101,13 @@ _EDIT_FIELDS = (
 
 
 def cmd_edit(args):
-    """선택 필드만 update. None 인자는 보존. project는 name → id 변환."""
+    """선택 필드만 update. None 인자는 보존. project는 name → id 변환.
+    --clear-estimated: estimated_min을 NULL로 되돌림 (--estimated-min과 상호 배타)."""
+    if args.estimated_min is not None and args.clear_estimated:
+        print("error: --estimated-min and --clear-estimated are mutually exclusive", file=sys.stderr)
+        sys.exit(1)
     overrides = {f: getattr(args, f) for f in _EDIT_FIELDS if getattr(args, f) is not None}
-    if not overrides and args.project is None:
+    if not overrides and args.project is None and not args.clear_estimated:
         print("error: at least one field required (no-op forbidden)", file=sys.stderr)
         sys.exit(1)
     conn = get_conn()
@@ -107,6 +121,8 @@ def cmd_edit(args):
             "category", "quarter", "deadline", "estimated_min", "notes",
         )}
         merged.update(overrides)
+        if args.clear_estimated:
+            merged["estimated_min"] = None
         if args.project is not None:
             merged["project_id"] = upsert_project(conn, args.project, repo=args.repo)
         upsert_todo(conn, merged)
@@ -121,15 +137,17 @@ def cmd_edit(args):
 
 
 def cmd_move(args):
+    if args.status == "deferred" and not args.reason:
+        print("error: --reason required when --status deferred (use defer command for shorthand)", file=sys.stderr)
+        sys.exit(1)
     conn = get_conn()
     try:
         if args.status == "wip" and not args.skip_estimated_check:
-            row = conn.execute(
-                "SELECT estimated_min FROM todos WHERE id = ?", (args.id,)
-            ).fetchone()
-            if row and row["estimated_min"] is None:
+            t = get_todo(conn, args.id)
+            est = t["estimated_min"] if t else None
+            if t and (est is None or est <= 0):
                 print(
-                    f"error: todo {args.id} estimated_min is NULL. "
+                    f"error: todo {args.id} estimated_min is missing or non-positive. "
                     f"Pass --estimated-min via 'edit' first, or --skip-estimated-check to override",
                     file=sys.stderr,
                 )
@@ -167,10 +185,13 @@ def cmd_done(args):
         t = get_todo(conn, args.id)
         if t and t.get("subtasks"):
             unfinished = [s for s in t["subtasks"] if s["status"] != "done"]
-            if unfinished and not args.force:
-                titles = ", ".join(s["title"] for s in unfinished)
-                print(f"Warning: unfinished subtasks remain: {titles}. Use --force to override.", file=sys.stderr)
-                sys.exit(1)
+            if unfinished:
+                titles = ", ".join(f"#{s['id']} '{s['title']}'" for s in unfinished)
+                if not args.force:
+                    print(f"error: unfinished subtasks remain: {titles}. Use --force to override.", file=sys.stderr)
+                    sys.exit(1)
+                # --force: 부모만 done, 자식은 그대로 → stderr 경고 (silent 차단)
+                print(f"[warn] parent done --force leaves unfinished subtasks: {titles}", file=sys.stderr)
         update_todo_status(conn, args.id, "done")
         conn.commit()
         _print_json({"id": args.id, "status": "done"})
@@ -196,7 +217,8 @@ def main():
     p_add.add_argument("--parent-id", dest="parent_id", type=int)
     p_add.add_argument("--quarter")
     p_add.add_argument("--deadline", help="ISO: YYYY-MM-DD or YYYY-MM-DDTHH:MM")
-    p_add.add_argument("--estimated-min", dest="estimated_min", type=int)
+    p_add.add_argument("--estimated-min", dest="estimated_min", type=_positive_int,
+                       help="Positive int (분). NULL로 두려면 --skip-estimated")
     p_add.add_argument("--skip-estimated", dest="skip_estimated", action="store_true",
                        help="Explicitly skip estimated_min (stored as NULL)")
     p_add.add_argument("--notes")
@@ -230,7 +252,9 @@ def main():
     p_edit.add_argument("--repo")
     p_edit.add_argument("--quarter")
     p_edit.add_argument("--deadline", help="ISO: YYYY-MM-DD or YYYY-MM-DDTHH:MM")
-    p_edit.add_argument("--estimated-min", dest="estimated_min", type=int)
+    p_edit.add_argument("--estimated-min", dest="estimated_min", type=_positive_int)
+    p_edit.add_argument("--clear-estimated", dest="clear_estimated", action="store_true",
+                        help="Set estimated_min back to NULL")
     p_edit.add_argument("--notes")
 
     p_defer = sub.add_parser("defer", help="Defer with reason")
