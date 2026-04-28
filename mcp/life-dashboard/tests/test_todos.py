@@ -437,3 +437,101 @@ def test_todo_schedules_partial_unique_allows_null_time_duplicates():
         assert rows[0] == 2
     finally:
         conn.close()
+
+
+def test_todo_schedule_actuals_table_exists():
+    conn = _setup_db()
+    try:
+        rows = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='todo_schedule_actuals'"
+        ).fetchall()
+        assert len(rows) == 1
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(todo_schedule_actuals)").fetchall()}
+        for c in ["id","schedule_id","source_task_id","source_date","source_repo","source_summary","duration_min_snapshot","confirmed_at"]:
+            assert c in cols, f"missing col: {c}"
+    finally:
+        conn.close()
+
+
+def test_actuals_unique_4_tuple():
+    """같은 (schedule_id, source_date, source_summary, source_repo) 중복 매핑 차단"""
+    from db import upsert_todo
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        cur = conn.execute(
+            "INSERT INTO todo_schedules (todo_id, date, planned_min) VALUES (?, ?, ?)",
+            (tid, "2026-04-28", 60),
+        )
+        sid = cur.lastrowid
+        conn.execute(
+            "INSERT INTO todo_schedule_actuals (schedule_id, source_date, source_summary, source_repo, duration_min_snapshot) VALUES (?, ?, ?, ?, ?)",
+            (sid, "2026-04-28", "summary A", "repo X", 30),
+        )
+        conn.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO todo_schedule_actuals (schedule_id, source_date, source_summary, source_repo, duration_min_snapshot) VALUES (?, ?, ?, ?, ?)",
+                (sid, "2026-04-28", "summary A", "repo X", 30),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def test_actuals_no_tasks_fk_survives_task_delete():
+    """work-digest의 tasks 테이블 row 삭제가 actual mapping을 파괴하지 않음 (Codex v4 BLOCK 회귀)"""
+    from db import upsert_todo
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        conn.execute(
+            "INSERT INTO tasks (date, tag, summary, repo, duration_min) VALUES (?, ?, ?, ?, ?)",
+            ("2026-04-28", "구현", "task A", "repo X", 60),
+        )
+        task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        cur = conn.execute(
+            "INSERT INTO todo_schedules (todo_id, date, planned_min) VALUES (?, ?, ?)",
+            (tid, "2026-04-28", 60),
+        )
+        sid = cur.lastrowid
+        conn.execute(
+            "INSERT INTO todo_schedule_actuals (schedule_id, source_task_id, source_date, source_summary, source_repo, duration_min_snapshot) VALUES (?, ?, ?, ?, ?, ?)",
+            (sid, task_id, "2026-04-28", "task A", "repo X", 60),
+        )
+        conn.commit()
+
+        # work-digest가 하루치 task 전체 교체 시뮬레이션
+        conn.execute("DELETE FROM tasks WHERE date = ?", ("2026-04-28",))
+        conn.commit()
+
+        rows = conn.execute(
+            "SELECT * FROM todo_schedule_actuals WHERE schedule_id = ?", (sid,)
+        ).fetchall()
+        assert len(rows) == 1, "tasks 삭제 후에도 actual은 보존되어야 함"
+    finally:
+        conn.close()
+
+
+def test_actuals_schedule_delete_cascade():
+    """schedule 삭제 시 actual은 CASCADE 삭제"""
+    from db import upsert_todo
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        cur = conn.execute(
+            "INSERT INTO todo_schedules (todo_id, date, planned_min) VALUES (?, ?, ?)",
+            (tid, "2026-04-28", 60),
+        )
+        sid = cur.lastrowid
+        conn.execute(
+            "INSERT INTO todo_schedule_actuals (schedule_id, source_date, source_summary, source_repo, duration_min_snapshot) VALUES (?, ?, ?, ?, ?)",
+            (sid, "2026-04-28", "task A", "repo X", 60),
+        )
+        conn.commit()
+        conn.execute("DELETE FROM todo_schedules WHERE id = ?", (sid,))
+        conn.commit()
+        rows = conn.execute("SELECT * FROM todo_schedule_actuals WHERE schedule_id = ?", (sid,)).fetchall()
+        assert len(rows) == 0
+    finally:
+        conn.close()

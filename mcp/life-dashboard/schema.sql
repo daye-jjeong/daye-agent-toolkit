@@ -199,6 +199,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_time_slot
   ON todo_schedules(todo_id, date, start_at, end_at)
   WHERE start_at IS NOT NULL;
 
+-- ── Todo Schedule Actuals (스케줄 ↔ 실제 작업 브리지, immutable snapshot) ──
+
+CREATE TABLE IF NOT EXISTS todo_schedule_actuals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schedule_id INTEGER NOT NULL,
+    source_task_id INTEGER,
+    source_date TEXT NOT NULL,
+    source_repo TEXT,
+    source_summary TEXT NOT NULL,
+    duration_min_snapshot INTEGER NOT NULL,
+    confirmed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (schedule_id) REFERENCES todo_schedules(id) ON DELETE CASCADE,
+    CHECK (duration_min_snapshot > 0),
+    UNIQUE (schedule_id, source_date, source_summary, source_repo)
+);
+CREATE INDEX IF NOT EXISTS idx_schedule_actuals_schedule ON todo_schedule_actuals(schedule_id);
+
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
