@@ -1179,3 +1179,48 @@ def query_expiring_pantry(conn: sqlite3.Connection, days_ahead: int = 3) -> dict
         ORDER BY expiry_date
     """, (today_str, threshold)).fetchall()]
     return {"expiring": expiring, "expired": expired}
+
+
+def upsert_schedule(
+    conn: sqlite3.Connection,
+    *,
+    todo_id: int,
+    date: str,
+    planned_min: int,
+    start_at: str | None = None,
+    end_at: str | None = None,
+    notes: str | None = None,
+) -> int:
+    """todo_schedule INSERT. partial UNIQUE 위반 시 sqlite3.IntegrityError.
+    planned_min은 항상 NOT NULL — wrapper가 시간 슬롯이면 end-start로 자동 계산해 넘김.
+    Returns: 생성된 schedule.id
+    """
+    cur = conn.execute(
+        """
+        INSERT INTO todo_schedules (todo_id, date, start_at, end_at, planned_min, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (todo_id, date, start_at, end_at, planned_min, notes),
+    )
+    return cur.lastrowid
+
+
+def get_schedule(conn: sqlite3.Connection, schedule_id: int) -> dict | None:
+    """schedule_id로 단일 row 조회. 없으면 None."""
+    row = conn.execute(
+        "SELECT * FROM todo_schedules WHERE id = ?", (schedule_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_schedules_by_date(conn: sqlite3.Connection, date: str) -> list[dict]:
+    """해당 date의 모든 schedule. 시간 슬롯 우선 정렬, 미지정은 NULLS LAST."""
+    rows = conn.execute(
+        """
+        SELECT * FROM todo_schedules
+        WHERE date = ?
+        ORDER BY start_at IS NULL, start_at, id
+        """,
+        (date,),
+    ).fetchall()
+    return [dict(r) for r in rows]

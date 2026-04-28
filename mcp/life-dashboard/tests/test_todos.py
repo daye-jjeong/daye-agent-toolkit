@@ -7,6 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from db import upsert_schedule, get_schedule, get_schedules_by_date
+
 
 def _setup_db():
     """인메모리 DB에 스키마 로드."""
@@ -666,5 +668,89 @@ def test_upsert_daily_checkin_skipped_with_value_stored_as_is():
         ck = get_daily_checkin(conn, "2026-04-28")
         assert ck["available_min"] == 300
         assert ck["available_status"] == "skipped"
+    finally:
+        conn.close()
+
+
+def test_upsert_schedule_minutes_only():
+    """시간 미지정 — date + planned_min만으로 schedule 생성."""
+    conn = _setup_db()
+    try:
+        from db import upsert_todo
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=120)
+        sch = get_schedule(conn, sid)
+        assert sch["planned_min"] == 120
+        assert sch["start_at"] is None
+        assert sch["end_at"] is None
+    finally:
+        conn.close()
+
+
+def test_upsert_schedule_time_slot():
+    """시간 슬롯 명시. db 함수는 planned_min을 그대로 저장 (계산은 wrapper 책임)."""
+    conn = _setup_db()
+    try:
+        from db import upsert_todo
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(
+            conn, todo_id=tid, date="2026-04-28",
+            start_at="14:00", end_at="16:00", planned_min=120,
+        )
+        sch = get_schedule(conn, sid)
+        assert sch["start_at"] == "14:00"
+        assert sch["end_at"] == "16:00"
+        assert sch["planned_min"] == 120
+    finally:
+        conn.close()
+
+
+def test_upsert_schedule_partial_unique_violation():
+    """동일 (todo_id, date, start_at, end_at) 시간 슬롯 중복 시 IntegrityError."""
+    conn = _setup_db()
+    try:
+        from db import upsert_todo
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        upsert_schedule(
+            conn, todo_id=tid, date="2026-04-28",
+            start_at="14:00", end_at="16:00", planned_min=120,
+        )
+        conn.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            upsert_schedule(
+                conn, todo_id=tid, date="2026-04-28",
+                start_at="14:00", end_at="16:00", planned_min=120,
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def test_get_schedules_by_date_orders_null_last():
+    """get_schedules_by_date: 시간 슬롯 우선, 미지정은 NULLS LAST."""
+    conn = _setup_db()
+    try:
+        from db import upsert_todo
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid_null = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=60)
+        sid_pm = upsert_schedule(
+            conn, todo_id=tid, date="2026-04-28",
+            start_at="14:00", end_at="16:00", planned_min=120,
+        )
+        sid_am = upsert_schedule(
+            conn, todo_id=tid, date="2026-04-28",
+            start_at="09:00", end_at="10:00", planned_min=60,
+        )
+        rows = get_schedules_by_date(conn, "2026-04-28")
+        assert [r["id"] for r in rows] == [sid_am, sid_pm, sid_null]
+    finally:
+        conn.close()
+
+
+def test_get_schedule_returns_none_for_missing():
+    """존재하지 않는 id는 None 반환 (raise 안 함)."""
+    conn = _setup_db()
+    try:
+        assert get_schedule(conn, 99999) is None
     finally:
         conn.close()
