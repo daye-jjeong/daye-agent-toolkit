@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from db import upsert_schedule, get_schedule, get_schedules_by_date
+from db import upsert_schedule, get_schedule, get_schedules_by_date, delete_schedule
 
 
 def _setup_db():
@@ -752,5 +752,56 @@ def test_get_schedule_returns_none_for_missing():
     conn = _setup_db()
     try:
         assert get_schedule(conn, 99999) is None
+    finally:
+        conn.close()
+
+
+def test_upsert_schedule_allows_multiple_null_time_same_day():
+    """함수 레이어에서 partial UNIQUE NULL 허용 행동 명시 — 시간 미지정 슬롯 여러 개 OK."""
+    conn = _setup_db()
+    try:
+        from db import upsert_todo
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid1 = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=60)
+        sid2 = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=90)
+        conn.commit()
+        assert sid1 != sid2
+        rows = get_schedules_by_date(conn, "2026-04-28")
+        assert len(rows) == 2
+    finally:
+        conn.close()
+
+
+def test_delete_schedule_removes_row_and_cascades():
+    """delete_schedule은 row 삭제 + actual은 CASCADE."""
+    conn = _setup_db()
+    try:
+        from db import upsert_todo
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=60)
+        conn.execute(
+            "INSERT INTO todo_schedule_actuals (schedule_id, source_date, source_summary, source_repo, duration_min_snapshot) VALUES (?, ?, ?, ?, ?)",
+            (sid, "2026-04-28", "task A", "repo X", 30),
+        )
+        conn.commit()
+        deleted = delete_schedule(conn, sid)
+        conn.commit()
+        assert deleted is True
+        assert get_schedule(conn, sid) is None
+        rows = conn.execute(
+            "SELECT * FROM todo_schedule_actuals WHERE schedule_id = ?", (sid,)
+        ).fetchall()
+        assert len(rows) == 0
+
+
+    finally:
+        conn.close()
+
+
+def test_delete_schedule_missing_returns_false():
+    """존재하지 않는 id 삭제 시 False 반환."""
+    conn = _setup_db()
+    try:
+        assert delete_schedule(conn, 99999) is False
     finally:
         conn.close()

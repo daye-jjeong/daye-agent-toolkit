@@ -1191,8 +1191,13 @@ def upsert_schedule(
     end_at: str | None = None,
     notes: str | None = None,
 ) -> int:
-    """todo_schedule INSERT. partial UNIQUE 위반 시 sqlite3.IntegrityError.
+    """todo_schedule INSERT (이름은 upsert지만 실제는 INSERT-only).
+
+    동일 (todo_id, date, start_at, end_at) 시간 슬롯 중복 시 sqlite3.IntegrityError.
+    수정이 필요하면 wrapper에서 delete_schedule(sid) 후 다시 upsert_schedule 호출.
+
     planned_min은 항상 NOT NULL — wrapper가 시간 슬롯이면 end-start로 자동 계산해 넘김.
+
     Returns: 생성된 schedule.id
     """
     cur = conn.execute(
@@ -1203,6 +1208,14 @@ def upsert_schedule(
         (todo_id, date, start_at, end_at, planned_min, notes),
     )
     return cur.lastrowid
+
+
+def delete_schedule(conn: sqlite3.Connection, schedule_id: int) -> bool:
+    """schedule 삭제. CASCADE로 todo_schedule_actuals도 같이 삭제.
+    Returns: True (삭제됨), False (없음)
+    """
+    cur = conn.execute("DELETE FROM todo_schedules WHERE id = ?", (schedule_id,))
+    return cur.rowcount > 0
 
 
 def get_schedule(conn: sqlite3.Connection, schedule_id: int) -> dict | None:
