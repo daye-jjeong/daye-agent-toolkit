@@ -2,6 +2,7 @@
 """life-dashboard DB module — SQLite access layer."""
 
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -13,22 +14,29 @@ DB_DIR = Path.home() / "life-dashboard"
 DB_PATH = DB_DIR / "data.db"
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
-_schema_initialized = False
+_schema_initialized: set[str] = set()
 _HHMM_RE = re.compile(r"^\d{2}:\d{2}$")
 
 
 def get_conn() -> sqlite3.Connection:
     global _schema_initialized
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+    _override = os.environ.get("LIFE_DASHBOARD_DB")
+    if _override:
+        db_path = Path(_override)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        DB_DIR.mkdir(parents=True, exist_ok=True)
+        db_path = DB_PATH
+    conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
-    if not _schema_initialized:
+    db_path_str = str(db_path)
+    if db_path_str not in _schema_initialized:
         conn.executescript(SCHEMA_PATH.read_text())
         _migrate(conn)
-        _schema_initialized = True
+        _schema_initialized.add(db_path_str)
     return conn
 
 
@@ -124,11 +132,18 @@ def _migrate(conn: sqlite3.Connection):
                 morning_wip_ids TEXT,
                 morning_intent TEXT,
                 evening_reflection TEXT,
+                available_min INTEGER CHECK (available_min IS NULL OR available_min >= 0),
+                energy TEXT CHECK (energy IS NULL OR energy IN ('low','mid','high')),
+                blockers TEXT,
+                available_status TEXT NOT NULL DEFAULT 'unknown' CHECK (available_status IN ('answered','skipped','unknown')),
+                energy_status TEXT NOT NULL DEFAULT 'unknown' CHECK (energy_status IN ('answered','skipped','unknown')),
+                blockers_status TEXT NOT NULL DEFAULT 'unknown' CHECK (blockers_status IN ('answered','skipped','unknown')),
                 created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
             );
         """)
         conn.commit()
+
 
 
 @contextmanager
@@ -651,22 +666,50 @@ def upsert_daily_checkin(
     morning_wip_ids: list[int] | None = None,
     morning_intent: str | None = None,
     evening_reflection: str | None = None,
+    available_min: int | None = None,
+    available_status: str | None = None,
+    energy: str | None = None,
+    energy_status: str | None = None,
+    blockers: str | None = None,
+    blockers_status: str | None = None,
 ) -> None:
-    """daily_checkin upsert. 제공된 필드만 UPDATE (COALESCE)."""
+    """daily_checkin upsert. None 인자는 기존 값 보존.
+
+    필드별 동작:
+    - 일반 필드 (morning_intent, available_min, energy, blockers 등):
+      None → 기존 값 유지 (COALESCE on excluded). 빈 문자열은 덮어씀.
+    - status 필드 (available_status, energy_status, blockers_status):
+      None → 기존 값 유지 (CASE WHEN on parameter).
+      'answered'/'skipped'/'unknown' 중 하나 명시 → 그 값으로 덮어씀.
+    - 'skipped' 시 value를 NULL로 정리하는 책임은 wrapper 단(db.py는 그대로 저장).
+    """
     wip_json = json.dumps(morning_wip_ids) if morning_wip_ids is not None else None
     conn.execute("""
-        INSERT INTO daily_checkins (date, morning_wip_ids, morning_intent, evening_reflection)
-        VALUES (:date, :wip, :intent, :reflection)
+        INSERT INTO daily_checkins (
+            date, morning_wip_ids, morning_intent, evening_reflection,
+            available_min, available_status, energy, energy_status, blockers, blockers_status
+        )
+        VALUES (
+            :date, :wip, :intent, :reflection,
+            :amin, COALESCE(:astatus,'unknown'), :energy, COALESCE(:estatus,'unknown'),
+            :blockers, COALESCE(:bstatus,'unknown')
+        )
         ON CONFLICT(date) DO UPDATE SET
             morning_wip_ids = COALESCE(excluded.morning_wip_ids, morning_wip_ids),
             morning_intent = COALESCE(excluded.morning_intent, morning_intent),
             evening_reflection = COALESCE(excluded.evening_reflection, evening_reflection),
+            available_min = COALESCE(excluded.available_min, available_min),
+            available_status = CASE WHEN :astatus IS NOT NULL THEN excluded.available_status ELSE available_status END,
+            energy = COALESCE(excluded.energy, energy),
+            energy_status = CASE WHEN :estatus IS NOT NULL THEN excluded.energy_status ELSE energy_status END,
+            blockers = COALESCE(excluded.blockers, blockers),
+            blockers_status = CASE WHEN :bstatus IS NOT NULL THEN excluded.blockers_status ELSE blockers_status END,
             updated_at = datetime('now','localtime')
     """, {
-        "date": date,
-        "wip": wip_json,
-        "intent": morning_intent,
-        "reflection": evening_reflection,
+        "date": date, "wip": wip_json, "intent": morning_intent, "reflection": evening_reflection,
+        "amin": available_min, "astatus": available_status,
+        "energy": energy, "estatus": energy_status,
+        "blockers": blockers, "bstatus": blockers_status,
     })
 
 
@@ -699,6 +742,23 @@ def get_daily_checkin(conn: sqlite3.Connection, date: str) -> dict | None:
     ck["morning_wip_ids"] = valid
     ck["missing_wip_ids"] = missing
     return ck
+
+
+def get_daily_checkins(
+    conn: sqlite3.Connection, start_date: str, end_date: str,
+) -> list[dict]:
+    """[start_date, end_date) 반-개구간 범위 daily_checkin row list. 날짜 ASC.
+    end_date 당일 row는 포함 안 됨.
+    """
+    rows = conn.execute(
+        """
+        SELECT * FROM daily_checkins
+        WHERE date >= ? AND date < ?
+        ORDER BY date ASC
+        """,
+        (start_date, end_date),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_coach_state(conn: sqlite3.Connection) -> dict:
@@ -1144,3 +1204,191 @@ def query_expiring_pantry(conn: sqlite3.Connection, days_ahead: int = 3) -> dict
         ORDER BY expiry_date
     """, (today_str, threshold)).fetchall()]
     return {"expiring": expiring, "expired": expired}
+
+
+def upsert_schedule(
+    conn: sqlite3.Connection,
+    *,
+    todo_id: int,
+    date: str,
+    planned_min: int,
+    start_at: str | None = None,
+    end_at: str | None = None,
+    notes: str | None = None,
+) -> int:
+    """todo_schedule INSERT (이름은 upsert지만 실제는 INSERT-only).
+
+    동일 (todo_id, date, start_at, end_at) 시간 슬롯 중복 시 sqlite3.IntegrityError.
+    수정이 필요하면 wrapper에서 delete_schedule(sid) 후 다시 upsert_schedule 호출.
+
+    planned_min은 항상 NOT NULL — wrapper가 시간 슬롯이면 end-start로 자동 계산해 넘김.
+
+    Returns: 생성된 schedule.id
+    """
+    cur = conn.execute(
+        """
+        INSERT INTO todo_schedules (todo_id, date, start_at, end_at, planned_min, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (todo_id, date, start_at, end_at, planned_min, notes),
+    )
+    return cur.lastrowid
+
+
+def delete_schedule(conn: sqlite3.Connection, schedule_id: int) -> bool:
+    """schedule 삭제. CASCADE로 todo_schedule_actuals도 같이 삭제.
+    Returns: True (삭제됨), False (없음)
+    """
+    cur = conn.execute("DELETE FROM todo_schedules WHERE id = ?", (schedule_id,))
+    return cur.rowcount > 0
+
+
+def get_schedule(conn: sqlite3.Connection, schedule_id: int) -> dict | None:
+    """schedule_id로 단일 row 조회. 없으면 None."""
+    row = conn.execute(
+        "SELECT * FROM todo_schedules WHERE id = ?", (schedule_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_schedules_by_date(conn: sqlite3.Connection, date: str) -> list[dict]:
+    """해당 date의 모든 schedule. 시간 슬롯 우선 정렬, 미지정은 NULLS LAST."""
+    rows = conn.execute(
+        """
+        SELECT * FROM todo_schedules
+        WHERE date = ?
+        ORDER BY start_at IS NULL, start_at, id
+        """,
+        (date,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def link_schedule_actual(
+    conn: sqlite3.Connection,
+    *,
+    schedule_id: int,
+    task_id: int,
+) -> int:
+    """task에서 date/duration/summary/repo 자동 조회 → todo_schedule_actuals snapshot 저장.
+
+    - schedule_id 또는 task_id 없음 → ValueError
+    - schedule.date != task.date → ValueError("date mismatch: ...")
+    - UNIQUE (schedule_id, source_date, source_summary, source_repo) 위반 → sqlite3.IntegrityError
+
+    Returns: 생성된 todo_schedule_actuals.id
+    """
+    sch = conn.execute(
+        "SELECT date FROM todo_schedules WHERE id = ?", (schedule_id,),
+    ).fetchone()
+    if not sch:
+        raise ValueError(f"schedule_id {schedule_id} not found")
+    task = conn.execute(
+        "SELECT date, summary, repo, duration_min FROM tasks WHERE id = ?", (task_id,),
+    ).fetchone()
+    if not task:
+        raise ValueError(f"task_id {task_id} not found")
+    if task["date"] != sch["date"]:
+        raise ValueError(
+            f"date mismatch: schedule.date={sch['date']} vs task.date={task['date']}"
+        )
+    cur = conn.execute(
+        """
+        INSERT INTO todo_schedule_actuals
+            (schedule_id, source_task_id, source_date, source_repo, source_summary, duration_min_snapshot)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (schedule_id, task_id, task["date"], task["repo"], task["summary"], task["duration_min"]),
+    )
+    return cur.lastrowid
+
+
+# ---------------------------------------------------------------------------
+# Capacity reconciliation helpers
+# ---------------------------------------------------------------------------
+
+def _hhmm_to_min(s: str) -> int:
+    """'HH:MM' 문자열을 분 단위 정수로 변환."""
+    h, m = s.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _time_overlap_min(a_start: str, a_end: str, b_start: str, b_end: str) -> int:
+    """[a_start, a_end), [b_start, b_end) 두 구간의 겹치는 분 (음수면 0)."""
+    a0, a1 = _hhmm_to_min(a_start), _hhmm_to_min(a_end)
+    b0, b1 = _hhmm_to_min(b_start), _hhmm_to_min(b_end)
+    return max(0, min(a1, b1) - max(a0, b0))
+
+
+def get_capacity_status(conn: sqlite3.Connection, date: str) -> dict:
+    """Reconcile capacity for a date. 4-way 진단 dict 반환.
+
+    필드:
+    - available_min, available_status (daily_checkin)
+    - planned_min_total: schedule 합
+    - actual_min_total: actual 합 (JOIN)
+    - planned_overbook: planned > budget
+    - actual_overrun: actual > budget
+    - time_conflicts: [{a_id, b_id, overlap_min}, ...]
+    - missing_budget: schedule 있지만 budget 모름 (available_min IS NULL)
+    - remaining_min: budget - planned (None if no budget)
+    - schedules: 그 날 schedule list
+    """
+    ck = conn.execute(
+        "SELECT available_min, available_status FROM daily_checkins WHERE date = ?",
+        (date,),
+    ).fetchone()
+    available_min = ck["available_min"] if ck else None
+    available_status = ck["available_status"] if ck else "unknown"
+
+    schedules = [dict(r) for r in conn.execute(
+        """
+        SELECT * FROM todo_schedules
+        WHERE date = ?
+        ORDER BY start_at IS NULL, start_at, id
+        """,
+        (date,),
+    ).fetchall()]
+
+    planned_total = sum(s["planned_min"] for s in schedules)
+
+    actual_row = conn.execute(
+        """
+        SELECT COALESCE(SUM(a.duration_min_snapshot), 0)
+        FROM todo_schedule_actuals a
+        JOIN todo_schedules s ON s.id = a.schedule_id
+        WHERE s.date = ?
+        """,
+        (date,),
+    ).fetchone()
+    actual_total = actual_row[0] if actual_row else 0
+
+    timed = [s for s in schedules if s["start_at"] and s["end_at"]]
+    conflicts = []
+    for i, a in enumerate(timed):
+        for b in timed[i + 1:]:
+            ov = _time_overlap_min(a["start_at"], a["end_at"], b["start_at"], b["end_at"])
+            if ov > 0:
+                conflicts.append({"a_id": a["id"], "b_id": b["id"], "overlap_min": ov})
+
+    planned_overbook = available_min is not None and planned_total > available_min
+    actual_overrun = available_min is not None and actual_total > available_min
+    missing_budget = (
+        available_min is None
+        and available_status == "unknown"
+        and len(schedules) > 0
+    )
+    remaining = (available_min - planned_total) if available_min is not None else None
+
+    return {
+        "available_min": available_min,
+        "available_status": available_status,
+        "planned_min_total": planned_total,
+        "actual_min_total": actual_total,
+        "planned_overbook": planned_overbook,
+        "actual_overrun": actual_overrun,
+        "time_conflicts": conflicts,
+        "missing_budget": missing_budget,
+        "remaining_min": remaining,
+        "schedules": schedules,
+    }

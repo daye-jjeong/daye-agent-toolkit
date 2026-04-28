@@ -162,9 +162,59 @@ CREATE TABLE IF NOT EXISTS daily_checkins (
     morning_wip_ids TEXT,
     morning_intent TEXT,
     evening_reflection TEXT,
+    available_min INTEGER CHECK (available_min IS NULL OR available_min >= 0),
+    energy TEXT CHECK (energy IS NULL OR energy IN ('low','mid','high')),
+    blockers TEXT,
+    available_status TEXT NOT NULL DEFAULT 'unknown' CHECK (available_status IN ('answered','skipped','unknown')),
+    energy_status TEXT NOT NULL DEFAULT 'unknown' CHECK (energy_status IN ('answered','skipped','unknown')),
+    blockers_status TEXT NOT NULL DEFAULT 'unknown' CHECK (blockers_status IN ('answered','skipped','unknown')),
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
+
+-- ── Todo Schedules (캐파 계획 — 할일 날짜별 시간 배정) ──
+
+CREATE TABLE IF NOT EXISTS todo_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    todo_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    start_at TEXT,
+    end_at TEXT,
+    planned_min INTEGER NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    CHECK (
+      (start_at IS NULL AND end_at IS NULL) OR
+      (start_at IS NOT NULL AND end_at IS NOT NULL)
+    ),
+    CHECK (start_at IS NULL OR end_at > start_at),
+    CHECK (start_at IS NULL OR start_at GLOB '[0-2][0-9]:[0-5][0-9]'),
+    CHECK (end_at IS NULL OR end_at GLOB '[0-2][0-9]:[0-5][0-9]'),
+    CHECK (planned_min > 0),
+    FOREIGN KEY(todo_id) REFERENCES todos(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_todo_schedules_date ON todo_schedules(date);
+CREATE INDEX IF NOT EXISTS idx_todo_schedules_todo ON todo_schedules(todo_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_time_slot
+  ON todo_schedules(todo_id, date, start_at, end_at)
+  WHERE start_at IS NOT NULL;
+
+-- ── Todo Schedule Actuals (스케줄 ↔ 실제 작업 브리지, immutable snapshot) ──
+
+CREATE TABLE IF NOT EXISTS todo_schedule_actuals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schedule_id INTEGER NOT NULL,
+    source_task_id INTEGER,
+    source_date TEXT NOT NULL,
+    source_repo TEXT,
+    source_summary TEXT NOT NULL,
+    duration_min_snapshot INTEGER NOT NULL,
+    confirmed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    FOREIGN KEY (schedule_id) REFERENCES todo_schedules(id) ON DELETE CASCADE,
+    CHECK (duration_min_snapshot > 0),
+    UNIQUE (schedule_id, source_date, source_summary, source_repo)
+);
+CREATE INDEX IF NOT EXISTS idx_schedule_actuals_schedule ON todo_schedule_actuals(schedule_id);
 
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
