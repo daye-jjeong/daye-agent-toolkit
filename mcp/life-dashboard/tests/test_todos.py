@@ -1077,3 +1077,74 @@ def test_capacity_status_unknown_with_schedule_flags_missing_budget():
         assert st["available_status"] == "unknown"
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Task 9: checkin_save.py wrapper tests
+# ---------------------------------------------------------------------------
+
+def test_checkin_save_morning_requires_value_or_skip(tmp_path):
+    """morning subcommand: --available-hours 또는 --skip-available 둘 중 하나 필수."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/checkin_save.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run(
+        ["python3", str(script), "morning", "--date", "2026-04-28"],
+        capture_output=True, text=True, env=env,
+    )
+    assert r.returncode != 0
+    assert "available" in r.stderr.lower()
+
+
+def test_checkin_save_morning_with_value_and_skips(tmp_path):
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/checkin_save.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "morning", "--date", "2026-04-28",
+        "--available-hours", "5", "--skip-energy", "--skip-blockers",
+        "--morning-intent", "test",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["available_min"] == 300
+    assert out["available_status"] == "answered"
+    assert out["energy_status"] == "skipped"
+    assert out["blockers_status"] == "skipped"
+    assert out["morning_intent"] == "test"
+
+
+def test_checkin_save_morning_mutual_exclusive(tmp_path):
+    """--available-hours와 --skip-available 둘 다 → 에러."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/checkin_save.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "morning", "--date", "2026-04-28",
+        "--available-hours", "5", "--skip-available",
+        "--skip-energy", "--skip-blockers",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "mutually exclusive" in r.stderr.lower() or "exclusive" in r.stderr.lower()
+
+
+def test_checkin_save_evening(tmp_path):
+    """evening subcommand: reflection만."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/checkin_save.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "evening", "--date", "2026-04-28",
+        "--evening-reflection", "good day",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["evening_reflection"] == "good day"
