@@ -81,19 +81,32 @@ python3 todo_crud.py add --title "..." \
     [--quarter "2026Q2"] [--deadline "YYYY-MM-DD"] \
     [--estimated-min N] [--notes "..."]
 ```
-출력: `{"id": N, "title": "...", "status": "backlog"}`
+출력: 모든 mutation(add/edit/move/defer/done)은 `get_todo()` 풀 dict 반환 (subtasks, project_name 포함).
+신규 project 자동 생성 시 stderr에 `[info] new project '<name>' created (id=N)`.
 
 **list** — 필터링된 todo 목록
 ```
 python3 todo_crud.py list [--status backlog|wip|done|blocked|deferred] \
-    [--category "..."] [--sort default|priority|deadline] [--limit N]
+    [--category "..."] [--sort default|priority|deadline] [--limit N] \
+    [--fields id,title,status]
 ```
-sort=default 정렬: deadline 있는 것 먼저 (임박 순) → priority 높은 순 → 오래된 것 순
+- sort=default 정렬: deadline 있는 것 먼저 (임박 순) → priority 높은 순 → 오래된 것 순
+- `--fields`: 콤마 구분 필드명만 출력 (토큰 절약). 정의되지 않은 필드는 error + exit 1
 
 **show** — 단일 todo (subtasks 포함)
 ```
 python3 todo_crud.py show --id N
 ```
+
+**edit** — 기존 todo의 선택 필드 update (None 인자는 보존, 최소 한 필드 필요)
+```
+python3 todo_crud.py edit --id N \
+    [--title "..."] [--done-definition "..."] [--category ...] [--priority N] \
+    [--project "..."] [--parent-id N | --clear-parent-id] [--quarter "..."] [--deadline "..."] \
+    [--estimated-min N | --clear-estimated] [--notes "..."]
+```
+- `--clear-estimated` / `--clear-parent-id`: 해당 필드를 NULL로 되돌림
+- `--estimated-min`/`--parent-id`와 각각의 `--clear-*`는 상호 배타
 
 **move** — 상태 전환 (검증 포함)
 ```
@@ -102,7 +115,7 @@ python3 todo_crud.py move --id N --status wip|done|blocked|deferred|backlog \
 ```
 - WIP 전환: `done_definition` null이면 거부
 - WIP 전환: 현재 WIP 2개면 거부 (`--force`로 override, stderr 로그)
-- `deferred`: `--reason` 권장
+- `deferred`: `--reason` 필수 (defer 명령과 contract 통일)
 - backlog→wip: started_at 자동
 - *→done: done_at 자동
 
