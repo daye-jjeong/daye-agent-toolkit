@@ -632,3 +632,39 @@ def test_upsert_daily_checkin_status_none_preserves_existing():
         assert ck["morning_intent"] == "새 의도"
     finally:
         conn.close()
+
+
+def test_upsert_daily_checkin_explicit_unknown_overwrites():
+    """status='unknown' 명시 시 기존 status를 'unknown'으로 덮어씀 (None과 다름)."""
+    from db import upsert_daily_checkin, get_daily_checkin
+    conn = _setup_db()
+    try:
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            available_min=300, available_status="answered",
+        )
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            available_status="unknown",
+        )
+        ck = get_daily_checkin(conn, "2026-04-28")
+        assert ck["available_status"] == "unknown"
+    finally:
+        conn.close()
+
+
+def test_upsert_daily_checkin_skipped_with_value_stored_as_is():
+    """status='skipped'이지만 value가 함께 들어오면 둘 다 저장 (db.py는 검증 안 함).
+    'skipped' 시 value를 NULL로 정리하는 책임은 wrapper 단."""
+    from db import upsert_daily_checkin, get_daily_checkin
+    conn = _setup_db()
+    try:
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            available_min=300, available_status="skipped",
+        )
+        ck = get_daily_checkin(conn, "2026-04-28")
+        assert ck["available_min"] == 300
+        assert ck["available_status"] == "skipped"
+    finally:
+        conn.close()

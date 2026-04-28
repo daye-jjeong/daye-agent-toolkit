@@ -665,8 +665,15 @@ def upsert_daily_checkin(
     blockers: str | None = None,
     blockers_status: str | None = None,
 ) -> None:
-    """daily_checkin upsert. 제공된 필드만 UPDATE (COALESCE).
-    status 컬럼은 'answered'/'skipped'/'unknown' 중 하나. None이면 기존 값 유지.
+    """daily_checkin upsert. None 인자는 기존 값 보존.
+
+    필드별 동작:
+    - 일반 필드 (morning_intent, available_min, energy, blockers 등):
+      None → 기존 값 유지 (COALESCE on excluded). 빈 문자열은 덮어씀.
+    - status 필드 (available_status, energy_status, blockers_status):
+      None → 기존 값 유지 (CASE WHEN on parameter).
+      'answered'/'skipped'/'unknown' 중 하나 명시 → 그 값으로 덮어씀.
+    - 'skipped' 시 value를 NULL로 정리하는 책임은 wrapper 단(db.py는 그대로 저장).
     """
     wip_json = json.dumps(morning_wip_ids) if morning_wip_ids is not None else None
     conn.execute("""
