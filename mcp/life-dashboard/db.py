@@ -124,11 +124,36 @@ def _migrate(conn: sqlite3.Connection):
                 morning_wip_ids TEXT,
                 morning_intent TEXT,
                 evening_reflection TEXT,
+                available_min INTEGER CHECK (available_min IS NULL OR available_min >= 0),
+                energy TEXT CHECK (energy IS NULL OR energy IN ('low','mid','high')),
+                blockers TEXT,
+                available_status TEXT NOT NULL DEFAULT 'unknown' CHECK (available_status IN ('answered','skipped','unknown')),
+                energy_status TEXT NOT NULL DEFAULT 'unknown' CHECK (energy_status IN ('answered','skipped','unknown')),
+                blockers_status TEXT NOT NULL DEFAULT 'unknown' CHECK (blockers_status IN ('answered','skipped','unknown')),
                 created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
             );
         """)
         conn.commit()
+
+    # daily_checkins additive: capacity columns
+    try:
+        dc_cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_checkins)").fetchall()}
+        if dc_cols and "available_min" not in dc_cols:
+            additions = [
+                ("available_min", "INTEGER"),
+                ("energy", "TEXT"),
+                ("blockers", "TEXT"),
+                ("available_status", "TEXT NOT NULL DEFAULT 'unknown'"),
+                ("energy_status", "TEXT NOT NULL DEFAULT 'unknown'"),
+                ("blockers_status", "TEXT NOT NULL DEFAULT 'unknown'"),
+            ]
+            for col, decl in additions:
+                if col not in dc_cols:
+                    conn.execute(f"ALTER TABLE daily_checkins ADD COLUMN {col} {decl}")
+            conn.commit()
+    except Exception:
+        pass
 
 
 @contextmanager

@@ -162,6 +162,12 @@ CREATE TABLE IF NOT EXISTS daily_checkins (
     morning_wip_ids TEXT,
     morning_intent TEXT,
     evening_reflection TEXT,
+    available_min INTEGER CHECK (available_min IS NULL OR available_min >= 0),
+    energy TEXT CHECK (energy IS NULL OR energy IN ('low','mid','high')),
+    blockers TEXT,
+    available_status TEXT NOT NULL DEFAULT 'unknown' CHECK (available_status IN ('answered','skipped','unknown')),
+    energy_status TEXT NOT NULL DEFAULT 'unknown' CHECK (energy_status IN ('answered','skipped','unknown')),
+    blockers_status TEXT NOT NULL DEFAULT 'unknown' CHECK (blockers_status IN ('answered','skipped','unknown')),
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );

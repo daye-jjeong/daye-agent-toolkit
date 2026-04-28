@@ -305,3 +305,51 @@ def test_daily_checkin_missing_wip_ids():
     assert ck["morning_wip_ids"] == [t1]  # 유효한 것만
     assert ck["missing_wip_ids"] == [t2]  # 삭제된 것
     conn.close()
+
+
+def test_daily_checkins_has_capacity_columns():
+    """daily_checkins에 available_min, energy, blockers + 3 status 컬럼 있어야 함"""
+    import pytest
+    conn = _setup_db()
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_checkins)").fetchall()}
+        assert "available_min" in cols
+        assert "energy" in cols
+        assert "blockers" in cols
+        assert "available_status" in cols
+        assert "energy_status" in cols
+        assert "blockers_status" in cols
+    finally:
+        conn.close()
+
+
+def test_daily_checkins_status_check_constraint():
+    """status 컬럼 CHECK 제약 — invalid 값 거부"""
+    import pytest
+    conn = _setup_db()
+    try:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO daily_checkins (date, available_status) VALUES (?, ?)",
+                ("2026-04-28", "invalid_status"),
+            )
+            conn.commit()
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_daily_checkins_energy_check_constraint():
+    """energy CHECK — low/mid/high만 허용"""
+    import pytest
+    conn = _setup_db()
+    try:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO daily_checkins (date, energy) VALUES (?, ?)",
+                ("2026-04-28", "extreme"),
+            )
+            conn.commit()
+    finally:
+        conn.rollback()
+        conn.close()
