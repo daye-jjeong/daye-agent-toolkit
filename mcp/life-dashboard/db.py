@@ -14,7 +14,7 @@ DB_DIR = Path.home() / "life-dashboard"
 DB_PATH = DB_DIR / "data.db"
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
-_schema_initialized = False
+_schema_initialized: set[str] = set()
 _HHMM_RE = re.compile(r"^\d{2}:\d{2}$")
 
 
@@ -32,10 +32,11 @@ def get_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
-    if not _schema_initialized:
+    db_path_str = str(db_path)
+    if db_path_str not in _schema_initialized:
         conn.executescript(SCHEMA_PATH.read_text())
         _migrate(conn)
-        _schema_initialized = True
+        _schema_initialized.add(db_path_str)
     return conn
 
 

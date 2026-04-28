@@ -1148,3 +1148,54 @@ def test_checkin_save_evening(tmp_path):
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
     assert out["evening_reflection"] == "good day"
+
+
+def test_checkin_save_morning_negative_hours_rejected(tmp_path):
+    """음수 --available-hours는 sqlite IntegrityError 노출 전에 친절한 에러로 차단."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/checkin_save.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "morning", "--date", "2026-04-28",
+        "--available-hours", "-1.5", "--skip-energy", "--skip-blockers",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert ">= 0" in r.stderr or "must be" in r.stderr.lower()
+
+
+def test_checkin_save_morning_invalid_wip_ids_rejected(tmp_path):
+    """--wip-ids에 비-정수 값 → 친절한 에러."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/checkin_save.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "morning", "--date", "2026-04-28",
+        "--skip-available", "--skip-energy", "--skip-blockers",
+        "--wip-ids", "13,abc",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "wip-ids" in r.stderr.lower() or "integer" in r.stderr.lower()
+
+
+def test_checkin_save_morning_wip_ids_with_whitespace(tmp_path):
+    """--wip-ids 공백/trailing 콤마 허용."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/checkin_save.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "morning", "--date", "2026-04-28",
+        "--skip-available", "--skip-energy", "--skip-blockers",
+        "--wip-ids", "13, 20, ",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    # get_daily_checkin은 wip_ids를 존재하는 todo id만 morning_wip_ids에, 나머지는 missing_wip_ids에 반환.
+    # 테스트 DB에 todo가 없으므로 13,20은 missing_wip_ids에 들어간다.
+    stored = sorted((out.get("morning_wip_ids") or []) + (out.get("missing_wip_ids") or []))
+    assert stored == [13, 20]

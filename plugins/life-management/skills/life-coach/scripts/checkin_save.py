@@ -35,11 +35,20 @@ def _resolve_tri_state(value, skip, name: str) -> tuple:
 
 
 def cmd_morning(args):
+    if args.available_hours is not None and args.available_hours < 0:
+        sys.exit("error: --available-hours must be >= 0")
     avail_value = int(args.available_hours * 60) if args.available_hours is not None else None
     avail_min, avail_status = _resolve_tri_state(avail_value, args.skip_available, "available")
     energy, energy_status = _resolve_tri_state(args.energy, args.skip_energy, "energy")
     blockers, blockers_status = _resolve_tri_state(args.blockers, args.skip_blockers, "blockers")
-    wip_ids = [int(x) for x in args.wip_ids.split(",")] if args.wip_ids else None
+    wip_ids = None
+    if args.wip_ids:
+        try:
+            wip_ids = [int(x.strip()) for x in args.wip_ids.split(",") if x.strip()]
+        except ValueError:
+            sys.exit("error: --wip-ids must be comma-separated integers")
+        if not wip_ids:
+            wip_ids = None
 
     conn = get_conn()
     try:
