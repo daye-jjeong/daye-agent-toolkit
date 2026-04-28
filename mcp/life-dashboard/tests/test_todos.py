@@ -567,3 +567,68 @@ def test_actuals_unique_4_tuple_null_repo_allows_duplicates():
         assert rows[0] == 2, "NULL repo 행은 중복 허용되어야 함"
     finally:
         conn.close()
+
+
+def test_upsert_daily_checkin_capacity_fields():
+    """capacity 필드 6개를 한 번에 저장 + 조회 round-trip."""
+    from db import upsert_daily_checkin, get_daily_checkin
+    conn = _setup_db()
+    try:
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            available_min=300, available_status="answered",
+            energy="mid", energy_status="answered",
+            blockers="두통", blockers_status="answered",
+        )
+        conn.commit()
+        ck = get_daily_checkin(conn, "2026-04-28")
+        assert ck["available_min"] == 300
+        assert ck["energy"] == "mid"
+        assert ck["blockers"] == "두통"
+        assert ck["available_status"] == "answered"
+        assert ck["energy_status"] == "answered"
+        assert ck["blockers_status"] == "answered"
+    finally:
+        conn.close()
+
+
+def test_upsert_daily_checkin_skip_status():
+    """status='skipped' 명시 시 NULL 값과 함께 저장."""
+    from db import upsert_daily_checkin, get_daily_checkin
+    conn = _setup_db()
+    try:
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            available_min=None, available_status="skipped",
+        )
+        conn.commit()
+        ck = get_daily_checkin(conn, "2026-04-28")
+        assert ck["available_min"] is None
+        assert ck["available_status"] == "skipped"
+    finally:
+        conn.close()
+
+
+def test_upsert_daily_checkin_status_none_preserves_existing():
+    """status 인자 None이면 기존 DB 값 유지 (COALESCE/CASE 패턴 검증)."""
+    from db import upsert_daily_checkin, get_daily_checkin
+    conn = _setup_db()
+    try:
+        # 첫 번째: answered로 저장
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            available_min=300, available_status="answered",
+        )
+        conn.commit()
+        # 두 번째: status=None, 다른 필드만 변경
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            morning_intent="새 의도",
+        )
+        conn.commit()
+        ck = get_daily_checkin(conn, "2026-04-28")
+        assert ck["available_min"] == 300
+        assert ck["available_status"] == "answered"  # 유지
+        assert ck["morning_intent"] == "새 의도"
+    finally:
+        conn.close()

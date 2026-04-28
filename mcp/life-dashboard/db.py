@@ -658,22 +658,43 @@ def upsert_daily_checkin(
     morning_wip_ids: list[int] | None = None,
     morning_intent: str | None = None,
     evening_reflection: str | None = None,
+    available_min: int | None = None,
+    available_status: str | None = None,
+    energy: str | None = None,
+    energy_status: str | None = None,
+    blockers: str | None = None,
+    blockers_status: str | None = None,
 ) -> None:
-    """daily_checkin upsert. 제공된 필드만 UPDATE (COALESCE)."""
+    """daily_checkin upsert. 제공된 필드만 UPDATE (COALESCE).
+    status 컬럼은 'answered'/'skipped'/'unknown' 중 하나. None이면 기존 값 유지.
+    """
     wip_json = json.dumps(morning_wip_ids) if morning_wip_ids is not None else None
     conn.execute("""
-        INSERT INTO daily_checkins (date, morning_wip_ids, morning_intent, evening_reflection)
-        VALUES (:date, :wip, :intent, :reflection)
+        INSERT INTO daily_checkins (
+            date, morning_wip_ids, morning_intent, evening_reflection,
+            available_min, available_status, energy, energy_status, blockers, blockers_status
+        )
+        VALUES (
+            :date, :wip, :intent, :reflection,
+            :amin, COALESCE(:astatus,'unknown'), :energy, COALESCE(:estatus,'unknown'),
+            :blockers, COALESCE(:bstatus,'unknown')
+        )
         ON CONFLICT(date) DO UPDATE SET
             morning_wip_ids = COALESCE(excluded.morning_wip_ids, morning_wip_ids),
             morning_intent = COALESCE(excluded.morning_intent, morning_intent),
             evening_reflection = COALESCE(excluded.evening_reflection, evening_reflection),
+            available_min = COALESCE(excluded.available_min, available_min),
+            available_status = CASE WHEN :astatus IS NOT NULL THEN excluded.available_status ELSE available_status END,
+            energy = COALESCE(excluded.energy, energy),
+            energy_status = CASE WHEN :estatus IS NOT NULL THEN excluded.energy_status ELSE energy_status END,
+            blockers = COALESCE(excluded.blockers, blockers),
+            blockers_status = CASE WHEN :bstatus IS NOT NULL THEN excluded.blockers_status ELSE blockers_status END,
             updated_at = datetime('now','localtime')
     """, {
-        "date": date,
-        "wip": wip_json,
-        "intent": morning_intent,
-        "reflection": evening_reflection,
+        "date": date, "wip": wip_json, "intent": morning_intent, "reflection": evening_reflection,
+        "amin": available_min, "astatus": available_status,
+        "energy": energy, "estatus": energy_status,
+        "blockers": blockers, "bstatus": blockers_status,
     })
 
 
