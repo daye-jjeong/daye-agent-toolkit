@@ -89,6 +89,19 @@ def cmd_list(args):
             rows = rows[: args.limit]
         if args.fields:
             fields = [f.strip() for f in args.fields.split(",") if f.strip()]
+            cursor = conn.execute(
+                "SELECT t.*, p.name as project_name FROM todos t "
+                "LEFT JOIN projects p ON t.project_id = p.id LIMIT 0"
+            )
+            valid = {d[0] for d in cursor.description}
+            invalid = [f for f in fields if f not in valid]
+            if invalid:
+                print(
+                    f"error: invalid fields: {','.join(invalid)}. "
+                    f"valid: {','.join(sorted(valid))}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             rows = [{f: r.get(f) for f in fields} for r in rows]
         _print_json(rows)
     finally:
@@ -115,12 +128,16 @@ _EDIT_FIELDS = (
 
 def cmd_edit(args):
     """선택 필드만 update. None 인자는 보존. project는 name → id 변환.
-    --clear-estimated: estimated_min을 NULL로 되돌림 (--estimated-min과 상호 배타)."""
+    --clear-estimated / --clear-parent-id: 해당 필드를 NULL로 (각각 --estimated-min / --parent-id와 상호 배타)."""
     if args.estimated_min is not None and args.clear_estimated:
         print("error: --estimated-min and --clear-estimated are mutually exclusive", file=sys.stderr)
         sys.exit(1)
+    if args.parent_id is not None and args.clear_parent_id:
+        print("error: --parent-id and --clear-parent-id are mutually exclusive", file=sys.stderr)
+        sys.exit(1)
     overrides = {f: getattr(args, f) for f in _EDIT_FIELDS if getattr(args, f) is not None}
-    if not overrides and args.project is None and not args.clear_estimated:
+    if (not overrides and args.project is None
+            and not args.clear_estimated and not args.clear_parent_id):
         print("error: at least one field required (no-op forbidden)", file=sys.stderr)
         sys.exit(1)
     conn = get_conn()
@@ -136,6 +153,8 @@ def cmd_edit(args):
         merged.update(overrides)
         if args.clear_estimated:
             merged["estimated_min"] = None
+        if args.clear_parent_id:
+            merged["parent_id"] = None
         if args.project is not None:
             merged["project_id"] = _resolve_project(conn, args.project, repo=args.repo)
         upsert_todo(conn, merged)
@@ -267,6 +286,8 @@ def main():
     p_edit.add_argument("--estimated-min", dest="estimated_min", type=_positive_int)
     p_edit.add_argument("--clear-estimated", dest="clear_estimated", action="store_true",
                         help="Set estimated_min back to NULL")
+    p_edit.add_argument("--clear-parent-id", dest="clear_parent_id", action="store_true",
+                        help="Set parent_id back to NULL")
     p_edit.add_argument("--notes")
 
     p_defer = sub.add_parser("defer", help="Defer with reason")

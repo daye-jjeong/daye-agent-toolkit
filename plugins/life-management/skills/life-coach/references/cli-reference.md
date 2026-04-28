@@ -91,7 +91,7 @@ python3 todo_crud.py list [--status backlog|wip|done|blocked|deferred] \
     [--fields id,title,status]
 ```
 - sort=default 정렬: deadline 있는 것 먼저 (임박 순) → priority 높은 순 → 오래된 것 순
-- `--fields`: 콤마 구분 필드명만 출력 (토큰 절약)
+- `--fields`: 콤마 구분 필드명만 출력 (토큰 절약). 정의되지 않은 필드는 error + exit 1
 
 **show** — 단일 todo (subtasks 포함)
 ```
@@ -102,11 +102,11 @@ python3 todo_crud.py show --id N
 ```
 python3 todo_crud.py edit --id N \
     [--title "..."] [--done-definition "..."] [--category ...] [--priority N] \
-    [--project "..."] [--parent-id N] [--quarter "..."] [--deadline "..."] \
+    [--project "..."] [--parent-id N | --clear-parent-id] [--quarter "..."] [--deadline "..."] \
     [--estimated-min N | --clear-estimated] [--notes "..."]
 ```
-- `--clear-estimated`: estimated_min을 NULL로 되돌림
-- `--estimated-min`과 `--clear-estimated`는 상호 배타
+- `--clear-estimated` / `--clear-parent-id`: 해당 필드를 NULL로 되돌림
+- `--estimated-min`/`--parent-id`와 각각의 `--clear-*`는 상호 배타
 
 **move** — 상태 전환 (검증 포함)
 ```
