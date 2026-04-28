@@ -1954,3 +1954,196 @@ def test_todo_crud_edit_clear_estimated_mutually_exclusive(tmp_path):
     ], capture_output=True, text=True, env=env)
     assert r.returncode != 0
     assert "exclusive" in r.stderr.lower()
+
+
+# ---------------------------------------------------------------------------
+# Task 39: todo_crud 일관성 정리 + 누락 기능
+# ---------------------------------------------------------------------------
+
+
+def test_todo_crud_show_missing_uses_lowercase_error(tmp_path):
+    """show --id 미존재 → stderr는 'error:' lowercase prefix."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "show", "--id", "99999",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert r.stderr.startswith("error:"), f"expected lowercase 'error:' prefix, got: {r.stderr!r}"
+
+
+def test_todo_crud_add_returns_full_dict(tmp_path):
+    """add 결과 stdout JSON에 풀 dict (subtasks, project_name 등 get_todo 필드)."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "add",
+        "--title", "t", "--done-definition", "d", "--category", "업무",
+        "--estimated-min", "60",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["title"] == "t"
+    assert out["estimated_min"] == 60
+    assert out["status"] == "backlog"
+    assert "subtasks" in out
+    assert "project_name" in out
+
+
+def test_todo_crud_move_returns_full_dict(tmp_path):
+    """move 결과 stdout JSON에 풀 dict."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t", "done_definition": "d", "category": "업무", "estimated_min": 30})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "move", "--id", str(tid), "--status", "wip",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["title"] == "t"
+    assert out["estimated_min"] == 30
+    assert out["status"] == "wip"
+    assert "subtasks" in out
+
+
+def test_todo_crud_done_returns_full_dict(tmp_path):
+    """done 결과 stdout JSON에 풀 dict."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t", "done_definition": "d", "category": "업무", "estimated_min": 30})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "done", "--id", str(tid),
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["status"] == "done"
+    assert out["title"] == "t"
+    assert "done_at" in out
+    assert "subtasks" in out
+
+
+def test_todo_crud_add_logs_new_project_creation(tmp_path):
+    """add 시 새 project 생성되면 stderr에 [info] new project 로그."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "add",
+        "--title", "t", "--done-definition", "d", "--category", "업무",
+        "--estimated-min", "30", "--project", "신규프로젝트",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "new project" in r.stderr
+    assert "신규프로젝트" in r.stderr
+
+
+def test_todo_crud_add_existing_project_no_log(tmp_path):
+    """add 시 기존 project를 가리키면 [info] 로그 출력 안 함."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_project
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        upsert_project(conn, "기존프로젝트")
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "add",
+        "--title", "t", "--done-definition", "d", "--category", "업무",
+        "--estimated-min", "30", "--project", "기존프로젝트",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "new project" not in r.stderr
+
+
+def test_todo_crud_edit_parent_id(tmp_path):
+    """edit --parent-id로 parent 변경."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        parent = upsert_todo(conn, {"title": "p", "done_definition": "d", "category": "업무", "estimated_min": 60})
+        child = upsert_todo(conn, {"title": "c", "done_definition": "d", "category": "업무", "estimated_min": 30})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "edit", "--id", str(child),
+        "--parent-id", str(parent),
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["parent_id"] == parent
+
+
+def test_todo_crud_list_fields_filter(tmp_path):
+    """list --fields id,title → 해당 필드만 출력."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        upsert_todo(conn, {"title": "한글제목", "done_definition": "d", "category": "업무", "estimated_min": 30})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "list", "--fields", "id,title",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    rows = json.loads(r.stdout)
+    assert len(rows) == 1
+    assert set(rows[0].keys()) == {"id", "title"}
+    assert rows[0]["title"] == "한글제목"

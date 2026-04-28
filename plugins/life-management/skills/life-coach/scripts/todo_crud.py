@@ -3,9 +3,9 @@
 
 Usage:
     python3 todo_crud.py add --title "..." [--done-definition "..."] [--category ...] ...
-    python3 todo_crud.py list [--status backlog] [--category 업무] [--sort default]
+    python3 todo_crud.py list [--status backlog] [--category 업무] [--sort default] [--fields id,title,...]
     python3 todo_crud.py show --id N
-    python3 todo_crud.py edit --id N [--estimated-min N] [--deadline ...] [--project ...] ...
+    python3 todo_crud.py edit --id N [--estimated-min N] [--parent-id N] [--project ...] ...
     python3 todo_crud.py move --id N --status wip [--reason "..."] [--force]
     python3 todo_crud.py defer --id N --reason "..."
     python3 todo_crud.py done --id N
@@ -36,6 +36,17 @@ def _positive_int(s: str) -> int:
     return n
 
 
+def _resolve_project(conn, name: str, repo: str | None = None) -> int:
+    """project name → id. 새로 생성될 때만 stderr로 [info] 로그."""
+    existed = conn.execute(
+        "SELECT 1 FROM projects WHERE name = ? AND repo IS ?", (name, repo)
+    ).fetchone() is not None
+    pid = upsert_project(conn, name, repo=repo)
+    if not existed:
+        print(f"[info] new project '{name}' created (id={pid})", file=sys.stderr)
+    return pid
+
+
 def cmd_add(args):
     if args.estimated_min is None and not args.skip_estimated:
         print("error: --estimated-min N or --skip-estimated required", file=sys.stderr)
@@ -58,14 +69,13 @@ def cmd_add(args):
     conn = get_conn()
     try:
         if args.project:
-            pid = upsert_project(conn, args.project, repo=args.repo)
-            data["project_id"] = pid
+            data["project_id"] = _resolve_project(conn, args.project, repo=args.repo)
         tid = upsert_todo(conn, data)
         conn.commit()
-        _print_json({"id": tid, "title": args.title, "status": "backlog"})
+        _print_json(get_todo(conn, tid))
     except Exception as e:
         conn.rollback()
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
         conn.close()
@@ -77,6 +87,9 @@ def cmd_list(args):
         rows = get_todos(conn, status=args.status, category=args.category, sort=args.sort)
         if args.limit:
             rows = rows[: args.limit]
+        if args.fields:
+            fields = [f.strip() for f in args.fields.split(",") if f.strip()]
+            rows = [{f: r.get(f) for f in fields} for r in rows]
         _print_json(rows)
     finally:
         conn.close()
@@ -87,7 +100,7 @@ def cmd_show(args):
     try:
         t = get_todo(conn, args.id)
         if not t:
-            print(f"Error: todo {args.id} not found", file=sys.stderr)
+            print(f"error: todo {args.id} not found", file=sys.stderr)
             sys.exit(1)
         _print_json(t)
     finally:
@@ -95,7 +108,7 @@ def cmd_show(args):
 
 
 _EDIT_FIELDS = (
-    "title", "done_definition", "category", "priority",
+    "title", "done_definition", "category", "priority", "parent_id",
     "quarter", "deadline", "estimated_min", "notes",
 )
 
@@ -124,13 +137,13 @@ def cmd_edit(args):
         if args.clear_estimated:
             merged["estimated_min"] = None
         if args.project is not None:
-            merged["project_id"] = upsert_project(conn, args.project, repo=args.repo)
+            merged["project_id"] = _resolve_project(conn, args.project, repo=args.repo)
         upsert_todo(conn, merged)
         conn.commit()
         _print_json(get_todo(conn, args.id))
     except Exception as e:
         conn.rollback()
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
         conn.close()
@@ -154,11 +167,10 @@ def cmd_move(args):
                 sys.exit(1)
         update_todo_status(conn, args.id, args.status, reason=args.reason, force=args.force)
         conn.commit()
-        t = get_todo(conn, args.id)
-        _print_json({"id": args.id, "status": t["status"], "started_at": t["started_at"], "done_at": t["done_at"]})
-    except ValueError as e:
+        _print_json(get_todo(conn, args.id))
+    except Exception as e:
         conn.rollback()
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
         conn.close()
@@ -169,10 +181,10 @@ def cmd_defer(args):
     try:
         update_todo_status(conn, args.id, "deferred", reason=args.reason)
         conn.commit()
-        _print_json({"id": args.id, "status": "deferred", "deferred_reason": args.reason})
-    except ValueError as e:
+        _print_json(get_todo(conn, args.id))
+    except Exception as e:
         conn.rollback()
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
         conn.close()
@@ -181,7 +193,6 @@ def cmd_defer(args):
 def cmd_done(args):
     conn = get_conn()
     try:
-        # 부모 todo라면 subtasks 확인
         t = get_todo(conn, args.id)
         if t and t.get("subtasks"):
             unfinished = [s for s in t["subtasks"] if s["status"] != "done"]
@@ -190,14 +201,13 @@ def cmd_done(args):
                 if not args.force:
                     print(f"error: unfinished subtasks remain: {titles}. Use --force to override.", file=sys.stderr)
                     sys.exit(1)
-                # --force: 부모만 done, 자식은 그대로 → stderr 경고 (silent 차단)
                 print(f"[warn] parent done --force leaves unfinished subtasks: {titles}", file=sys.stderr)
         update_todo_status(conn, args.id, "done")
         conn.commit()
-        _print_json({"id": args.id, "status": "done"})
-    except ValueError as e:
+        _print_json(get_todo(conn, args.id))
+    except Exception as e:
         conn.rollback()
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
         conn.close()
@@ -228,6 +238,7 @@ def main():
     p_list.add_argument("--category")
     p_list.add_argument("--sort", default="default", choices=["default", "priority", "deadline"])
     p_list.add_argument("--limit", type=int)
+    p_list.add_argument("--fields", help="Comma-separated field names (e.g. 'id,title,status')")
 
     p_show = sub.add_parser("show", help="Show single todo with subtasks")
     p_show.add_argument("--id", required=True, type=int)
@@ -250,6 +261,7 @@ def main():
     p_edit.add_argument("--priority", type=int)
     p_edit.add_argument("--project")
     p_edit.add_argument("--repo")
+    p_edit.add_argument("--parent-id", dest="parent_id", type=int)
     p_edit.add_argument("--quarter")
     p_edit.add_argument("--deadline", help="ISO: YYYY-MM-DD or YYYY-MM-DDTHH:MM")
     p_edit.add_argument("--estimated-min", dest="estimated_min", type=_positive_int)
