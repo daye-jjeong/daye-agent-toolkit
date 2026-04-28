@@ -1555,3 +1555,116 @@ def test_capacity_script_default_range_is_7_days(tmp_path):
     assert r.returncode == 0, r.stderr
     assert "4.0h" in r.stdout  # today's row
     assert "3.0h" not in r.stdout  # old row excluded
+
+
+# ---------------------------------------------------------------------------
+# Task 13: todo_crud.py — tri-state estimated_min on add + WIP gate
+# ---------------------------------------------------------------------------
+
+def test_todo_crud_add_requires_estimated_or_skip(tmp_path):
+    """add는 --estimated-min OR --skip-estimated 필수."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "add",
+        "--title", "t", "--done-definition", "d", "--category", "업무",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "estimated" in r.stderr.lower()
+
+
+def test_todo_crud_add_with_estimated_succeeds(tmp_path):
+    """--estimated-min 명시하면 add 성공."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "add",
+        "--title", "t1", "--done-definition", "d", "--category", "업무",
+        "--estimated-min", "60",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+
+
+def test_todo_crud_add_with_skip_estimated_succeeds(tmp_path):
+    """--skip-estimated만 있으면 add 성공 (estimated_min은 NULL로 저장)."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "add",
+        "--title", "t2", "--done-definition", "d", "--category", "업무",
+        "--skip-estimated",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+
+
+def test_todo_crud_add_mutually_exclusive(tmp_path):
+    """--estimated-min과 --skip-estimated 둘 다 → 에러."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "add",
+        "--title", "t3", "--done-definition", "d", "--category", "업무",
+        "--estimated-min", "60", "--skip-estimated",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "exclusive" in r.stderr.lower()
+
+
+def test_todo_crud_move_wip_blocks_when_estimated_null(tmp_path):
+    """estimated_min NULL인 todo를 wip로 옮길 때 에러 (override 옵션 없으면)."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "x", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "move", "--id", str(tid), "--status", "wip",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "estimated" in r.stderr.lower()
+
+
+def test_todo_crud_move_wip_with_override_succeeds(tmp_path):
+    """--skip-estimated-check 명시하면 estimated_min NULL이어도 wip 전환 허용."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "y", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "move", "--id", str(tid), "--status", "wip",
+        "--skip-estimated-check",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr

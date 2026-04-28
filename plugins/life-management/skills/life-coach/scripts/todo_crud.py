@@ -26,6 +26,13 @@ def _print_json(obj) -> None:
 
 
 def cmd_add(args):
+    if args.estimated_min is None and not args.skip_estimated:
+        print("error: --estimated-min N or --skip-estimated required", file=sys.stderr)
+        sys.exit(1)
+    if args.estimated_min is not None and args.skip_estimated:
+        print("error: --estimated-min and --skip-estimated are mutually exclusive", file=sys.stderr)
+        sys.exit(1)
+
     data = {
         "title": args.title,
         "done_definition": args.done_definition,
@@ -79,6 +86,17 @@ def cmd_show(args):
 def cmd_move(args):
     conn = get_conn()
     try:
+        if args.status == "wip" and not args.skip_estimated_check:
+            row = conn.execute(
+                "SELECT estimated_min FROM todos WHERE id = ?", (args.id,)
+            ).fetchone()
+            if row and row["estimated_min"] is None:
+                print(
+                    f"error: todo {args.id} estimated_min is NULL. "
+                    f"Pass --estimated-min via 'edit' first, or --skip-estimated-check to override",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
         update_todo_status(conn, args.id, args.status, reason=args.reason, force=args.force)
         conn.commit()
         t = get_todo(conn, args.id)
@@ -142,6 +160,8 @@ def main():
     p_add.add_argument("--quarter")
     p_add.add_argument("--deadline", help="ISO: YYYY-MM-DD or YYYY-MM-DDTHH:MM")
     p_add.add_argument("--estimated-min", dest="estimated_min", type=int)
+    p_add.add_argument("--skip-estimated", dest="skip_estimated", action="store_true",
+                       help="Explicitly skip estimated_min (stored as NULL)")
     p_add.add_argument("--notes")
 
     p_list = sub.add_parser("list", help="List todos")
@@ -160,6 +180,8 @@ def main():
     p_move.add_argument("--reason")
     p_move.add_argument("--force", action="store_true",
                         help="Override WIP limit or unfinished-subtask warning")
+    p_move.add_argument("--skip-estimated-check", dest="skip_estimated_check", action="store_true",
+                        help="Allow moving to wip even if estimated_min is NULL")
 
     p_defer = sub.add_parser("defer", help="Defer with reason")
     p_defer.add_argument("--id", required=True, type=int)
