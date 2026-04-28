@@ -1448,3 +1448,110 @@ def test_schedule_actual_link_missing_schedule(tmp_path):
     ], capture_output=True, text=True, env=env)
     assert r.returncode != 0
     assert "schedule_id" in r.stderr.lower() or "not found" in r.stderr.lower()
+
+
+def test_capacity_script_markdown_output(tmp_path):
+    """기본 markdown 표 출력."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/capacity.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_daily_checkin
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            available_min=300, available_status="answered",
+            energy="mid", energy_status="answered",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "--start", "2026-04-28", "--end", "2026-04-29",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "| 날짜 |" in r.stdout
+    assert "04-28" in r.stdout
+    assert "5.0h" in r.stdout  # 300 min = 5.0h
+
+
+def test_capacity_script_skipped_row(tmp_path):
+    """skipped status는 ℹ skipped 표시."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/capacity.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_daily_checkin
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        upsert_daily_checkin(
+            conn, "2026-04-27",
+            available_min=None, available_status="skipped",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "--start", "2026-04-27", "--end", "2026-04-28",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "skipped" in r.stdout
+
+
+def test_capacity_script_no_data(tmp_path):
+    """범위에 row 없으면 친절한 메시지."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/capacity.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "--start", "2026-04-01", "--end", "2026-04-10",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0
+    assert "no daily_checkins" in r.stdout.lower() or "(no" in r.stdout
+
+
+def test_capacity_script_default_range_is_7_days(tmp_path):
+    """기본 범위: today-6 ~ today+1 (half-open) → 약 7일."""
+    import subprocess, os
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/capacity.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_daily_checkin
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date()
+    conn = get_conn()
+    try:
+        # today's checkin
+        upsert_daily_checkin(
+            conn, today.strftime("%Y-%m-%d"),
+            available_min=240, available_status="answered",
+        )
+        # 7-days-ago — should NOT appear (today-6 is the start)
+        old = (today - timedelta(days=7)).strftime("%Y-%m-%d")
+        upsert_daily_checkin(
+            conn, old,
+            available_min=180, available_status="answered",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run(["python3", str(script)], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert "4.0h" in r.stdout  # today's row
+    assert "3.0h" not in r.stdout  # old row excluded
