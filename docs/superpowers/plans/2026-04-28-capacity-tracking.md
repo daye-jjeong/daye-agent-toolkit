@@ -23,7 +23,7 @@
 
 ### 변경 (5)
 - `mcp/life-dashboard/schema.sql` — daily_checkins +6 컬럼, todo_schedules + todo_schedule_actuals CREATE
-- `mcp/life-dashboard/db.py` — 마이그레이션 ALTER + 함수 6개 추가 (`upsert_daily_checkin` 확장, `upsert_schedule`, `link_schedule_actual`, `get_schedule`, `get_schedules_by_date`, `get_daily_checkins(start,end)`, `get_capacity_status(date)`)
+- `mcp/life-dashboard/db.py` — 함수 6개 추가 (`upsert_daily_checkin` 확장, `upsert_schedule`, `link_schedule_actual`, `get_schedule`, `get_schedules_by_date`, `get_daily_checkins(start,end)`, `get_capacity_status(date)`). 신규 스키마는 schema.sql만 정의하고 라이브 DB에는 1회성 수동 적용 (db.py `_migrate`에 마이그레이션 분기 추가 금지)
 - `mcp/life-dashboard/tests/test_todos.py` — 위 함수 + wrapper + silent fail 회귀 테스트
 - `plugins/life-management/skills/life-coach/scripts/todo_crud.py` — estimated_min tri-state 정책
 - `plugins/life-management/skills/life-coach/SKILL.md` — 슬래시 커맨드, 워크플로우 (wrapper 경유), 인터뷰 가이드, status 영속화 룰
@@ -343,8 +343,8 @@ git -C /Users/dayejeong/git_workplace/daye-agent-toolkit/.worktrees/capacity-tra
 
 **Files:**
 - Modify: `mcp/life-dashboard/schema.sql`
-- Modify: `mcp/life-dashboard/db.py:_migrate`
 - Test: `mcp/life-dashboard/tests/test_todos.py`
+- Live DB: `~/life-dashboard/data.db` (1회성 수동 적용 — Step 4)
 
 - [ ] **Step 1: Write failing tests (snapshot identity, no tasks FK, schedule CASCADE)**
 
@@ -462,7 +462,7 @@ def test_actuals_schedule_delete_cascade():
 
 Expected: 4 FAIL (table 없음)
 
-- [ ] **Step 3: Update schema.sql + db.py _migrate**
+- [ ] **Step 3: Update schema.sql only**
 
 `schema.sql`의 todo_schedules 다음에:
 
@@ -483,19 +483,27 @@ CREATE TABLE IF NOT EXISTS todo_schedule_actuals (
 CREATE INDEX IF NOT EXISTS idx_schedule_actuals_schedule ON todo_schedule_actuals(schedule_id);
 ```
 
-`db.py:_migrate`의 todo_schedules 분기 다음에 동일 SQL을 `executescript`로 추가.
+**db.py `_migrate`에 분기 추가 금지** — 신규 스키마는 schema.sql만 정의. 기존 라이브 DB에는 Step 4에서 1회성 수동 적용.
 
-- [ ] **Step 4: Run tests pass**
+- [ ] **Step 4: 라이브 DB 1회성 수동 적용**
+
+```bash
+cp ~/life-dashboard/data.db ~/life-dashboard/data.db.bak.$(date +%Y%m%d-%H%M%S)
+sqlite3 ~/life-dashboard/data.db < /tmp/task3-actuals.sql  # Step 3의 SQL을 임시 파일로 저장 후 실행
+sqlite3 ~/life-dashboard/data.db "PRAGMA table_info(todo_schedule_actuals);"  # 검증
+```
+
+- [ ] **Step 5: Run tests pass**
 
 ```bash
 cd mcp/life-dashboard && python -m pytest tests/test_todos.py -k "actuals" -v
 ```
-Expected: 4 PASS
+Expected: 4 PASS (테스트는 `_setup_db()` 사용 — schema.sql 직접 로드)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git -C /Users/dayejeong/git_workplace/daye-agent-toolkit/.worktrees/capacity-tracking add mcp/life-dashboard/schema.sql mcp/life-dashboard/db.py mcp/life-dashboard/tests/test_todos.py
+git -C /Users/dayejeong/git_workplace/daye-agent-toolkit/.worktrees/capacity-tracking add mcp/life-dashboard/schema.sql mcp/life-dashboard/tests/test_todos.py
 git -C /Users/dayejeong/git_workplace/daye-agent-toolkit/.worktrees/capacity-tracking commit -m "feat(schema): todo_schedule_actuals with immutable snapshot identity (no tasks FK)"
 ```
 
