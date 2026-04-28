@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from db import upsert_schedule, get_schedule, get_schedules_by_date, delete_schedule, link_schedule_actual, upsert_todo
+from db import upsert_schedule, get_schedule, get_schedules_by_date, delete_schedule, link_schedule_actual, upsert_todo, get_daily_checkins
 
 
 def _setup_db():
@@ -894,5 +894,45 @@ def test_link_schedule_actual_unique_4tuple_violation():
         task_id_2 = cur.lastrowid
         with pytest.raises(sqlite3.IntegrityError):
             link_schedule_actual(conn, schedule_id=sid, task_id=task_id_2)
+    finally:
+        conn.close()
+
+
+def test_get_daily_checkins_range_half_open():
+    """[start, end) half-open range: end_date 당일 row는 포함 안 됨."""
+    conn = _setup_db()
+    try:
+        from db import upsert_daily_checkin
+        upsert_daily_checkin(conn, "2026-04-25", available_min=360, available_status="answered")
+        upsert_daily_checkin(conn, "2026-04-26", available_min=240, available_status="answered")
+        upsert_daily_checkin(conn, "2026-04-28", available_min=300, available_status="answered")
+        conn.commit()
+        rows = get_daily_checkins(conn, "2026-04-25", "2026-04-27")
+        dates = [r["date"] for r in rows]
+        assert dates == ["2026-04-25", "2026-04-26"]
+    finally:
+        conn.close()
+
+
+def test_get_daily_checkins_empty_range():
+    """범위에 row 없으면 빈 리스트."""
+    conn = _setup_db()
+    try:
+        rows = get_daily_checkins(conn, "2026-04-01", "2026-04-10")
+        assert rows == []
+    finally:
+        conn.close()
+
+
+def test_get_daily_checkins_orders_asc():
+    """삽입 순서와 무관하게 date ASC 정렬."""
+    conn = _setup_db()
+    try:
+        from db import upsert_daily_checkin
+        upsert_daily_checkin(conn, "2026-04-26", available_min=240, available_status="answered")
+        upsert_daily_checkin(conn, "2026-04-25", available_min=360, available_status="answered")
+        conn.commit()
+        rows = get_daily_checkins(conn, "2026-04-20", "2026-04-30")
+        assert [r["date"] for r in rows] == ["2026-04-25", "2026-04-26"]
     finally:
         conn.close()

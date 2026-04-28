@@ -736,6 +736,23 @@ def get_daily_checkin(conn: sqlite3.Connection, date: str) -> dict | None:
     return ck
 
 
+def get_daily_checkins(
+    conn: sqlite3.Connection, start_date: str, end_date: str,
+) -> list[dict]:
+    """[start_date, end_date) 반-개구간 범위 daily_checkin row list. 날짜 ASC.
+    end_date 당일 row는 포함 안 됨.
+    """
+    rows = conn.execute(
+        """
+        SELECT * FROM daily_checkins
+        WHERE date >= ? AND date < ?
+        ORDER BY date ASC
+        """,
+        (start_date, end_date),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_coach_state(conn: sqlite3.Connection) -> dict:
     rows = conn.execute("SELECT key, value FROM coach_state").fetchall()
     return {r["key"]: r["value"] for r in rows}
