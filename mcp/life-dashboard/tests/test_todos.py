@@ -1199,3 +1199,139 @@ def test_checkin_save_morning_wip_ids_with_whitespace(tmp_path):
     # 테스트 DB에 todo가 없으므로 13,20은 missing_wip_ids에 들어간다.
     stored = sorted((out.get("morning_wip_ids") or []) + (out.get("missing_wip_ids") or []))
     assert stored == [13, 20]
+
+
+def test_schedule_upsert_minutes_only(tmp_path):
+    """시간 미지정 — --planned-min만으로 schedule 저장."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_upsert.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    # setup todo
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    # run script
+    r = subprocess.run([
+        "python3", str(script), "--todo-id", str(tid),
+        "--date", "2026-04-28", "--planned-min", "120",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["schedule"]["planned_min"] == 120
+    assert out["schedule"]["start_at"] is None
+    assert "capacity_status" in out
+
+
+def test_schedule_upsert_time_slot_auto_planned_min(tmp_path):
+    """--start/--end 명시 시 planned_min 자동 계산."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_upsert.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t2", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "--todo-id", str(tid),
+        "--date", "2026-04-28", "--start", "14:00", "--end", "16:00",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["schedule"]["planned_min"] == 120
+    assert out["schedule"]["start_at"] == "14:00"
+
+
+def test_schedule_upsert_planned_min_mismatch_rejected(tmp_path):
+    """시간 슬롯 + 명시한 --planned-min이 end-start와 다르면 에러."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_upsert.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t3", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "--todo-id", str(tid),
+        "--date", "2026-04-28", "--start", "14:00", "--end", "16:00",
+        "--planned-min", "100",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "mismatch" in r.stderr.lower() or "!=" in r.stderr
+
+
+def test_schedule_upsert_unpaired_time_rejected(tmp_path):
+    """--start만 있고 --end 없으면 에러."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_upsert.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t4", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "--todo-id", str(tid),
+        "--date", "2026-04-28", "--start", "14:00", "--planned-min", "60",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "paired" in r.stderr.lower() or "start" in r.stderr.lower()
+
+
+def test_schedule_upsert_unique_violation_friendly_error(tmp_path):
+    """동일 시간 슬롯 두 번 → 친절한 에러 (raw IntegrityError 아님)."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_upsert.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t5", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    args = [
+        "python3", str(script), "--todo-id", str(tid),
+        "--date", "2026-04-28", "--start", "14:00", "--end", "16:00",
+    ]
+    r1 = subprocess.run(args, capture_output=True, text=True, env=env)
+    assert r1.returncode == 0, r1.stderr
+    r2 = subprocess.run(args, capture_output=True, text=True, env=env)
+    assert r2.returncode != 0
+    assert "constraint" in r2.stderr.lower() or "schedule" in r2.stderr.lower()
