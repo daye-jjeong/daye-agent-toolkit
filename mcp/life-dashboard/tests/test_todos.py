@@ -351,6 +351,70 @@ def test_daily_checkins_energy_check_constraint():
         conn.close()
 
 
+def test_todo_schedules_table_exists():
+    conn = _setup_db()
+    try:
+        rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='todo_schedules'").fetchall()
+        assert len(rows) == 1
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(todo_schedules)").fetchall()}
+        for c in ["id","todo_id","date","start_at","end_at","planned_min","notes","created_at"]:
+            assert c in cols
+    finally:
+        conn.close()
+
+
+def test_todo_schedules_check_planned_min_positive():
+    from db import upsert_todo
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO todo_schedules (todo_id, date, planned_min) VALUES (?, ?, ?)",
+                (tid, "2026-04-28", 0),
+            )
+            conn.commit()
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_todo_schedules_check_time_pair():
+    from db import upsert_todo
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO todo_schedules (todo_id, date, start_at, end_at, planned_min) VALUES (?, ?, ?, ?, ?)",
+                (tid, "2026-04-28", "14:00", None, 60),
+            )
+            conn.commit()
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_todo_schedules_partial_unique_time_slot():
+    from db import upsert_todo
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        conn.execute(
+            "INSERT INTO todo_schedules (todo_id, date, start_at, end_at, planned_min) VALUES (?, ?, ?, ?, ?)",
+            (tid, "2026-04-28", "14:00", "16:00", 120),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO todo_schedules (todo_id, date, start_at, end_at, planned_min) VALUES (?, ?, ?, ?, ?)",
+                (tid, "2026-04-28", "14:00", "16:00", 120),
+            )
+            conn.commit()
+    finally:
+        conn.rollback()
+        conn.close()
+
+
 def test_daily_checkins_migration_alter_adds_capacity_columns():
     """기존 DB (4컬럼만 있는 daily_checkins)에 _migrate 호출 시 ALTER가 6 캐파 컬럼 추가."""
     from db import _migrate

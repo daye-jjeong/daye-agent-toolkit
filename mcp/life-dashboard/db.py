@@ -136,6 +136,37 @@ def _migrate(conn: sqlite3.Connection):
         """)
         conn.commit()
 
+    # todo_schedules 테이블 마이그레이션
+    existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "todo_schedules" not in existing:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS todo_schedules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                todo_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                start_at TEXT,
+                end_at TEXT,
+                planned_min INTEGER NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                CHECK (
+                  (start_at IS NULL AND end_at IS NULL) OR
+                  (start_at IS NOT NULL AND end_at IS NOT NULL)
+                ),
+                CHECK (start_at IS NULL OR end_at > start_at),
+                CHECK (start_at IS NULL OR start_at GLOB '[0-2][0-9]:[0-5][0-9]'),
+                CHECK (end_at IS NULL OR end_at GLOB '[0-2][0-9]:[0-5][0-9]'),
+                CHECK (planned_min > 0),
+                FOREIGN KEY(todo_id) REFERENCES todos(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_todo_schedules_date ON todo_schedules(date);
+            CREATE INDEX IF NOT EXISTS idx_todo_schedules_todo ON todo_schedules(todo_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_time_slot
+              ON todo_schedules(todo_id, date, start_at, end_at)
+              WHERE start_at IS NOT NULL;
+        """)
+        conn.commit()
+
     # daily_checkins additive: capacity columns
     # NOTE: SQLite ALTER TABLE ADD COLUMN cannot add CHECK constraints.
     # Fresh DBs (via schema.sql CREATE) get full constraints (energy IN low/mid/high,
