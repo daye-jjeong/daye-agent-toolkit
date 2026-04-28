@@ -1043,3 +1043,37 @@ def test_capacity_status_no_schedules_no_conflict_no_missing():
         assert st["schedules"] == []
     finally:
         conn.close()
+
+
+def test_capacity_status_skipped_does_not_flag_missing_budget():
+    """available_status='skipped' + schedule 있어도 missing_budget=False (의도적 skip)."""
+    conn = _setup_db()
+    try:
+        from db import upsert_daily_checkin
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        upsert_daily_checkin(
+            conn, "2026-04-28",
+            available_min=None, available_status="skipped",
+        )
+        upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=60)
+        conn.commit()
+        st = get_capacity_status(conn, "2026-04-28")
+        assert st["missing_budget"] is False
+        assert st["available_status"] == "skipped"
+    finally:
+        conn.close()
+
+
+def test_capacity_status_unknown_with_schedule_flags_missing_budget():
+    """available_status='unknown' + schedule 있으면 missing_budget=True (대답 안 한 상태)."""
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        # daily_checkin 자체가 없어서 status="unknown" (default fallback)
+        upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=60)
+        conn.commit()
+        st = get_capacity_status(conn, "2026-04-28")
+        assert st["missing_budget"] is True
+        assert st["available_status"] == "unknown"
+    finally:
+        conn.close()

@@ -1365,7 +1365,11 @@ def get_capacity_status(conn: sqlite3.Connection, date: str) -> dict:
 
     planned_overbook = available_min is not None and planned_total > available_min
     actual_overrun = available_min is not None and actual_total > available_min
-    missing_budget = available_min is None and len(schedules) > 0
+    missing_budget = (
+        available_min is None
+        and available_status == "unknown"
+        and len(schedules) > 0
+    )
     remaining = (available_min - planned_total) if available_min is not None else None
 
     return {
