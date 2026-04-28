@@ -1335,3 +1335,116 @@ def test_schedule_upsert_unique_violation_friendly_error(tmp_path):
     r2 = subprocess.run(args, capture_output=True, text=True, env=env)
     assert r2.returncode != 0
     assert "constraint" in r2.stderr.lower() or "schedule" in r2.stderr.lower()
+
+
+def test_schedule_actual_link_reads_task(tmp_path):
+    """task에서 자동 snapshot."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_actual_link.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo, upsert_schedule
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=120)
+        cur = conn.execute(
+            "INSERT INTO tasks (date, tag, summary, repo, duration_min) VALUES (?, ?, ?, ?, ?)",
+            ("2026-04-28", "구현", "task X", "repo Y", 90),
+        )
+        task_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "--schedule-id", str(sid),
+        "--task-id", str(task_id), "--date", "2026-04-28", "--todo-id", str(tid),
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["actual"]["duration_min_snapshot"] == 90
+    assert out["actual"]["source_summary"] == "task X"
+    assert out["actual"]["source_repo"] == "repo Y"
+    assert "capacity_status" in out
+
+
+def test_schedule_actual_link_rejects_todo_id_mismatch(tmp_path):
+    """schedule이 다른 todo_id에 속하면 거부."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_actual_link.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo, upsert_schedule
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        t1 = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        t2 = upsert_todo(conn, {"title": "t2", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=t1, date="2026-04-28", planned_min=60)
+        cur = conn.execute(
+            "INSERT INTO tasks (date, tag, summary, duration_min) VALUES (?, ?, ?, ?)",
+            ("2026-04-28", "구현", "task A", 60),
+        )
+        task_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "--schedule-id", str(sid),
+        "--task-id", str(task_id), "--date", "2026-04-28", "--todo-id", str(t2),
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "todo" in r.stderr.lower() and "mismatch" in r.stderr.lower()
+
+
+def test_schedule_actual_link_rejects_date_mismatch(tmp_path):
+    """--date가 schedule.date와 다르면 거부."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_actual_link.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo, upsert_schedule
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=60)
+        cur = conn.execute(
+            "INSERT INTO tasks (date, tag, summary, duration_min) VALUES (?, ?, ?, ?)",
+            ("2026-04-28", "구현", "task A", 60),
+        )
+        task_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "--schedule-id", str(sid),
+        "--task-id", str(task_id), "--date", "2026-04-27", "--todo-id", str(tid),
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "date" in r.stderr.lower() and "mismatch" in r.stderr.lower()
+
+
+def test_schedule_actual_link_missing_schedule(tmp_path):
+    """존재하지 않는 schedule_id → 친절한 에러."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/schedule_actual_link.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "--schedule-id", "99999",
+        "--task-id", "1", "--date", "2026-04-28", "--todo-id", "1",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "schedule_id" in r.stderr.lower() or "not found" in r.stderr.lower()
