@@ -5,6 +5,7 @@ Usage:
     python3 todo_crud.py add --title "..." [--done-definition "..."] [--category ...] ...
     python3 todo_crud.py list [--status backlog] [--category 업무] [--sort default]
     python3 todo_crud.py show --id N
+    python3 todo_crud.py edit --id N [--estimated-min N] [--deadline ...] [--project ...] ...
     python3 todo_crud.py move --id N --status wip [--reason "..."] [--force]
     python3 todo_crud.py defer --id N --reason "..."
     python3 todo_crud.py done --id N
@@ -79,6 +80,42 @@ def cmd_show(args):
             print(f"Error: todo {args.id} not found", file=sys.stderr)
             sys.exit(1)
         _print_json(t)
+    finally:
+        conn.close()
+
+
+_EDIT_FIELDS = (
+    "title", "done_definition", "category", "priority",
+    "quarter", "deadline", "estimated_min", "notes",
+)
+
+
+def cmd_edit(args):
+    """선택 필드만 update. None 인자는 보존. project는 name → id 변환."""
+    overrides = {f: getattr(args, f) for f in _EDIT_FIELDS if getattr(args, f) is not None}
+    if not overrides and args.project is None:
+        print("error: at least one field required (no-op forbidden)", file=sys.stderr)
+        sys.exit(1)
+    conn = get_conn()
+    try:
+        existing = get_todo(conn, args.id)
+        if not existing:
+            print(f"error: todo {args.id} not found", file=sys.stderr)
+            sys.exit(1)
+        merged = {k: existing.get(k) for k in (
+            "id", "title", "done_definition", "priority", "project_id", "parent_id",
+            "category", "quarter", "deadline", "estimated_min", "notes",
+        )}
+        merged.update(overrides)
+        if args.project is not None:
+            merged["project_id"] = upsert_project(conn, args.project, repo=args.repo)
+        upsert_todo(conn, merged)
+        conn.commit()
+        _print_json(get_todo(conn, args.id))
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     finally:
         conn.close()
 
@@ -183,6 +220,19 @@ def main():
     p_move.add_argument("--skip-estimated-check", dest="skip_estimated_check", action="store_true",
                         help="Allow moving to wip even if estimated_min is NULL")
 
+    p_edit = sub.add_parser("edit", help="Update select fields (None preserves existing)")
+    p_edit.add_argument("--id", required=True, type=int)
+    p_edit.add_argument("--title")
+    p_edit.add_argument("--done-definition", dest="done_definition")
+    p_edit.add_argument("--category")
+    p_edit.add_argument("--priority", type=int)
+    p_edit.add_argument("--project")
+    p_edit.add_argument("--repo")
+    p_edit.add_argument("--quarter")
+    p_edit.add_argument("--deadline", help="ISO: YYYY-MM-DD or YYYY-MM-DDTHH:MM")
+    p_edit.add_argument("--estimated-min", dest="estimated_min", type=int)
+    p_edit.add_argument("--notes")
+
     p_defer = sub.add_parser("defer", help="Defer with reason")
     p_defer.add_argument("--id", required=True, type=int)
     p_defer.add_argument("--reason", required=True)
@@ -195,6 +245,7 @@ def main():
         "add": cmd_add,
         "list": cmd_list,
         "show": cmd_show,
+        "edit": cmd_edit,
         "move": cmd_move,
         "defer": cmd_defer,
         "done": cmd_done,

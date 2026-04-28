@@ -1668,3 +1668,130 @@ def test_todo_crud_move_wip_with_override_succeeds(tmp_path):
         "--skip-estimated-check",
     ], capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
+
+
+# Task 38: edit subcommand
+
+
+def test_todo_crud_edit_estimated_min(tmp_path):
+    """edit --estimated-min: NULL이던 필드를 60으로 변경."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "edit", "--id", str(tid), "--estimated-min", "60",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["estimated_min"] == 60
+    assert out["title"] == "t"  # 다른 필드 유지
+
+
+def test_todo_crud_edit_multiple_fields(tmp_path):
+    """edit: 여러 필드 동시 수정. 명시 안 한 필드는 보존."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {
+            "title": "원래 제목", "done_definition": "원래 정의",
+            "category": "업무", "estimated_min": 30,
+        })
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "edit", "--id", str(tid),
+        "--estimated-min", "120", "--deadline", "2026-05-01", "--priority", "1",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["estimated_min"] == 120
+    assert out["deadline"] == "2026-05-01"
+    assert out["priority"] == 1
+    assert out["title"] == "원래 제목"  # 보존
+    assert out["done_definition"] == "원래 정의"  # 보존
+    assert out["category"] == "업무"  # 보존
+
+
+def test_todo_crud_edit_missing_todo(tmp_path):
+    """존재하지 않는 id → 에러."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    r = subprocess.run([
+        "python3", str(script), "edit", "--id", "99999", "--estimated-min", "60",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "not found" in r.stderr.lower() or "99999" in r.stderr
+
+
+def test_todo_crud_edit_no_fields_specified(tmp_path):
+    """수정할 필드 하나도 안 주면 에러 (no-op 차단)."""
+    import subprocess, os
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "edit", "--id", str(tid),
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode != 0
+    assert "field" in r.stderr.lower() or "no" in r.stderr.lower()
+
+
+def test_todo_crud_edit_project_resolves_to_id(tmp_path):
+    """edit --project NAME: project_id로 변환되어 저장."""
+    import subprocess, os, json
+    repo = Path(__file__).resolve().parents[3]
+    script = repo / "plugins/life-management/skills/life-coach/scripts/todo_crud.py"
+    db_path = tmp_path / "test.db"
+    env = {**os.environ, "LIFE_DASHBOARD_DB": str(db_path)}
+    sys.path.insert(0, str(repo / "mcp/life-dashboard"))
+    from db import get_conn, upsert_todo
+    os.environ["LIFE_DASHBOARD_DB"] = str(db_path)
+    conn = get_conn()
+    try:
+        tid = upsert_todo(conn, {"title": "t", "done_definition": "d", "category": "업무"})
+        conn.commit()
+    finally:
+        conn.close()
+    del os.environ["LIFE_DASHBOARD_DB"]
+    r = subprocess.run([
+        "python3", str(script), "edit", "--id", str(tid),
+        "--project", "큐브 백엔드",
+    ], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["project_name"] == "큐브 백엔드"
