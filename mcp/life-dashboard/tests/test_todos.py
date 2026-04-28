@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from db import upsert_schedule, get_schedule, get_schedules_by_date, delete_schedule
+from db import upsert_schedule, get_schedule, get_schedules_by_date, delete_schedule, link_schedule_actual, upsert_todo
 
 
 def _setup_db():
@@ -803,5 +803,96 @@ def test_delete_schedule_missing_returns_false():
     conn = _setup_db()
     try:
         assert delete_schedule(conn, 99999) is False
+    finally:
+        conn.close()
+
+
+def test_link_schedule_actual_reads_from_tasks():
+    """wrapper가 task에서 date/duration/summary/repo 자동 조회 → snapshot 저장."""
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=120)
+        cur = conn.execute(
+            "INSERT INTO tasks (date, tag, summary, repo, duration_min) VALUES (?, ?, ?, ?, ?)",
+            ("2026-04-28", "구현", "implement X", "repo Y", 90),
+        )
+        task_id = cur.lastrowid
+        actual_id = link_schedule_actual(conn, schedule_id=sid, task_id=task_id)
+        conn.commit()
+        rows = conn.execute(
+            "SELECT * FROM todo_schedule_actuals WHERE id = ?", (actual_id,)
+        ).fetchall()
+        assert len(rows) == 1
+        a = dict(rows[0])
+        assert a["source_date"] == "2026-04-28"
+        assert a["source_summary"] == "implement X"
+        assert a["source_repo"] == "repo Y"
+        assert a["duration_min_snapshot"] == 90
+        assert a["source_task_id"] == task_id
+    finally:
+        conn.close()
+
+
+def test_link_schedule_actual_rejects_date_mismatch():
+    """task.date != schedule.date면 ValueError."""
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=120)
+        cur = conn.execute(
+            "INSERT INTO tasks (date, tag, summary, duration_min) VALUES (?, ?, ?, ?)",
+            ("2026-04-27", "구현", "wrong day task", 60),
+        )
+        task_id = cur.lastrowid
+        with pytest.raises(ValueError, match="date mismatch"):
+            link_schedule_actual(conn, schedule_id=sid, task_id=task_id)
+    finally:
+        conn.close()
+
+
+def test_link_schedule_actual_missing_schedule_raises():
+    """존재하지 않는 schedule_id는 ValueError."""
+    conn = _setup_db()
+    try:
+        with pytest.raises(ValueError, match="schedule_id"):
+            link_schedule_actual(conn, schedule_id=99999, task_id=1)
+    finally:
+        conn.close()
+
+
+def test_link_schedule_actual_missing_task_raises():
+    """존재하지 않는 task_id는 ValueError."""
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=120)
+        with pytest.raises(ValueError, match="task_id"):
+            link_schedule_actual(conn, schedule_id=sid, task_id=99999)
+    finally:
+        conn.close()
+
+
+def test_link_schedule_actual_unique_4tuple_violation():
+    """같은 (schedule_id, source_date, source_summary, source_repo) 두 번 link 시 IntegrityError."""
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=120)
+        cur = conn.execute(
+            "INSERT INTO tasks (date, tag, summary, repo, duration_min) VALUES (?, ?, ?, ?, ?)",
+            ("2026-04-28", "구현", "task A", "repo X", 30),
+        )
+        task_id_1 = cur.lastrowid
+        link_schedule_actual(conn, schedule_id=sid, task_id=task_id_1)
+        conn.commit()
+        # 동일 summary/repo 가진 두 번째 task
+        cur = conn.execute(
+            "INSERT INTO tasks (date, tag, summary, repo, duration_min) VALUES (?, ?, ?, ?, ?)",
+            ("2026-04-28", "구현", "task A", "repo X", 30),
+        )
+        task_id_2 = cur.lastrowid
+        with pytest.raises(sqlite3.IntegrityError):
+            link_schedule_actual(conn, schedule_id=sid, task_id=task_id_2)
     finally:
         conn.close()

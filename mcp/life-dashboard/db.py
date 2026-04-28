@@ -1237,3 +1237,42 @@ def get_schedules_by_date(conn: sqlite3.Connection, date: str) -> list[dict]:
         (date,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def link_schedule_actual(
+    conn: sqlite3.Connection,
+    *,
+    schedule_id: int,
+    task_id: int,
+) -> int:
+    """task에서 date/duration/summary/repo 자동 조회 → todo_schedule_actuals snapshot 저장.
+
+    - schedule_id 또는 task_id 없음 → ValueError
+    - schedule.date != task.date → ValueError("date mismatch: ...")
+    - UNIQUE (schedule_id, source_date, source_summary, source_repo) 위반 → sqlite3.IntegrityError
+
+    Returns: 생성된 todo_schedule_actuals.id
+    """
+    sch = conn.execute(
+        "SELECT date FROM todo_schedules WHERE id = ?", (schedule_id,),
+    ).fetchone()
+    if not sch:
+        raise ValueError(f"schedule_id {schedule_id} not found")
+    task = conn.execute(
+        "SELECT date, summary, repo, duration_min FROM tasks WHERE id = ?", (task_id,),
+    ).fetchone()
+    if not task:
+        raise ValueError(f"task_id {task_id} not found")
+    if task["date"] != sch["date"]:
+        raise ValueError(
+            f"date mismatch: schedule.date={sch['date']} vs task.date={task['date']}"
+        )
+    cur = conn.execute(
+        """
+        INSERT INTO todo_schedule_actuals
+            (schedule_id, source_task_id, source_date, source_repo, source_summary, duration_min_snapshot)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (schedule_id, task_id, task["date"], task["repo"], task["summary"], task["duration_min"]),
+    )
+    return cur.lastrowid
