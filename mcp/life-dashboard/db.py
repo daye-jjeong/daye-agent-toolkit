@@ -137,6 +137,11 @@ def _migrate(conn: sqlite3.Connection):
         conn.commit()
 
     # daily_checkins additive: capacity columns
+    # NOTE: SQLite ALTER TABLE ADD COLUMN cannot add CHECK constraints.
+    # Fresh DBs (via schema.sql CREATE) get full constraints (energy IN low/mid/high,
+    # *_status IN answered/skipped/unknown). Migrated DBs (via this ALTER) get the
+    # columns without CHECK — relying on app-layer validation in upsert_daily_checkin
+    # and wrapper scripts to enforce valid values. This is an intentional trade-off.
     try:
         dc_cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_checkins)").fetchall()}
         if dc_cols and "available_min" not in dc_cols:

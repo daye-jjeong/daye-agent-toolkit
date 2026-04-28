@@ -2,6 +2,7 @@
 import json
 import sqlite3
 import sys
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -76,7 +77,6 @@ def test_get_todos_filter_by_status_and_category():
 
 
 def test_update_todo_status_done_definition_required():
-    import pytest
     from db import upsert_todo, update_todo_status
     conn = _setup_db()
     tid = upsert_todo(conn, {"title": "준비 안 됨"})  # done_definition null
@@ -87,7 +87,6 @@ def test_update_todo_status_done_definition_required():
 
 
 def test_update_todo_status_wip_limit():
-    import pytest
     from db import upsert_todo, update_todo_status, get_todos
     conn = _setup_db()
     ids = [upsert_todo(conn, {"title": f"t{i}", "done_definition": "x"}) for i in range(3)]
@@ -309,7 +308,6 @@ def test_daily_checkin_missing_wip_ids():
 
 def test_daily_checkins_has_capacity_columns():
     """daily_checkins에 available_min, energy, blockers + 3 status 컬럼 있어야 함"""
-    import pytest
     conn = _setup_db()
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_checkins)").fetchall()}
@@ -325,7 +323,6 @@ def test_daily_checkins_has_capacity_columns():
 
 def test_daily_checkins_status_check_constraint():
     """status 컬럼 CHECK 제약 — invalid 값 거부"""
-    import pytest
     conn = _setup_db()
     try:
         with pytest.raises(sqlite3.IntegrityError):
@@ -341,7 +338,6 @@ def test_daily_checkins_status_check_constraint():
 
 def test_daily_checkins_energy_check_constraint():
     """energy CHECK — low/mid/high만 허용"""
-    import pytest
     conn = _setup_db()
     try:
         with pytest.raises(sqlite3.IntegrityError):
@@ -352,4 +348,72 @@ def test_daily_checkins_energy_check_constraint():
             conn.commit()
     finally:
         conn.rollback()
+        conn.close()
+
+
+def test_daily_checkins_migration_alter_adds_capacity_columns():
+    """기존 DB (4컬럼만 있는 daily_checkins)에 _migrate 호출 시 ALTER가 6 캐파 컬럼 추가."""
+    from db import _migrate
+
+    conn = sqlite3.connect(":memory:")
+    try:
+        # Old schema (4 columns, no capacity columns)
+        conn.executescript("""
+            CREATE TABLE daily_checkins (
+                date TEXT PRIMARY KEY,
+                morning_wip_ids TEXT,
+                morning_intent TEXT,
+                evening_reflection TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                repo TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                UNIQUE(name, repo)
+            );
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                tag TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                repo TEXT,
+                segments TEXT NOT NULL DEFAULT '[]',
+                duration_min INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'completed',
+                follow_up TEXT,
+                project_id INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+            );
+            CREATE TABLE todos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                done_definition TEXT,
+                status TEXT NOT NULL DEFAULT 'backlog',
+                priority INTEGER,
+                project_id INTEGER,
+                parent_id INTEGER,
+                category TEXT,
+                quarter TEXT,
+                deadline TEXT,
+                estimated_min INTEGER,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                started_at TEXT,
+                done_at TEXT,
+                deferred_reason TEXT
+            );
+        """)
+
+        _migrate(conn)
+
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_checkins)").fetchall()}
+        for c in ["available_min", "energy", "blockers",
+                  "available_status", "energy_status", "blockers_status"]:
+            assert c in cols, f"migration missing column: {c}"
+    finally:
         conn.close()
