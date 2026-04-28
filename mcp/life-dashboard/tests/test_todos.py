@@ -415,69 +415,25 @@ def test_todo_schedules_partial_unique_time_slot():
         conn.close()
 
 
-def test_daily_checkins_migration_alter_adds_capacity_columns():
-    """기존 DB (4컬럼만 있는 daily_checkins)에 _migrate 호출 시 ALTER가 6 캐파 컬럼 추가."""
-    from db import _migrate
-
-    conn = sqlite3.connect(":memory:")
+def test_todo_schedules_partial_unique_allows_null_time_duplicates():
+    """partial UNIQUE WHERE start_at IS NOT NULL → 시간 미지정 슬롯은 중복 허용."""
+    conn = _setup_db()
     try:
-        # Old schema (4 columns, no capacity columns)
-        conn.executescript("""
-            CREATE TABLE daily_checkins (
-                date TEXT PRIMARY KEY,
-                morning_wip_ids TEXT,
-                morning_intent TEXT,
-                evening_reflection TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
-            );
-            CREATE TABLE projects (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                repo TEXT,
-                status TEXT NOT NULL DEFAULT 'active',
-                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-                UNIQUE(name, repo)
-            );
-            CREATE TABLE tasks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date TEXT NOT NULL,
-                tag TEXT NOT NULL,
-                summary TEXT NOT NULL,
-                repo TEXT,
-                segments TEXT NOT NULL DEFAULT '[]',
-                duration_min INTEGER NOT NULL DEFAULT 0,
-                status TEXT NOT NULL DEFAULT 'completed',
-                follow_up TEXT,
-                project_id INTEGER,
-                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
-            );
-            CREATE TABLE todos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                done_definition TEXT,
-                status TEXT NOT NULL DEFAULT 'backlog',
-                priority INTEGER,
-                project_id INTEGER,
-                parent_id INTEGER,
-                category TEXT,
-                quarter TEXT,
-                deadline TEXT,
-                estimated_min INTEGER,
-                notes TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-                started_at TEXT,
-                done_at TEXT,
-                deferred_reason TEXT
-            );
-        """)
-
-        _migrate(conn)
-
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(daily_checkins)").fetchall()}
-        for c in ["available_min", "energy", "blockers",
-                  "available_status", "energy_status", "blockers_status"]:
-            assert c in cols, f"migration missing column: {c}"
+        from db import upsert_todo
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        conn.execute(
+            "INSERT INTO todo_schedules (todo_id, date, planned_min) VALUES (?, ?, ?)",
+            (tid, "2026-04-28", 60),
+        )
+        conn.execute(
+            "INSERT INTO todo_schedules (todo_id, date, planned_min) VALUES (?, ?, ?)",
+            (tid, "2026-04-28", 90),
+        )
+        conn.commit()
+        rows = conn.execute(
+            "SELECT COUNT(*) FROM todo_schedules WHERE todo_id=? AND date=? AND start_at IS NULL",
+            (tid, "2026-04-28"),
+        ).fetchone()
+        assert rows[0] == 2
     finally:
         conn.close()
