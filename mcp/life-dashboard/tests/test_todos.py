@@ -535,3 +535,35 @@ def test_actuals_schedule_delete_cascade():
         assert len(rows) == 0
     finally:
         conn.close()
+
+
+def test_actuals_unique_4_tuple_null_repo_allows_duplicates():
+    """SQLite NULL semantics: source_repo=NULL인 두 행은 UNIQUE 충돌 안 함.
+    의도된 동작 — work-digest 외부 활동(repo 미부여)이 같은 summary로 여러 번 들어와도
+    각각 독립 snapshot으로 보관. 추가 dedup이 필요하면 wrapper 단에서 pre-check.
+    """
+    conn = _setup_db()
+    try:
+        from db import upsert_todo
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        cur = conn.execute(
+            "INSERT INTO todo_schedules (todo_id, date, planned_min) VALUES (?, ?, ?)",
+            (tid, "2026-04-28", 60),
+        )
+        sid = cur.lastrowid
+        conn.execute(
+            "INSERT INTO todo_schedule_actuals (schedule_id, source_date, source_summary, source_repo, duration_min_snapshot) VALUES (?, ?, ?, ?, ?)",
+            (sid, "2026-04-28", "general work", None, 30),
+        )
+        conn.execute(
+            "INSERT INTO todo_schedule_actuals (schedule_id, source_date, source_summary, source_repo, duration_min_snapshot) VALUES (?, ?, ?, ?, ?)",
+            (sid, "2026-04-28", "general work", None, 45),
+        )
+        conn.commit()
+        rows = conn.execute(
+            "SELECT COUNT(*) FROM todo_schedule_actuals WHERE schedule_id=? AND source_repo IS NULL",
+            (sid,),
+        ).fetchone()
+        assert rows[0] == 2, "NULL repo 행은 중복 허용되어야 함"
+    finally:
+        conn.close()

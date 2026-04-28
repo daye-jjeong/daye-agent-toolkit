@@ -151,6 +151,7 @@ CREATE INDEX IF NOT EXISTS idx_schedule_actuals_schedule ON todo_schedule_actual
 - `source_*` 4개 컬럼이 immutable snapshot identity 역할 — task 재생성과 무관하게 actual은 사용자가 확정한 시점의 값으로 freeze
 - `source_task_id`는 NULL 허용 + FK 없음. 단순 참고용
 - UNIQUE 키는 `(schedule_id, source_date, source_summary, source_repo)` — 같은 schedule에 같은 task 중복 매핑 차단
+- **NULL repo 동작**: SQLite UNIQUE는 NULL을 distinct로 취급. `source_repo=NULL`인 행끼리는 UNIQUE 충돌 안 함 — 의도된 동작 (work-digest 외부 활동, repo 미부여 task가 같은 summary여도 독립 snapshot). 추가 dedup이 필요하면 wrapper 단(`schedule_actual_link.py`)에서 pre-check로 처리.
 - schedule 삭제 시에는 actual도 같이 삭제 (`schedule_id` ON DELETE CASCADE — 정상 흐름)
 - wrapper가 `duration_min_snapshot`, `source_date`, `source_summary`, `source_repo`를 모두 task table에서 직접 조회 후 snapshot (에이전트 입력 X)
 
