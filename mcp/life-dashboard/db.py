@@ -1293,3 +1293,90 @@ def link_schedule_actual(
         (schedule_id, task_id, task["date"], task["repo"], task["summary"], task["duration_min"]),
     )
     return cur.lastrowid
+
+
+# ---------------------------------------------------------------------------
+# Capacity reconciliation helpers
+# ---------------------------------------------------------------------------
+
+def _hhmm_to_min(s: str) -> int:
+    """'HH:MM' 문자열을 분 단위 정수로 변환."""
+    h, m = s.split(":")
+    return int(h) * 60 + int(m)
+
+
+def _time_overlap_min(a_start: str, a_end: str, b_start: str, b_end: str) -> int:
+    """[a_start, a_end), [b_start, b_end) 두 구간의 겹치는 분 (음수면 0)."""
+    a0, a1 = _hhmm_to_min(a_start), _hhmm_to_min(a_end)
+    b0, b1 = _hhmm_to_min(b_start), _hhmm_to_min(b_end)
+    return max(0, min(a1, b1) - max(a0, b0))
+
+
+def get_capacity_status(conn: sqlite3.Connection, date: str) -> dict:
+    """Reconcile capacity for a date. 4-way 진단 dict 반환.
+
+    필드:
+    - available_min, available_status (daily_checkin)
+    - planned_min_total: schedule 합
+    - actual_min_total: actual 합 (JOIN)
+    - planned_overbook: planned > budget
+    - actual_overrun: actual > budget
+    - time_conflicts: [{a_id, b_id, overlap_min}, ...]
+    - missing_budget: schedule 있지만 budget 모름 (available_min IS NULL)
+    - remaining_min: budget - planned (None if no budget)
+    - schedules: 그 날 schedule list
+    """
+    ck = conn.execute(
+        "SELECT available_min, available_status FROM daily_checkins WHERE date = ?",
+        (date,),
+    ).fetchone()
+    available_min = ck["available_min"] if ck else None
+    available_status = ck["available_status"] if ck else "unknown"
+
+    schedules = [dict(r) for r in conn.execute(
+        """
+        SELECT * FROM todo_schedules
+        WHERE date = ?
+        ORDER BY start_at IS NULL, start_at, id
+        """,
+        (date,),
+    ).fetchall()]
+
+    planned_total = sum(s["planned_min"] for s in schedules)
+
+    actual_row = conn.execute(
+        """
+        SELECT COALESCE(SUM(a.duration_min_snapshot), 0)
+        FROM todo_schedule_actuals a
+        JOIN todo_schedules s ON s.id = a.schedule_id
+        WHERE s.date = ?
+        """,
+        (date,),
+    ).fetchone()
+    actual_total = actual_row[0] if actual_row else 0
+
+    timed = [s for s in schedules if s["start_at"] and s["end_at"]]
+    conflicts = []
+    for i, a in enumerate(timed):
+        for b in timed[i + 1:]:
+            ov = _time_overlap_min(a["start_at"], a["end_at"], b["start_at"], b["end_at"])
+            if ov > 0:
+                conflicts.append({"a_id": a["id"], "b_id": b["id"], "overlap_min": ov})
+
+    planned_overbook = available_min is not None and planned_total > available_min
+    actual_overrun = available_min is not None and actual_total > available_min
+    missing_budget = available_min is None and len(schedules) > 0
+    remaining = (available_min - planned_total) if available_min is not None else None
+
+    return {
+        "available_min": available_min,
+        "available_status": available_status,
+        "planned_min_total": planned_total,
+        "actual_min_total": actual_total,
+        "planned_overbook": planned_overbook,
+        "actual_overrun": actual_overrun,
+        "time_conflicts": conflicts,
+        "missing_budget": missing_budget,
+        "remaining_min": remaining,
+        "schedules": schedules,
+    }

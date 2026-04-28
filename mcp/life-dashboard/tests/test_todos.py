@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from db import upsert_schedule, get_schedule, get_schedules_by_date, delete_schedule, link_schedule_actual, upsert_todo, get_daily_checkins
+from db import upsert_schedule, get_schedule, get_schedules_by_date, delete_schedule, link_schedule_actual, upsert_todo, get_daily_checkins, get_capacity_status
 
 
 def _setup_db():
@@ -934,5 +934,112 @@ def test_get_daily_checkins_orders_asc():
         conn.commit()
         rows = get_daily_checkins(conn, "2026-04-20", "2026-04-30")
         assert [r["date"] for r in rows] == ["2026-04-25", "2026-04-26"]
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# get_capacity_status
+# ---------------------------------------------------------------------------
+
+def test_capacity_status_under_budget():
+    """planned_total < available_min → planned_overbook False, missing_budget False."""
+    conn = _setup_db()
+    try:
+        from db import upsert_daily_checkin
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        upsert_daily_checkin(conn, "2026-04-28", available_min=300, available_status="answered")
+        upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=120)
+        conn.commit()
+        st = get_capacity_status(conn, "2026-04-28")
+        assert st["available_min"] == 300
+        assert st["planned_min_total"] == 120
+        assert st["planned_overbook"] is False
+        assert st["missing_budget"] is False
+        assert st["remaining_min"] == 180
+    finally:
+        conn.close()
+
+
+def test_capacity_status_planned_overbook():
+    """planned_total > available_min → planned_overbook True."""
+    conn = _setup_db()
+    try:
+        from db import upsert_daily_checkin
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        upsert_daily_checkin(conn, "2026-04-28", available_min=120, available_status="answered")
+        upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=180)
+        conn.commit()
+        st = get_capacity_status(conn, "2026-04-28")
+        assert st["planned_overbook"] is True
+        assert st["remaining_min"] == -60
+    finally:
+        conn.close()
+
+
+def test_capacity_status_actual_overrun():
+    """actual_total > available_min → actual_overrun True."""
+    conn = _setup_db()
+    try:
+        from db import upsert_daily_checkin
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        upsert_daily_checkin(conn, "2026-04-28", available_min=100, available_status="answered")
+        sid = upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=60)
+        conn.execute(
+            "INSERT INTO tasks (date, tag, summary, repo, duration_min) VALUES (?, ?, ?, ?, ?)",
+            ("2026-04-28", "구현", "task A", "repo X", 150),
+        )
+        task_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        link_schedule_actual(conn, schedule_id=sid, task_id=task_id)
+        conn.commit()
+        st = get_capacity_status(conn, "2026-04-28")
+        assert st["actual_min_total"] == 150
+        assert st["actual_overrun"] is True
+    finally:
+        conn.close()
+
+
+def test_capacity_status_time_conflicts():
+    """겹치는 시간 슬롯 두 개 → time_conflicts 1개, overlap_min 정확."""
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        upsert_schedule(conn, todo_id=tid, date="2026-04-28", start_at="14:00", end_at="16:00", planned_min=120)
+        upsert_schedule(conn, todo_id=tid, date="2026-04-28", start_at="15:30", end_at="17:00", planned_min=90)
+        conn.commit()
+        st = get_capacity_status(conn, "2026-04-28")
+        assert len(st["time_conflicts"]) == 1
+        assert st["time_conflicts"][0]["overlap_min"] == 30
+    finally:
+        conn.close()
+
+
+def test_capacity_status_missing_budget():
+    """schedule 있고 available_min NULL이면 missing_budget=True, remaining_min=None."""
+    conn = _setup_db()
+    try:
+        tid = upsert_todo(conn, {"title": "t1", "done_definition": "d", "category": "업무"})
+        upsert_schedule(conn, todo_id=tid, date="2026-04-28", planned_min=60)
+        conn.commit()
+        st = get_capacity_status(conn, "2026-04-28")
+        assert st["missing_budget"] is True
+        assert st["available_status"] == "unknown"
+        assert st["remaining_min"] is None
+    finally:
+        conn.close()
+
+
+def test_capacity_status_no_schedules_no_conflict_no_missing():
+    """schedule 없으면 time_conflicts 빈 리스트, missing_budget False."""
+    conn = _setup_db()
+    try:
+        from db import upsert_daily_checkin
+        upsert_daily_checkin(conn, "2026-04-28", available_min=300, available_status="answered")
+        conn.commit()
+        st = get_capacity_status(conn, "2026-04-28")
+        assert st["planned_min_total"] == 0
+        assert st["time_conflicts"] == []
+        assert st["missing_budget"] is False
+        assert st["schedules"] == []
     finally:
         conn.close()
