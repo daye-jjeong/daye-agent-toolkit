@@ -50,3 +50,53 @@ def split_tracks(data: bytes) -> list[bytes]:
     if len(chunks) != ntrks:
         raise ValueError(f"MTrk 수 {len(chunks)} ≠ 헤더 선언 {ntrks}")
     return chunks
+
+
+def extract_notes(chunk: bytes) -> tuple[list[tuple[int, int, int]], dict]:
+    """트랙 청크 → ([(start,dur,pitch)], stats). 손실 통계 명시."""
+    pos = abs_tick = status = 0
+    pending: dict[int, list[int]] = {}
+    notes: list[tuple[int, int, int]] = []
+    stats = {"unmatched_on": 0, "unmatched_off": 0, "skipped_events": 0}
+    n = len(chunk)
+    while pos < n:
+        delta, pos = read_vlq(chunk, pos)
+        abs_tick += delta
+        b = chunk[pos]
+        if b & 0x80:
+            status = b
+            pos += 1
+        ev = status & 0xF0
+        if ev in (0x80, 0x90):
+            pitch, vel = chunk[pos], chunk[pos + 1]
+            pos += 2
+            if ev == 0x90 and vel > 0:
+                pending.setdefault(pitch, []).append(abs_tick)
+            else:
+                if pending.get(pitch):
+                    start = pending[pitch].pop(0)
+                    notes.append((start, abs_tick - start, pitch))
+                else:
+                    stats["unmatched_off"] += 1
+        elif ev in (0xA0, 0xB0, 0xE0):
+            pos += 2
+            stats["skipped_events"] += 1
+        elif ev in (0xC0, 0xD0):
+            pos += 1
+            stats["skipped_events"] += 1
+        elif status == 0xFF:
+            mtype = chunk[pos]
+            pos += 1
+            mlen, pos = read_vlq(chunk, pos)
+            pos += mlen
+            if mtype == 0x2F:
+                break  # EOT는 구조 마커 — 변환 손실 아니므로 skipped 제외
+            stats["skipped_events"] += 1
+        elif status in (0xF0, 0xF7):
+            slen, pos = read_vlq(chunk, pos)
+            pos += slen
+            stats["skipped_events"] += 1
+        else:
+            raise ValueError(f"미지원 상태 바이트 {status:#x} @ {pos}")
+    stats["unmatched_on"] = sum(len(v) for v in pending.values())
+    return notes, stats

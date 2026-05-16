@@ -62,3 +62,37 @@ def test_split_tracks_raises_on_ntrks_mismatch():
                    ntrks=2)
     with pytest.raises(ValueError):
         split_tracks(smf)
+
+from midi_to_mml import extract_notes
+
+def test_extract_single_note_and_clean_stats():
+    smf = make_smf(480, [(0, b"\x90\x3C\x40"), (480, b"\x80\x3C\x40")])
+    notes, stats = extract_notes(split_tracks(smf)[0])
+    assert notes == [(0, 480, 60)]
+    assert stats == {"unmatched_on": 0, "unmatched_off": 0,
+                     "skipped_events": 0}
+
+def test_vel0_noteon_is_off():
+    smf = make_smf(480, [(0, b"\x90\x3C\x40"), (240, b"\x90\x3C\x00")])
+    notes, _ = extract_notes(split_tracks(smf)[0])
+    assert notes == [(0, 240, 60)]
+
+def test_running_status():
+    smf = make_smf(480, [(0, b"\x90\x3C\x40"), (0, b"\x3E\x40"),
+                         (480, b"\x80\x3C\x40"), (0, b"\x3E\x40")])
+    notes, _ = extract_notes(split_tracks(smf)[0])
+    assert sorted(notes) == [(0, 480, 60), (0, 480, 62)]
+
+def test_meta_and_sysex_skipped_counted():
+    smf = make_smf(480, [
+        (0, b"\xFF\x51\x03\x07\xA1\x20"),
+        (0, b"\xF0\x02\x11\xF7"),
+        (0, b"\x90\x3C\x40"), (480, b"\x80\x3C\x40")])
+    notes, stats = extract_notes(split_tracks(smf)[0])
+    assert notes == [(0, 480, 60)]
+    assert stats["skipped_events"] >= 2
+
+def test_unmatched_note_on_counted():
+    smf = make_smf(480, [(0, b"\x90\x3C\x40")])
+    notes, stats = extract_notes(split_tracks(smf)[0])
+    assert notes == [] and stats["unmatched_on"] == 1
