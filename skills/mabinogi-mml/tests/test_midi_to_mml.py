@@ -126,3 +126,18 @@ def test_near_value_snaps_with_error():
 def test_triplet_eighth_reports_error():
     s, err = ticks_to_length(160, 480)
     assert err > 0
+
+
+from midi_to_mml import midi_note_to_token
+
+def test_c4_no_shift():
+    assert midi_note_to_token(60, 4) == ("c", 4)
+
+def test_sharp():
+    assert midi_note_to_token(61, 4) == ("c+", 4)
+
+def test_octave_up():
+    assert midi_note_to_token(72, 4) == ("<c", 5)
+
+def test_octave_down_two():
+    assert midi_note_to_token(36, 4) == (">>c", 2)

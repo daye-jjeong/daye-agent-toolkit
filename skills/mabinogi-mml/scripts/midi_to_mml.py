@@ -13,6 +13,19 @@ for _b in (1, 2, 4, 8, 16, 32, 64):
     _LEN_TABLE.append((4.0 / _b * 1.5, f"{_b}."))
 
 
+_PITCH = {0:"c",1:"c+",2:"d",3:"d+",4:"e",5:"f",
+          6:"f+",7:"g",8:"g+",9:"a",10:"a+",11:"b"}
+
+
+def midi_note_to_token(pitch: int, cur_oct: int) -> tuple[str, int]:
+    """MIDI 음 → (MML 토큰, 새 옥타브). MIDI60=o4 c. OCTAVE_UP/DOWN 사용."""
+    octave = (pitch - MIDI_C4) // 12 + 4
+    name = _PITCH[(pitch - MIDI_C4) % 12]
+    diff = octave - cur_oct
+    shift = OCTAVE_UP*diff if diff > 0 else OCTAVE_DOWN*(-diff) if diff < 0 else ""
+    return shift + name, octave
+
+
 def ticks_to_length(ticks: int, ppq: int = 480) -> tuple[str, int]:
     """tick → (가장 가까운 MML 길이, 양자화 오차 tick절댓값)."""
     quarters = ticks / ppq
