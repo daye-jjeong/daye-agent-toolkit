@@ -195,3 +195,64 @@ def _extract_notes(chunk: bytes) -> tuple[list[tuple[int, int, int]], dict]:
             raise ValueError(f"미지원 상태 바이트 {status:#x} @ {pos}")
     stats["unmatched_on"] = sum(len(v) for v in pending.values())
     return notes, stats
+
+
+def convert(path: str, max_tracks: int = MAX_TRACKS,
+            ppq_override: int | None = None) -> dict:
+    """SMF → {"mml": "MML@...;", "report": {...}}. 손실 명시."""
+    with open(path, "rb") as f:
+        data = f.read()
+    _, _, ppq = parse_header(data)
+    ppq = ppq_override or ppq
+    chunks = split_tracks(data)
+    tracks_mml: list[str] = []
+    agg = {"unmatched_on": 0, "unmatched_off": 0, "skipped_events": 0}
+    quant_err = 0
+    nonempty = 0
+    for chunk in chunks:
+        raw, stats = extract_notes(chunk)
+        for k in agg:
+            agg[k] += stats[k]
+        if not raw:
+            continue
+        nonempty += 1
+        if len(tracks_mml) < max_tracks:
+            mono = reduce_polyphony(raw)
+            tracks_mml.append(notes_to_mml(mono, ppq))
+            quant_err += quantization_error(mono, ppq)
+    report = {
+        "skipped_chunks": len(chunks) - nonempty,
+        "unmatched": agg,
+        "quant_error": quant_err,
+        "tracks_used": len(tracks_mml),
+        "tracks_dropped": max(0, nonempty - len(tracks_mml)),
+    }
+    return {"mml": "MML@" + ",".join(tracks_mml) + ";", "report": report}
+
+
+def midi_to_mml(path: str, max_tracks: int = MAX_TRACKS,
+                ppq_override: int | None = None) -> str:
+    return convert(path, max_tracks, ppq_override)["mml"]
+
+
+def _main(argv: list[str]) -> int:
+    import argparse, json, sys
+    p = argparse.ArgumentParser(description="MIDI → 마비노기 모바일 MML")
+    p.add_argument("midi")
+    p.add_argument("--max-tracks", type=int, default=MAX_TRACKS)
+    p.add_argument("--ppq", type=int, default=None)
+    p.add_argument("--report", action="store_true",
+                   help="변환 리포트를 JSON으로 stdout에 추가 출력")
+    a = p.parse_args(argv)
+    r = convert(a.midi, a.max_tracks, a.ppq)
+    print(r["mml"])
+    if a.report:
+        print(json.dumps(r["report"], ensure_ascii=False))
+    else:
+        print(f"[report] {r['report']}", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(_main(sys.argv[1:]))

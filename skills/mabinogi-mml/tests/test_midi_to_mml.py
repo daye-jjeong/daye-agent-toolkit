@@ -197,3 +197,38 @@ def test_invariant_round_trip_tick_length():
 
 def test_quantization_error_zero_for_aligned_dup():
     assert quantization_error([(0,480,60),(480,240,62)], 480) == 0
+
+
+from midi_to_mml import convert, midi_to_mml
+
+def test_convert_returns_mml_and_report(tmp_path):
+    smf = make_smf(480, [(0,b"\x90\x3C\x40"),(480,b"\x80\x3C\x40")])
+    p = tmp_path/"a.mid"; p.write_bytes(smf)
+    r = convert(str(p))
+    assert r["mml"].startswith("MML@") and r["mml"].endswith(";")
+    assert set(r["report"]) >= {"skipped_chunks","unmatched","quant_error",
+                                "tracks_used","tracks_dropped"}
+
+def test_convert_caps_and_reports_dropped_tracks(tmp_path):
+    body = _vlq(0)+b"\x90\x3C\x40"+_vlq(480)+b"\x80\x3C\x40"+_vlq(0)+b"\xFF\x2F\x00"
+    chunk = b"MTrk"+struct.pack(">I",len(body))+body
+    smf = b"MThd"+struct.pack(">IHHH",6,1,8,480)+chunk*8
+    p = tmp_path/"m.mid"; p.write_bytes(smf)
+    r = convert(str(p), max_tracks=6)
+    assert r["mml"].count(",") == 5
+    assert r["report"]["tracks_used"] == 6
+    assert r["report"]["tracks_dropped"] == 2
+
+def test_midi_to_mml_returns_only_mml(tmp_path):
+    smf = make_smf(480, [(0,b"\x90\x3C\x40"),(480,b"\x80\x3C\x40")])
+    p = tmp_path/"b.mid"; p.write_bytes(smf)
+    assert midi_to_mml(str(p)).startswith("MML@")
+
+def test_cli_prints_mml_stdout(tmp_path):
+    smf = make_smf(480, [(0,b"\x90\x3C\x40"),(480,b"\x80\x3C\x40")])
+    p = tmp_path/"c.mid"; p.write_bytes(smf)
+    import subprocess
+    out = subprocess.run(["python3","scripts/midi_to_mml.py",str(p)],
+        cwd=os.path.join(os.path.dirname(__file__),".."),
+        capture_output=True,text=True)
+    assert out.returncode == 0 and out.stdout.strip().startswith("MML@")
