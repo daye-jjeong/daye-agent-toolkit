@@ -96,3 +96,30 @@ def test_unmatched_note_on_counted():
     smf = make_smf(480, [(0, b"\x90\x3C\x40")])
     notes, stats = extract_notes(split_tracks(smf)[0])
     assert notes == [] and stats["unmatched_on"] == 1
+
+
+from midi_to_mml import ticks_to_length
+
+def test_ticks_to_length_quarter():
+    # 480 ticks @ ppq=480 → 4분음표, quant_error=0
+    denom, dotted, err = ticks_to_length(480, 480)
+    assert denom == 4 and dotted is False and err == 0
+
+def test_ticks_to_length_dotted_quarter():
+    # 720 ticks @ ppq=480 → 점4분음표, quant_error=0
+    denom, dotted, err = ticks_to_length(720, 480)
+    assert denom == 4 and dotted is True and err == 0
+
+def test_ticks_to_length_whole():
+    # 1920 ticks @ ppq=480 → 온음표, quant_error=0
+    denom, dotted, err = ticks_to_length(1920, 480)
+    assert denom == 1 and dotted is False and err == 0
+
+def test_ticks_to_length_quant_error_positive():
+    # 500 ticks @ ppq=480 → 스냅=480 (4분음표), quant_error=+20
+    denom, dotted, err = ticks_to_length(500, 480)
+    assert denom == 4 and dotted is False and err == 20
+
+def test_ticks_to_length_invalid_raises():
+    with pytest.raises(ValueError):
+        ticks_to_length(0, 480)
