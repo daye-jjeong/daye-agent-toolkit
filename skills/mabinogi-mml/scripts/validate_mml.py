@@ -14,3 +14,15 @@ def parse_tracks(mml: str) -> list[str]:
     if s.endswith(";"):
         s = s[:-1]
     return s.split(",")
+
+
+def check_limits(tracks: list[str], max_tracks: int = MAX_TRACKS,
+                 max_chars: int = MAX_CHARS_PER_PART) -> list[str]:
+    """제약 위반(violations). 빈 리스트면 통과."""
+    v: list[str] = []
+    if len(tracks) > max_tracks:
+        v.append(f"트랙 수 {len(tracks)}개 — 최대 {max_tracks}개 초과")
+    for i, t in enumerate(tracks, 1):
+        if len(t) > max_chars:
+            v.append(f"트랙 {i} 글자수 {len(t)} — 파트당 최대 {max_chars} 초과")
+    return v
