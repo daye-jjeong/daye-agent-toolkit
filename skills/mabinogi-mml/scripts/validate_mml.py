@@ -1,5 +1,6 @@
 """마비노기 모바일 MML 제약 검증 + 압축 제안. stdlib only."""
 import re
+from collections import Counter
 
 MAX_TRACKS = 6
 MAX_CHARS_PER_PART = 1200  # 1200/2400 소스 상이. 보수적 기본. 게임 실측 후 조정.
@@ -28,6 +29,8 @@ def check_limits(tracks: list[str], max_tracks: int = MAX_TRACKS,
     return v
 
 
+# MML 토큰: note(음+임시표+길이+점) | rest(r+길이+점) | N명령(n+음높이+길이+점)
+# | l기본길이 | o/<>/t/v(길이 0). 매칭 안 되는 문자는 의도적으로 무시(best-effort).
 _TOKEN_RE = re.compile(
     r"(?P<note>[a-gA-G])(?P<acc>[+#-]?)(?P<len>\d*)(?P<dot>\.*)"
     r"|(?P<rest>[rR])(?P<rlen>\d*)(?P<rdot>\.*)"
@@ -38,6 +41,8 @@ _TOKEN_RE = re.compile(
 
 
 def _len_to_ticks(length: int, dots: int, ppq: int) -> int:
+    if length <= 0:
+        return 0  # malformed length token (l0/c0) contributes 0 ticks
     base = (4 * ppq) // length
     total = add = base
     for _ in range(dots):
@@ -92,7 +97,6 @@ def suggest_compression(track: str) -> list[str]:
     out: list[str] = []
     lengths = re.findall(r"[a-gA-G][+#-]?(\d+)", track)
     if lengths:
-        from collections import Counter
         common, cnt = Counter(lengths).most_common(1)[0]
         if cnt >= 4:
             out.append(f"길이 {common} {cnt}회 — `l{common}` 기본길이로 절약")
@@ -128,8 +132,11 @@ def _main(argv: list[str]) -> int:
     a = p.parse_args(argv)
     text = a.mml
     if text.startswith("@"):
-        with open(text[1:], encoding="utf-8") as f:
-            text = f.read().strip()
+        try:
+            with open(text[1:], encoding="utf-8") as f:
+                text = f.read().strip()
+        except OSError as e:
+            p.error(f"파일 읽기 실패: {e}")
     rep = validate(text, a.max_tracks, a.max_chars, a.ppq, a.strict)
     if a.json:
         print(json.dumps(rep, ensure_ascii=False))

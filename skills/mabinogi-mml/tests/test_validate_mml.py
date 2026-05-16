@@ -92,3 +92,23 @@ def test_cli_exit_code_and_json():
         capture_output=True, text=True)
     assert out.returncode == 1
     assert json.loads(out.stdout)["ok"] is False
+
+def test_tick_length_zero_length_token_is_zero_not_crash():
+    assert track_tick_length("l0c", 480) == 0
+    assert track_tick_length("c0d4", 480) == 480  # c0 → 0 tick, d4 → 480
+
+def test_cli_malformed_zero_length_exits_gracefully():
+    out = subprocess.run(
+        ["python3", "scripts/validate_mml.py", "MML@l0cdef,cdef;"],
+        cwd=os.path.join(os.path.dirname(__file__), ".."),
+        capture_output=True, text=True)
+    assert out.returncode in (0, 1)          # graceful, not 1-from-traceback
+    assert "Traceback" not in out.stderr
+
+def test_cli_missing_at_file_clean_error():
+    out = subprocess.run(
+        ["python3", "scripts/validate_mml.py", "@/nonexistent_xyz.mml"],
+        cwd=os.path.join(os.path.dirname(__file__), ".."),
+        capture_output=True, text=True)
+    assert out.returncode == 2
+    assert "Traceback" not in out.stderr
