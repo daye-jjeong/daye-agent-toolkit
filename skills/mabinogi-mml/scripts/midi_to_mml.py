@@ -209,6 +209,7 @@ def convert(path: str, max_tracks: int = MAX_TRACKS,
     agg = {"unmatched_on": 0, "unmatched_off": 0, "skipped_events": 0}
     quant_err = 0
     nonempty = 0
+    poly_dropped = 0
     for chunk in chunks:
         raw, stats = extract_notes(chunk)
         for k in agg:
@@ -218,6 +219,7 @@ def convert(path: str, max_tracks: int = MAX_TRACKS,
         nonempty += 1
         if len(tracks_mml) < max_tracks:
             mono = reduce_polyphony(raw)
+            poly_dropped += max(0, len(raw) - len(mono))
             tracks_mml.append(notes_to_mml(mono, ppq))
             quant_err += quantization_error(mono, ppq)
     report = {
@@ -226,6 +228,7 @@ def convert(path: str, max_tracks: int = MAX_TRACKS,
         "quant_error": quant_err,
         "tracks_used": len(tracks_mml),
         "tracks_dropped": max(0, nonempty - len(tracks_mml)),
+        "notes_dropped_polyphony": poly_dropped,
     }
     return {"mml": "MML@" + ",".join(tracks_mml) + ";", "report": report}
 

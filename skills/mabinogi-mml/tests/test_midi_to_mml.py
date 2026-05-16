@@ -232,3 +232,32 @@ def test_cli_prints_mml_stdout(tmp_path):
         cwd=os.path.join(os.path.dirname(__file__),".."),
         capture_output=True,text=True)
     assert out.returncode == 0 and out.stdout.strip().startswith("MML@")
+
+
+def test_convert_reports_polyphony_dropped(tmp_path):
+    # 한 트랙에 동시 3음(60,64,67) → reduce_polyphony가 2음 버림
+    body = (_vlq(0)+b"\x90\x3C\x40" + _vlq(0)+b"\x90\x40\x40" + _vlq(0)+b"\x90\x43\x40"
+            + _vlq(480)+b"\x80\x3C\x40" + _vlq(0)+b"\x80\x40\x40" + _vlq(0)+b"\x80\x43\x40"
+            + _vlq(0)+b"\xFF\x2F\x00")
+    chunk = b"MTrk"+struct.pack(">I",len(body))+body
+    smf = b"MThd"+struct.pack(">IHHH",6,0,1,480)+chunk
+    p = tmp_path/"poly.mid"; p.write_bytes(smf)
+    r = convert(str(p))
+    assert r["report"]["notes_dropped_polyphony"] == 2
+
+
+def test_convert_format1_multitrack_with_meta(tmp_path):
+    def mk(track_bytes):
+        return b"MTrk"+struct.pack(">I",len(track_bytes))+track_bytes
+    t1 = (_vlq(0)+b"\xFF\x51\x03\x07\xA1\x20"            # tempo meta
+          + _vlq(0)+b"\x90\x3C\x40" + _vlq(480)+b"\x80\x3C\x40"
+          + _vlq(0)+b"\xFF\x2F\x00")
+    t2 = (_vlq(0)+b"\x90\x40\x40" + _vlq(480)+b"\x80\x40\x40"
+          + _vlq(0)+b"\xFF\x2F\x00")
+    smf = b"MThd"+struct.pack(">IHHH",6,1,2,480)+mk(t1)+mk(t2)
+    p = tmp_path/"f1.mid"; p.write_bytes(smf)
+    r = convert(str(p))
+    assert r["mml"].startswith("MML@") and r["mml"].count(",") == 1  # 2 tracks
+    assert r["report"]["tracks_used"] == 2
+    assert r["report"]["skipped_chunks"] == 0
+    assert r["report"]["unmatched"] == {"unmatched_on":0,"unmatched_off":0,"skipped_events":1}
