@@ -247,7 +247,10 @@ def _main(argv: list[str]) -> int:
     p.add_argument("--report", action="store_true",
                    help="변환 리포트를 JSON으로 stdout에 추가 출력")
     a = p.parse_args(argv)
-    r = convert(a.midi, a.max_tracks, a.ppq)
+    try:
+        r = convert(a.midi, a.max_tracks, a.ppq)
+    except (ValueError, OSError) as e:
+        p.error(str(e))
     print(r["mml"])
     if a.report:
         print(json.dumps(r["report"], ensure_ascii=False))

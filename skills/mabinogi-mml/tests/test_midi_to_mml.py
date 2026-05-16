@@ -246,6 +246,16 @@ def test_convert_reports_polyphony_dropped(tmp_path):
     assert r["report"]["notes_dropped_polyphony"] == 2
 
 
+def test_cli_corrupt_midi_clean_error(tmp_path):
+    bad = tmp_path/"bad.mid"; bad.write_bytes(b"NOT A MIDI FILE")
+    import subprocess
+    out = subprocess.run(["python3","scripts/midi_to_mml.py",str(bad)],
+        cwd=os.path.join(os.path.dirname(__file__),".."),
+        capture_output=True, text=True)
+    assert out.returncode == 2
+    assert "Traceback" not in out.stderr
+
+
 def test_convert_format1_multitrack_with_meta(tmp_path):
     def mk(track_bytes):
         return b"MTrk"+struct.pack(">I",len(track_bytes))+track_bytes
