@@ -26,3 +26,49 @@ def check_limits(tracks: list[str], max_tracks: int = MAX_TRACKS,
         if len(t) > max_chars:
             v.append(f"트랙 {i} 글자수 {len(t)} — 파트당 최대 {max_chars} 초과")
     return v
+
+
+_TOKEN_RE = re.compile(
+    r"(?P<note>[a-gA-G])(?P<acc>[+#-]?)(?P<len>\d*)(?P<dot>\.*)"
+    r"|(?P<rest>[rR])(?P<rlen>\d*)(?P<rdot>\.*)"
+    r"|[nN](?P<npitch>\d+)(?P<nlen>\d*)(?P<ndot>\.*)"
+    r"|[lL](?P<ldef>\d+)"
+    r"|[oO]\d+|[<>]|[tT]\d+|[vV]\d+"
+)
+
+
+def _len_to_ticks(length: int, dots: int, ppq: int) -> int:
+    base = (4 * ppq) // length
+    total = add = base
+    for _ in range(dots):
+        add //= 2
+        total += add
+    return total
+
+
+def track_tick_length(track: str, ppq: int = 480) -> int:
+    """총 연주 길이(tick). l 기본길이/점음표/쉼표/N명령 반영. o<>tv는 0."""
+    cur_l = MABI_DEFAULTS["l"]
+    total = 0
+    for m in _TOKEN_RE.finditer(track):
+        if m.group("ldef"):
+            cur_l = int(m.group("ldef"))
+        elif m.group("note"):
+            ln = int(m.group("len")) if m.group("len") else cur_l
+            total += _len_to_ticks(ln, len(m.group("dot")), ppq)
+        elif m.group("rest"):
+            ln = int(m.group("rlen")) if m.group("rlen") else cur_l
+            total += _len_to_ticks(ln, len(m.group("rdot")), ppq)
+        elif m.group("npitch"):
+            ln = int(m.group("nlen")) if m.group("nlen") else cur_l
+            total += _len_to_ticks(ln, len(m.group("ndot")), ppq)
+    return total
+
+
+def check_desync(tracks: list[str], ppq: int = 480) -> list[str]:
+    """트랙 길이 불일치 = warning(곡 구조상 정상일 수 있음, hard-fail 아님)."""
+    lengths = [track_tick_length(t, ppq) for t in tracks if t.strip()]
+    if len(set(lengths)) > 1:
+        return [f"트랙 길이 불일치(디싱크 가능, 인트로/아웃트로면 정상): "
+                f"{lengths} tick — --strict 시 위반 처리"]
+    return []
