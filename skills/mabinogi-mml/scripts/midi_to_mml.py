@@ -34,6 +34,12 @@ def ticks_to_length(ticks: int, ppq: int = 480) -> tuple[str, int]:
     return label, err
 
 
+def quantization_error(notes: list[tuple[int, int, int]],
+                       ppq: int = 480) -> int:
+    """각 음표 duration 양자화 오차 합(tick). 변환 손실 리포트용."""
+    return sum(ticks_to_length(d, ppq)[1] for _, d, _ in notes)
+
+
 def read_vlq(data: bytes, pos: int) -> tuple[int, int]:
     """가변길이 수량 → (value, next_pos)."""
     value = 0

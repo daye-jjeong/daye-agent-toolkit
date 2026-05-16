@@ -141,3 +141,12 @@ def test_octave_up():
 
 def test_octave_down_two():
     assert midi_note_to_token(36, 4) == (">>c", 2)
+
+
+from midi_to_mml import quantization_error
+
+def test_quantization_error_zero_for_aligned():
+    assert quantization_error([(0,480,60),(480,240,62)], 480) == 0
+
+def test_quantization_error_positive_for_triplet():
+    assert quantization_error([(0,160,60)], 480) > 0
