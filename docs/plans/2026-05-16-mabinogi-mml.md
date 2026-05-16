@@ -673,9 +673,9 @@ def extract_notes(chunk: bytes) -> tuple[list[tuple[int, int, int]], dict]:
             pos += 1
             mlen, pos = read_vlq(chunk, pos)
             pos += mlen
-            stats["skipped_events"] += 1
             if mtype == 0x2F:
-                break
+                break  # EOT는 구조 마커 — 변환 손실 아니므로 skipped 제외
+            stats["skipped_events"] += 1
         elif status in (0xF0, 0xF7):
             slen, pos = read_vlq(chunk, pos)
             pos += slen
