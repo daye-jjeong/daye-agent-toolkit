@@ -62,3 +62,33 @@ def test_suggest_compression_repeated_length():
 
 def test_suggest_compression_clean_no_suggestion():
     assert suggest_compression("l4cdef") == []
+
+from validate_mml import validate
+import subprocess, json
+
+def test_validate_desync_is_warning_not_violation():
+    rep = validate("MML@t120cdef,t120cde;")
+    assert rep["violations"] == []
+    assert any("디싱크" in w or "길이" in w for w in rep["warnings"])
+    assert rep["ok"] is True
+
+def test_validate_strict_promotes_warning():
+    rep = validate("MML@t120cdef,t120cde;", strict=True)
+    assert rep["ok"] is False
+
+def test_validate_charlimit_is_violation():
+    rep = validate("MML@" + "x"*1201 + ";", max_chars=1200)
+    assert rep["ok"] is False and rep["violations"]
+
+def test_validate_clean_passes():
+    rep = validate("MML@t120cdef,t120cdef;")
+    assert rep["ok"] is True and rep["violations"] == [] and rep["warnings"] == []
+
+def test_cli_exit_code_and_json():
+    out = subprocess.run(
+        ["python3", "scripts/validate_mml.py", "--json", "--strict",
+         "MML@cdef,cde;"],
+        cwd=os.path.join(os.path.dirname(__file__), ".."),
+        capture_output=True, text=True)
+    assert out.returncode == 1
+    assert json.loads(out.stdout)["ok"] is False
