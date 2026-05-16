@@ -68,8 +68,8 @@ def reduce_polyphony(
 def notes_to_mml(notes: list[tuple[int, int, int]], ppq: int = 480) -> str:
     """단선율 → MML 트랙. 공백은 rest로 채움.
     불변식(테스트 강제): track_tick_length(반환) == 음표+gap 총 tick.
-    옥타브/기본길이 전략 = 사용자 기여. 기본 권장: 상대 <> + 최빈 l.
-    helper: midi_note_to_token, ticks_to_length(라벨만 사용).
+    옥타브: 상대 <>/>(midi_note_to_token). 길이: 음표·rest마다 명시
+    (l 기본길이 최적화는 미구현). helper: ticks_to_length(라벨만 사용).
     """
     if not notes:
         return ""

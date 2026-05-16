@@ -52,7 +52,7 @@ python3 scripts/validate_mml.py "@파일" --json [--strict]
 |------|----------|
 | `skipped_chunks` | 음표 없는 청크 건너뜀 — 마비꼬 수동 확인 |
 | `unmatched` | 음표 매핑 실패 — 옥타브 범위 초과 가능성 |
-| `quant_error` | 양자화 오차 큼 — L64 정렬 후 재변환 권장 |
+| `quant_error` | 양자화 오차 합계(tick) 큼 — L64 정렬 후 재변환 권장 |
 | `notes_dropped_polyphony` | 화음 제거 — 중요 선율 손실 여부 확인 |
 | `tracks_dropped` | 6트랙 초과로 잘림 — --max-tracks로 조정 |
 

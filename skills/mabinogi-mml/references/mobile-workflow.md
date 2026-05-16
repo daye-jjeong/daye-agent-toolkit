@@ -40,7 +40,7 @@
 |------------|------|
 | `skipped_chunks` | 음표 없는 청크로 건너뛴 청크 수 |
 | `unmatched` | 매핑 실패 음표 수 |
-| `quant_error` | 양자화 오차가 큰 음표 수 |
+| `quant_error` | 양자화 오차 합계(tick 단위) — 클수록 리듬 손실 큼 |
 | `notes_dropped_polyphony` | 화음 정리로 제거된 음표 수 |
 | `tracks_dropped` | 6트랙 초과로 잘린 트랙 수 |
 
