@@ -34,6 +34,52 @@ def ticks_to_length(ticks: int, ppq: int = 480) -> tuple[str, int]:
     return label, err
 
 
+def reduce_polyphony(
+    notes: list[tuple[int, int, int]],
+) -> list[tuple[int, int, int]]:
+    """겹치는 음을 단선율로 축약 (마비노기 트랙은 모노포닉).
+    in/out: [(start_tick,dur_tick,midi_pitch)].
+    불변식(테스트 강제): 출력은 구간 비겹침, dur>0.
+    정책 결정 — 기본 권장: 동시/겹침 시 최고음, 가린 앞음은 절단, 0길이 제거.
+    """
+    if not notes:
+        return []
+    notes = sorted(notes)
+    result: list[tuple[int, int, int]] = []
+    i, n = 0, len(notes)
+    while i < n:
+        start = notes[i][0]
+        j = i
+        best = notes[i]
+        while j < n and notes[j][0] == start:
+            if notes[j][2] > best[2]:
+                best = notes[j]
+            j += 1
+        _, dur, pitch = best
+        next_start = notes[j][0] if j < n else None
+        if next_start is not None and start + dur > next_start:
+            dur = next_start - start
+        if dur > 0:
+            result.append((start, dur, pitch))
+        i = j
+    return result
+
+
+def notes_to_mml(notes: list[tuple[int, int, int]], ppq: int = 480) -> str:
+    """단선율 → MML 트랙. 공백은 rest로 채움.
+    불변식(테스트 강제): track_tick_length(반환) == 음표+gap 총 tick.
+    옥타브/기본길이 전략 = 사용자 기여. 기본 권장: 상대 <> + 최빈 l.
+    helper: midi_note_to_token, ticks_to_length(라벨만 사용).
+    """
+    if not notes:
+        return ""
+    notes = sorted(notes)
+    # TODO(사용자 기여 5~10줄): l 기본길이 + 루프(gap→rest, note→token).
+    #   rest 길이/음표 길이는 ticks_to_length(...)[0] 라벨 사용.
+    #   옥타브는 midi_note_to_token 반환 new_oct로 갱신.
+    raise NotImplementedError
+
+
 def quantization_error(notes: list[tuple[int, int, int]],
                        ppq: int = 480) -> int:
     """각 음표 duration 양자화 오차 합(tick). 변환 손실 리포트용."""

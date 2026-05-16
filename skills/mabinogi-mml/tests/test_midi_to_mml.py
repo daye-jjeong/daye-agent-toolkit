@@ -150,3 +150,50 @@ def test_quantization_error_zero_for_aligned():
 
 def test_quantization_error_positive_for_triplet():
     assert quantization_error([(0,160,60)], 480) > 0
+
+
+from midi_to_mml import reduce_polyphony
+
+def _monophonic(notes):
+    s = sorted(notes)
+    return all(s[i][0] + s[i][1] <= s[i+1][0] for i in range(len(s)-1))
+
+def test_highest_at_same_start():
+    out = reduce_polyphony([(0,480,60),(0,480,64),(0,480,67),(480,240,62)])
+    assert out == [(0,480,67),(480,240,62)]
+
+def test_monophonic_unchanged():
+    n = [(0,240,60),(240,240,62)]
+    assert reduce_polyphony(n) == n
+
+def test_invariant_output_is_monophonic():
+    n = [(0,480,60),(120,480,64),(300,200,67),(900,480,62)]
+    assert _monophonic(reduce_polyphony(n))
+
+def test_invariant_no_zero_or_negative_duration():
+    out = reduce_polyphony([(0,480,60),(240,480,64)])
+    assert all(d > 0 for _, d, _ in out)
+
+
+from midi_to_mml import notes_to_mml
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "..", "scripts"))
+from validate_mml import track_tick_length
+
+def test_basic_sequence():
+    out = notes_to_mml([(0,480,60),(480,480,62),(960,480,64)], 480)
+    assert "c" in out and "d" in out and "e" in out and "," not in out
+
+def test_rest_for_gap():
+    assert "r" in notes_to_mml([(0,480,60),(960,480,62)], 480)
+
+def test_empty():
+    assert notes_to_mml([], 480) == ""
+
+def test_invariant_round_trip_tick_length():
+    notes = [(0,480,60),(480,240,62),(960,480,64)]
+    span = 960 + 480
+    assert track_tick_length(notes_to_mml(notes, 480), 480) == span
+
+def test_quantization_error_zero_for_aligned_dup():
+    assert quantization_error([(0,480,60),(480,240,62)], 480) == 0
