@@ -47,6 +47,11 @@ def test_parse_header_rejects_smpte_division():
     with pytest.raises(ValueError):
         parse_header(bad)
 
+def test_parse_header_rejects_zero_division():
+    bad = b"MThd" + struct.pack(">IHHH", 6, 0, 1, 0) + b"MTrk\x00\x00\x00\x00"
+    with pytest.raises(ValueError):
+        parse_header(bad)
+
 def test_split_tracks_one_chunk():
     smf = make_smf(480, [(0, b"\x90\x3C\x40"), (480, b"\x80\x3C\x40")])
     chunks = split_tracks(smf)
@@ -96,6 +101,11 @@ def test_unmatched_note_on_counted():
     smf = make_smf(480, [(0, b"\x90\x3C\x40")])
     notes, stats = extract_notes(split_tracks(smf)[0])
     assert notes == [] and stats["unmatched_on"] == 1
+
+def test_extract_notes_raises_on_internally_truncated_chunk():
+    # delta=0, note-on status+pitch but velocity byte missing (chunk ends)
+    with pytest.raises(ValueError):
+        extract_notes(b"\x00\x90\x3C")
 
 
 from midi_to_mml import ticks_to_length

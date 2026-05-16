@@ -43,6 +43,8 @@ def parse_header(data: bytes) -> tuple[int, int, int]:
         raise ValueError(f"미지원 SMF format {fmt}")
     if division & 0x8000:
         raise ValueError("SMPTE division 미지원 (PPQ 형식만)")
+    if division == 0:
+        raise ValueError("division 0 — 손상 헤더")
     return fmt, ntrks, division
 
 
@@ -66,7 +68,15 @@ def split_tracks(data: bytes) -> list[bytes]:
 
 
 def extract_notes(chunk: bytes) -> tuple[list[tuple[int, int, int]], dict]:
-    """트랙 청크 → ([(start,dur,pitch)], stats). 손실 통계 명시."""
+    """트랙 청크 → ([(start,dur,pitch)], stats). 손실 통계 명시.
+    이벤트 도중 절단(범위 초과)은 fail-closed ValueError로 노출."""
+    try:
+        return _extract_notes(chunk)
+    except IndexError:
+        raise ValueError("트랙 청크가 이벤트 도중 절단됨 — 손상 파일")
+
+
+def _extract_notes(chunk: bytes) -> tuple[list[tuple[int, int, int]], dict]:
     pos = abs_tick = status = 0
     pending: dict[int, list[int]] = {}
     notes: list[tuple[int, int, int]] = []
