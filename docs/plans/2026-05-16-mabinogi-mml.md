@@ -320,7 +320,8 @@ def suggest_compression(track: str) -> list[str]:
         common, cnt = Counter(lengths).most_common(1)[0]
         if cnt >= 4:
             out.append(f"길이 {common} {cnt}회 — `l{common}` 기본길이로 절약")
-    if "n" not in track.lower() and re.search(r"[a-gA-G]", track):
+    # N 제안은 옥타브 명령이 있을 때만 의미(절대음높이로 옥타브 명령 절약).
+    if "n" not in track.lower() and re.search(r"[oO]\d+|[<>]", track):
         out.append("`N` 명령으로 옥타브 명령 생략 가능 "
                     "(마비꼬 export 'N 명령 허용' 체크)")
     return out
