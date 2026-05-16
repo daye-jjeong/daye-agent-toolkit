@@ -7,54 +7,18 @@ MIDI_C4 = 60
 MABI_DEFAULTS = {"o": 4, "l": 4, "t": 120, "v": 8}
 OCTAVE_UP, OCTAVE_DOWN = "<", ">"
 
-# MML 음표 길이 테이블: (분모, 점음표여부) 순서대로 — 긴 쪽 우선 탐색
-# 기준: ppq=480, 온음표=1920 ticks
-_LEN_TABLE: list[tuple[int, bool]] = [
-    (1, False),   # 온음표       1920
-    (1, True),    # 점온음표     2880  (마비노기 지원 여부 불명이나 포함)
-    (2, True),    # 점2분음표    1440
-    (2, False),   # 2분음표      960
-    (4, True),    # 점4분음표    720
-    (4, False),   # 4분음표      480
-    (8, True),    # 점8분음표    360
-    (8, False),   # 8분음표      240
-    (16, True),   # 점16분음표   180
-    (16, False),  # 16분음표     120
-    (32, True),   # 점32분음표   90
-    (32, False),  # 32분음표     60
-    (64, False),  # 64분음표     30
-]
+_LEN_TABLE: list[tuple[float, str]] = []
+for _b in (1, 2, 4, 8, 16, 32, 64):
+    _LEN_TABLE.append((4.0 / _b, str(_b)))
+    _LEN_TABLE.append((4.0 / _b * 1.5, f"{_b}."))
 
 
-def ticks_to_length(ticks: int, ppq: int) -> tuple[int, bool, int]:
-    """틱 수 → (분모, 점음표, quant_error_ticks). 가장 가까운 MML 길이로 스냅.
-
-    Args:
-        ticks: 음표 지속 시간 (MIDI tick 수, >0)
-        ppq:   PPQ (Pulses Per Quarter Note)
-
-    Returns:
-        (denom, dotted, quant_error)
-        - denom: MML 길이 분모 (1=온음표, 4=4분음표, …)
-        - dotted: 점음표 여부
-        - quant_error: 스냅 오차 (ticks - 스냅된_ticks), 양수=길이 잘림, 음수=늘어남
-    """
-    if ticks <= 0:
-        raise ValueError(f"ticks는 양수여야 합니다: {ticks}")
-    if ppq <= 0:
-        raise ValueError(f"ppq는 양수여야 합니다: {ppq}")
-
-    whole = ppq * 4  # 온음표 = 4 * PPQ
-
-    best_denom, best_dotted, best_snap, best_err = None, False, 0, ticks + 1
-    for denom, dotted in _LEN_TABLE:
-        snap = whole * (3 if dotted else 2) // (denom * 2)
-        err = abs(ticks - snap)
-        if err < best_err:
-            best_err = err
-            best_denom, best_dotted, best_snap = denom, dotted, snap
-
-    return best_denom, best_dotted, ticks - best_snap
+def ticks_to_length(ticks: int, ppq: int = 480) -> tuple[str, int]:
+    """tick → (가장 가까운 MML 길이, 양자화 오차 tick절댓값)."""
+    quarters = ticks / ppq
+    val, label = min(_LEN_TABLE, key=lambda c: abs(c[0] - quarters))
+    err = abs(round(val * ppq) - ticks)
+    return label, err
 
 
 def read_vlq(data: bytes, pos: int) -> tuple[int, int]:
