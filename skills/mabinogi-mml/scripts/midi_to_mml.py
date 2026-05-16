@@ -17,3 +17,36 @@ def read_vlq(data: bytes, pos: int) -> tuple[int, int]:
         value = (value << 7) | (b & 0x7F)
         if not (b & 0x80):
             return value, pos
+
+
+def parse_header(data: bytes) -> tuple[int, int, int]:
+    """MThd 검증·파싱 → (format, ntrks, division). 비표준은 ValueError."""
+    if len(data) < 14 or data[:4] != b"MThd":
+        raise ValueError("MThd 청크 없음 — 유효한 SMF 아님")
+    length, fmt, ntrks, division = struct.unpack(">IHHH", data[4:14])
+    if length != 6:
+        raise ValueError(f"MThd 길이 {length} ≠ 6 — 손상 의심")
+    if fmt not in (0, 1, 2):
+        raise ValueError(f"미지원 SMF format {fmt}")
+    if division & 0x8000:
+        raise ValueError("SMPTE division 미지원 (PPQ 형식만)")
+    return fmt, ntrks, division
+
+
+def split_tracks(data: bytes) -> list[bytes]:
+    """MTrk 본문 리스트. 선언 ntrks와 불일치하거나 절단되면 ValueError."""
+    _, ntrks, _ = parse_header(data)
+    chunks: list[bytes] = []
+    pos = 14
+    while pos < len(data):
+        if data[pos:pos + 4] != b"MTrk":
+            raise ValueError(f"오프셋 {pos}: MTrk 아닌 청크 — 손상/미지원")
+        (length,) = struct.unpack(">I", data[pos + 4:pos + 8])
+        end = pos + 8 + length
+        if end > len(data):
+            raise ValueError("MTrk 본문 절단 — 손상 파일")
+        chunks.append(data[pos + 8:end])
+        pos = end
+    if len(chunks) != ntrks:
+        raise ValueError(f"MTrk 수 {len(chunks)} ≠ 헤더 선언 {ntrks}")
+    return chunks
