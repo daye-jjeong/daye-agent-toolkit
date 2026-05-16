@@ -50,7 +50,7 @@ python3 scripts/validate_mml.py "@파일" --json [--strict]
 
 | 항목 | 값이 크면 |
 |------|----------|
-| `skipped` | 처리 못한 청크 — 마비꼬 수동 확인 |
+| `skipped_chunks` | 음표 없는 청크 건너뜀 — 마비꼬 수동 확인 |
 | `unmatched` | 음표 매핑 실패 — 옥타브 범위 초과 가능성 |
 | `quant_error` | 양자화 오차 큼 — L64 정렬 후 재변환 권장 |
 | `notes_dropped_polyphony` | 화음 제거 — 중요 선율 손실 여부 확인 |

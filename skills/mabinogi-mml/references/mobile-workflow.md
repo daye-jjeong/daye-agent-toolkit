@@ -38,7 +38,7 @@
 
 | 리포트 항목 | 의미 |
 |------------|------|
-| `skipped` | 처리하지 못한 청크/이벤트 수 |
+| `skipped_chunks` | 음표 없는 청크로 건너뛴 청크 수 |
 | `unmatched` | 매핑 실패 음표 수 |
 | `quant_error` | 양자화 오차가 큰 음표 수 |
 | `notes_dropped_polyphony` | 화음 정리로 제거된 음표 수 |
