@@ -6,6 +6,8 @@
 
 `make install` → 스킬 심링크(CC + Codex) + 로컬 마켓플레이스 등록 + 규칙 심링크
 
+`make install`은 **메인 레포 루트에서** 실행한다. worktree에서 실행하면 worktree 제거 후 `~/.claude/skills/`·`~/.codex/skills/` 심링크가 dangling 된다(머지 후 메인에서 재실행 필요).
+
 ## 디렉토리 구조
 
 ```
