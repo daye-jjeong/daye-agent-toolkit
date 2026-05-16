@@ -47,3 +47,18 @@ def test_check_desync_returns_warning_on_mismatch():
 
 def test_check_desync_empty_when_equal():
     assert check_desync(["cdef", "cdef"], 480) == []
+
+from validate_mml import check_tempo_placement, suggest_compression
+
+def test_tempo_mid_track_warns():
+    assert any("트랙 2" in m and "템포" in m
+               for m in check_tempo_placement(["t120cdef", "cdt140ef"]))
+
+def test_tempo_at_start_ok():
+    assert check_tempo_placement(["t120cdef", "t120cdef"]) == []
+
+def test_suggest_compression_repeated_length():
+    assert any("l8" in x for x in suggest_compression("c8d8e8f8g8a8"))
+
+def test_suggest_compression_clean_no_suggestion():
+    assert suggest_compression("l4cdef") == []

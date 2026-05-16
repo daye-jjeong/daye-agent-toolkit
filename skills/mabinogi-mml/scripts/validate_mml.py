@@ -72,3 +72,31 @@ def check_desync(tracks: list[str], ppq: int = 480) -> list[str]:
         return [f"트랙 길이 불일치(디싱크 가능, 인트로/아웃트로면 정상): "
                 f"{lengths} tick — --strict 시 위반 처리"]
     return []
+
+
+def check_tempo_placement(tracks: list[str]) -> list[str]:
+    """t가 트랙 첫 음표 뒤면 warning(모바일 박자 어긋남 흔한 원인)."""
+    w: list[str] = []
+    for i, t in enumerate(tracks, 1):
+        fn = re.search(r"[a-gA-Gr]", t)
+        for tm in re.finditer(r"[tT]\d+", t):
+            if fn and tm.start() > fn.start():
+                w.append(f"트랙 {i}: 음표 뒤 템포({tm.group()}) — "
+                         f"모바일 박자 어긋남 위험, 트랙 맨 앞 권장")
+                break
+    return w
+
+
+def suggest_compression(track: str) -> list[str]:
+    """글자수 절약 제안(텍스트만, 자동수정 안 함 — 위험)."""
+    out: list[str] = []
+    lengths = re.findall(r"[a-gA-G][+#-]?(\d+)", track)
+    if lengths:
+        from collections import Counter
+        common, cnt = Counter(lengths).most_common(1)[0]
+        if cnt >= 4:
+            out.append(f"길이 {common} {cnt}회 — `l{common}` 기본길이로 절약")
+    if "n" not in track.lower() and re.search(r"[oO]\d+|[<>]", track):
+        out.append("`N` 명령으로 옥타브 명령 생략 가능 "
+                    "(마비꼬 export 'N 명령 허용' 체크)")
+    return out
