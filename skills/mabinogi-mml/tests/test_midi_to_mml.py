@@ -176,8 +176,6 @@ def test_invariant_no_zero_or_negative_duration():
 
 
 from midi_to_mml import notes_to_mml
-import sys as _sys, os as _os
-_sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "..", "scripts"))
 from validate_mml import track_tick_length
 
 def test_basic_sequence():
@@ -194,9 +192,6 @@ def test_invariant_round_trip_tick_length():
     notes = [(0,480,60),(480,240,62),(960,480,64)]
     span = 960 + 480
     assert track_tick_length(notes_to_mml(notes, 480), 480) == span
-
-def test_quantization_error_zero_for_aligned_dup():
-    assert quantization_error([(0,480,60),(480,240,62)], 480) == 0
 
 
 from midi_to_mml import convert, midi_to_mml

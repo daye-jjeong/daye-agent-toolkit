@@ -18,7 +18,7 @@ _PITCH = {0:"c",1:"c+",2:"d",3:"d+",4:"e",5:"f",
 
 
 def midi_note_to_token(pitch: int, cur_oct: int) -> tuple[str, int]:
-    """MIDI 음 → (MML 토큰, 새 옥타브). MIDI60=o4 c. OCTAVE_UP/DOWN 사용."""
+    """MIDI 음 → (MML 토큰, 새 옥타브). MIDI60=o4 c 기준 매핑."""
     octave = (pitch - MIDI_C4) // 12 + 4
     name = _PITCH[(pitch - MIDI_C4) % 12]
     diff = octave - cur_oct
@@ -221,6 +221,7 @@ def convert(path: str, max_tracks: int = MAX_TRACKS,
             mono = reduce_polyphony(raw)
             poly_dropped += max(0, len(raw) - len(mono))
             tracks_mml.append(notes_to_mml(mono, ppq))
+            # mono(폴리포니 축약 후) 기준 — 드롭된 동시음은 quant_err에 미포함
             quant_err += quantization_error(mono, ppq)
     report = {
         "skipped_chunks": len(chunks) - nonempty,
