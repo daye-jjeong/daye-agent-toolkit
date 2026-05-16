@@ -74,10 +74,17 @@ def notes_to_mml(notes: list[tuple[int, int, int]], ppq: int = 480) -> str:
     if not notes:
         return ""
     notes = sorted(notes)
-    # TODO(사용자 기여 5~10줄): l 기본길이 + 루프(gap→rest, note→token).
-    #   rest 길이/음표 길이는 ticks_to_length(...)[0] 라벨 사용.
-    #   옥타브는 midi_note_to_token 반환 new_oct로 갱신.
-    raise NotImplementedError
+    out: list[str] = []
+    cur_oct = MABI_DEFAULTS["o"]
+    cursor = 0
+    for start, dur, pitch in notes:
+        gap = start - cursor
+        if gap > 0:
+            out.append("r" + ticks_to_length(gap, ppq)[0])
+        token, cur_oct = midi_note_to_token(pitch, cur_oct)
+        out.append(token + ticks_to_length(dur, ppq)[0])
+        cursor = start + dur
+    return "".join(out)
 
 
 def quantization_error(notes: list[tuple[int, int, int]],
