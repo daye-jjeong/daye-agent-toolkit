@@ -61,7 +61,7 @@ python3 scripts/validate_mml.py "@파일" --json [--strict]
 | 종류 | 항목 | 처리 |
 |------|------|------|
 | violations (hard) | 글자수 초과, 트랙 수 초과 | 반드시 수정 |
-| warnings (soft) | 트랙 길이 디싱크, 템포 위치 | `--strict` 시 위반 처리 |
+| warnings (soft) | 트랙 길이 디싱크, 템포 위치 | `--strict` 시 `ok=false`·exit 1 (단, `violations` 배열에는 추가되지 않고 `warnings`에 유지) |
 
 ---
 
