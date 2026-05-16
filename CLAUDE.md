@@ -1,15 +1,16 @@
 # daye-agent-toolkit
 
-개인 범용 에이전트 툴킷. Claude Code 플러그인 구조로 스킬/훅/규칙을 관리.
+개인 범용 에이전트 툴킷. standalone 크로스 에이전트 스킬 + 규칙을 관리.
 
 ## 접근 방식
 
-`make install` → 로컬 마켓플레이스 등록 + 플러그인 활성화 + 규칙 심링크
+`make install` → 스킬 심링크(CC + Codex) + 로컬 마켓플레이스 등록 + 규칙 심링크
 
 ## 디렉토리 구조
 
 ```
-plugins/          — CC 플러그인 (4개 플러그인, 18개 스킬)
+skills/           — standalone 크로스 에이전트 스킬 (CC + Codex 심링크 대상)
+plugins/          — 레거시 플러그인 스킬 4종(유지, 신규는 여기 안 만듦)
 rules/            — 글로벌 규칙 (~/.claude/rules/에 심링크)
 mcp/              — MCP 서버 (life-dashboard 등)
 codex/            — Codex CLI 전용 설정
@@ -17,7 +18,9 @@ docs/plans/       — 디자인 문서 + 구현 plan
 .claude/rules/    — 프로젝트 레벨 규칙 오버라이드
 ```
 
-## 플러그인 분류
+## 레거시 플러그인 스킬 (grandfathered, 유지)
+
+신규 스킬은 플러그인으로 만들지 않는다. 아래는 기존 유지 스킬이며 마이그레이션은 범위 밖.
 
 ### life-management (4개 스킬)
 
@@ -58,7 +61,7 @@ docs/plans/       — 디자인 문서 + 구현 plan
 
 ## marketplace.json
 
-`.claude-plugin/marketplace.json`이 로컬 마켓플레이스를 정의. `make install`이 이를 `~/.claude/settings.json`에 등록.
+`.claude-plugin/marketplace.json`이 로컬 마켓플레이스를 정의. `make install`이 이를 `~/.claude/settings.json`에 등록. 레거시 플러그인 4종만 관리하며, standalone 스킬은 marketplace.json을 건드리지 않는다.
 
 ## 규칙 시스템
 
@@ -81,10 +84,15 @@ docs/plans/       — 디자인 문서 + 구현 plan
 
 ## 스킬 포맷
 
-- `plugins/<plugin>/skills/<skill-name>/SKILL.md` — 스킬 본문 (150줄 이내)
-- `plugins/<plugin>/skills/<skill-name>/references/` — 상세 문서 (SKILL.md에서 포인터 참조)
-- `plugins/<plugin>/.claude-plugin/plugin.json` — 플러그인 메타데이터
-- `plugins/<plugin>/hooks/hooks.json` — 훅 정의 (해당 플러그인에 훅이 있을 때)
+신규 standalone 스킬 경로:
+
+- `skills/<skill-name>/SKILL.md` — 스킬 본문 (레포 루트, ≤150줄)
+- `skills/<skill-name>/references/` — 상세 문서 (SKILL.md에서 포인터 참조)
+- `skills/<skill-name>/scripts/` — 데이터 수집/가공 스크립트 (stdlib만)
+
+frontmatter(`name`/`description`)는 CC·Codex 공통. `make install`이 `~/.claude/skills/` + `~/.codex/skills/`에 심링크.
+
+레거시 플러그인 스킬은 `plugins/<plugin>/skills/...` 구조 그대로 유지(변경 안 함).
 
 ### SKILL.md frontmatter 필드
 
@@ -97,11 +105,11 @@ docs/plans/       — 디자인 문서 + 구현 plan
 
 ## 새 스킬 추가 절차
 
-1. 해당 플러그인 디렉토리에 `skills/<skill-name>/` 생성
-2. `SKILL.md` 작성 (frontmatter + 150줄 이내)
-3. 상세 내용은 `references/`로 분리
-4. `make install` 실행
-5. 커밋 + push
+1. `skills/<skill-name>/` 생성 (레포 루트)
+2. `SKILL.md` 작성 (frontmatter + ≤150줄)
+3. 상세는 `references/`, 스크립트는 `scripts/`(stdlib)
+4. `make install` (→ `~/.claude/skills/` + `~/.codex/skills/` 심링크)
+5. 커밋
 
 ## scripts/ 규칙
 
