@@ -8,3 +8,4 @@ __pycache__/
 .claude/.worktrees/
 .worktrees/
 codex/work-digest/session_logger_state.json
+mcp/life-dashboard/data.db*
