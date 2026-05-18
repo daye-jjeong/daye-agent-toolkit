@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """life-dashboard DB module — SQLite access layer."""
 
+from __future__ import annotations
+
 import json
 import os
 import re
