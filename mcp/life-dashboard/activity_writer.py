@@ -32,6 +32,7 @@ from db import (
     get_coaching_entry, get_pending_tasks, get_open_followups,
     upsert_tasks, upsert_project,
 )
+from pricing import estimate_cost
 
 KST = timezone(timedelta(hours=9))
 
@@ -97,6 +98,17 @@ def _prepare_fields(data: dict, date_str: str) -> dict | None:
     if token_total == 0:
         token_total = tokens.get("api_calls", 0)
 
+    # 모델별 토큰 → USD 비용 합산. by_model 없으면(구 데이터/codex 변종) 0.
+    by_model = tokens.get("by_model", {})
+    cost_usd = round(sum(
+        estimate_cost(
+            model,
+            t.get("input", 0), t.get("output", 0),
+            t.get("cache_read", 0), t.get("cache_create", 0),
+        )
+        for model, t in by_model.items()
+    ), 6)
+
     has_tests = 0
     has_commits = data.get("has_commits", False)
     for cmd in data.get("commands", []):
@@ -112,6 +124,7 @@ def _prepare_fields(data: dict, date_str: str) -> dict | None:
 
     return {
         "token_total": token_total,
+        "cost_usd": cost_usd,
         "has_tests": has_tests,
         "has_commits": 1 if has_commits else 0,
         "start_at": start_at,

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     has_tests INTEGER DEFAULT 0,
     has_commits INTEGER DEFAULT 0,
     token_total INTEGER DEFAULT 0,
+    cost_usd REAL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now', 'localtime')),
     UNIQUE(source, session_id, date)
 );

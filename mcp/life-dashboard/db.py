@@ -95,6 +95,18 @@ def _migrate(conn: sqlite3.Connection):
     except Exception:
         pass
 
+    # sessions: cost_usd column (SessionEnd 비용 영속화)
+    try:
+        s_cols = {r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()}
+        if s_cols and "cost_usd" not in s_cols:
+            conn.execute("ALTER TABLE sessions ADD COLUMN cost_usd REAL DEFAULT 0")
+            conn.commit()
+    except Exception as e:
+        # 컬럼 미생성 시 이후 모든 upsert_session이 실패 → 세션 무음 손실.
+        # re-raise 안 함(훅 크래시 방지) — 대신 stderr로 진단 가능하게.
+        print(f"[db._migrate] sessions.cost_usd 마이그 실패: {type(e).__name__}: {e}",
+              file=sys.stderr)
+
     # todos + daily_checkins 테이블 마이그레이션
     existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     if "todos" not in existing:
@@ -839,15 +851,17 @@ def get_mistake_trends(conn: sqlite3.Connection, date_str: str, days: int = 14) 
 
 def upsert_session(conn: sqlite3.Connection, data: dict):
     """sessions 테이블 upsert. scanner 컬럼별 우선순위 적용."""
+    # cost_usd 없는 호출부(sync_calendar/테스트)도 깨지지 않게 — caller dict는 변이 안 함
+    params = data if "cost_usd" in data else {**data, "cost_usd": 0}
     conn.execute("""
         INSERT INTO sessions (source, session_id, date, repo, branch, tag, summary,
             summary_source, status, follow_up,
             start_at, end_at, duration_min, file_count, error_count,
-            has_tests, has_commits, token_total)
+            has_tests, has_commits, token_total, cost_usd)
         VALUES (:source, :session_id, :date, :repo, :branch, :tag, :summary,
             :summary_source, :status, :follow_up,
             :start_at, :end_at, :duration_min, :file_count, :error_count,
-            :has_tests, :has_commits, :token_total)
+            :has_tests, :has_commits, :token_total, :cost_usd)
         ON CONFLICT(source, session_id, date) DO UPDATE SET
             repo=excluded.repo,
             branch=COALESCE(excluded.branch, branch),
@@ -875,9 +889,10 @@ def upsert_session(conn: sqlite3.Connection, data: dict):
             file_count=excluded.file_count,
             error_count=excluded.error_count,
             token_total=excluded.token_total,
+            cost_usd=excluded.cost_usd,
             has_tests=MAX(has_tests, excluded.has_tests),
             has_commits=MAX(has_commits, excluded.has_commits)
-    """, data)
+    """, params)
 
 
 def upsert_session_content(conn: sqlite3.Connection, data: dict):
