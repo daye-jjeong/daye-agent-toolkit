@@ -72,5 +72,11 @@
     "type": "trivial-topic",
     "detail": "'/login[^a-z]' appears 2x",
     "auto_fixed": false
+  },
+  {
+    "date": "2026-05-15",
+    "type": "nudge-false-alarm",
+    "detail": "새벽 작업 감지 넛지가 eval 세션(00:00 크론)을 실제 새벽 작업으로 오인. eval 필터 적용 후 nudge 재평가 필요.",
+    "auto_fixed": false
   }
 ]
