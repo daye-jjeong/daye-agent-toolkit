@@ -360,6 +360,7 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                         "token_output": 0,
                         "token_cache_read": 0,
                         "token_cache_create": 0,
+                        "token_by_model": {},
                         "api_calls": 0,
                         "has_commits": False,
                     }
@@ -411,10 +412,21 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                     usage = msg.get("usage", {})
                     if usage:
                         acc["api_calls"] += 1
-                        acc["token_input"] += usage.get("input_tokens", 0)
-                        acc["token_output"] += usage.get("output_tokens", 0)
-                        acc["token_cache_read"] += usage.get("cache_read_input_tokens", 0)
-                        acc["token_cache_create"] += usage.get("cache_creation_input_tokens", 0)
+                        ti = usage.get("input_tokens", 0)
+                        to = usage.get("output_tokens", 0)
+                        tcr = usage.get("cache_read_input_tokens", 0)
+                        tcc = usage.get("cache_creation_input_tokens", 0)
+                        acc["token_input"] += ti
+                        acc["token_output"] += to
+                        acc["token_cache_read"] += tcr
+                        acc["token_cache_create"] += tcc
+                        model = msg.get("model") or "unknown"
+                        bm = acc["token_by_model"].setdefault(
+                            model, {"input": 0, "output": 0, "cache_read": 0, "cache_create": 0})
+                        bm["input"] += ti
+                        bm["output"] += to
+                        bm["cache_read"] += tcr
+                        bm["cache_create"] += tcc
 
                 if entry_type == "assistant" and isinstance(content, list):
                     for block in content:
@@ -477,6 +489,7 @@ def parse_transcript_by_date(transcript_path: str, fallback_date: str | None = N
                 "cache_read": acc["token_cache_read"],
                 "cache_create": acc["token_cache_create"],
                 "api_calls": acc["api_calls"],
+                "by_model": acc["token_by_model"],
             },
         }
 
