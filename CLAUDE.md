@@ -118,6 +118,7 @@ frontmatter(`name`/`description`)는 CC·Codex 공통. `make install`이 `~/.cla
 - stdlib만 사용 (외부 패키지 금지)
 - bash 또는 python3
 - 개별 스킬은 자체 `scripts/`를 SKILL.md에서 참조
+- 훅(`plugins/*/hooks/*.sh`): 입력은 **stdin JSON + jq** (`INPUT=$(cat); echo "$INPUT" | jq -r '.tool_name'`). `$CLAUDE_TOOL_*` env는 CC가 안 채워 no-op. 레퍼런스: `plan-review-gate.sh`. grep은 macOS BSD 호환 `[[:space:]]` (`\s`/`\b` 금지)
 
 ## 스킬 자동 개선
 
