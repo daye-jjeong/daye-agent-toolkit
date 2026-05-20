@@ -10,7 +10,10 @@
 - **편집 전 게이트**: `git branch --show-current`이 master/main이면 수정 거부, worktree부터
 - worktree 생성 후 `npm ci` → `code --add <worktree-absolute-path>` (LSP 진단 정상화). 삭제 시 메인 레포로 `cd` 먼저
 - 합리화("작은 수정/빨리 테스트/조사 중 수정") 전부 거부. 규모 무관
-- **산출물 게이트**: plan/design/correction 룰도 메인 레포 dev에 untracked 금지. 새 산출물 만들기 *직전*에 worktree 먼저 — 잊으면 husky가 commit 차단, 다음 `git pull`이 origin과 충돌, stash 공유 사고로 번짐
+- **메인 레포 클린 게이트**: 메인 레포(`dev`/`main` 체크아웃)는 항상 `git status` clean을 유지한다. 코드·문서·plan/design/correction 룰 — 종류 무관 어떤 unstaged/untracked도 두지 마라. 두 허용 패턴:
+  - (a) **선-worktree**: 주제·범위 윤곽 잡힌 시점에 worktree 먼저 → 그 안에서 작성
+  - (b) **후-이동**: 메인에서 무심코 작성한 경우 즉시 worktree 만들고 `mv`로 이동
+  어긋나면 `git pull`이 origin과 충돌, husky가 commit/push 차단, stash 공유 사고로 번짐. 산출물 누적 → cleanup PR 부채
 
 ## 파이프라인
 1. `superpowers:brainstorming` → design
