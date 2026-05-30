@@ -25,8 +25,14 @@
 - 학습 루프: 리뷰에서 수정 2개+ 시 반복 패턴을 `patterns.md`에 기록
 
 ## 구현 위임
-- **Claude subagent** (`superpowers:subagent-driven-development`): 기본. implementer는 `model: "sonnet"` 우선
+- **Claude subagent 순차** (`superpowers:subagent-driven-development`): 태스크 순차 의존·소수·검토 필요. 기본. implementer는 `model: "sonnet"` 우선
+- **Claude dynamic workflow 병렬** (Workflow 도구): 태스크 독립·대량·기계적, 또는 광범위 감사/대형 마이그레이션
 - **Codex** (`codex:rescue`): 디버깅 난항, 세컨드 오피니언. adversarial은 `/codex:adversarial-review`
+
+### Dynamic workflow 자동 사용
+- (a) 독립·대량·기계적 또는 (b) 광범위 감사/대형 마이그레이션이면 `workflow` 키워드 없이도 Claude가 판단해 사용
+- 실행 전 한 줄 통보(무엇을 왜). 비용 큰 run은 짧게 확인
+- 부적합엔 안 씀: 설계·계획·리뷰(병렬 금지), 소규모(1-3파일), 디버깅 초기. ultracode 상시 안 켬
 
 ## 머지 게이트
 simplify+review 수렴 → `git log HEAD..master` divergence 확인(rebase) → 변경 요약 + 사용자 승인
