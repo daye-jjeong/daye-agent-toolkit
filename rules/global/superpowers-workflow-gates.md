@@ -23,11 +23,7 @@
 7. `/simplify` → `pr-review-toolkit:review-pr` 순차 반복(병렬 금지, 수렴 전 머지 금지)
 8. 머지 게이트 → 9. `claude-md-management:revise-claude-md` (+ 구조 변경 시 `ARCHITECTURE.md` 갱신)
 - 학습 루프: 리뷰에서 수정 2개+ 시 반복 패턴을 `patterns.md`에 기록
-- 구조 지식 3축 (작업이 구조를 건드릴 때만 누적, trivial 제외). 문서 0인 레포는 첫 구조성 작업이 시드:
-  - `ADR`(`docs/adr/`) = 비가역·놀라운 구조 결정의 "왜" — `grill-with-docs` 생성
-  - `CONTEXT-MAP.md` = 서비스/컨텍스트 관계 지도 — `grill-with-docs`(멀티컨텍스트)
-  - `ARCHITECTURE.md` = 현재 구조 스냅샷(디렉토리/레이어/흐름) — 수동
-  - `CONTEXT.md`는 용어집 only(구조 아님)
+- 구조 지식(구조 건드릴 때만 누적, trivial 제외): `ADR`(결정 "왜")·`CONTEXT-MAP`(서비스 관계지도)=`grill-with-docs`, `ARCHITECTURE`(구조 스냅샷)=수동, `CONTEXT.md`=용어집. 상세는 그 스킬.
 
 ## 구현 위임
 - **Claude subagent 순차** (`superpowers:subagent-driven-development`): 태스크 순차 의존·소수·검토 필요. 기본. implementer는 `model: "sonnet"` 우선
@@ -43,13 +39,10 @@
 simplify+review 수렴 → `git log HEAD..master` divergence 확인(rebase) → 변경 요약 + 사용자 승인
 
 ## Subagent 모델
-- implementer: `model: "sonnet"` (1-2파일 단순), `model: "opus"` (multi-file/복잡)
-- spec reviewer: `model: "sonnet"` / code quality reviewer: `model: "opus"`
-- BLOCKED 재dispatch: `model: "opus"`
+- implementer=sonnet(1-2파일 단순)/opus(multi·복잡), spec reviewer=sonnet, code quality=opus, BLOCKED 재dispatch=opus
 
 ## 커밋
 worktree에서 자유롭게. 머지 전 `git rebase -i`로 정리: `fix:` squash, dist는 마지막 커밋에.
 
 ## 핸드오프
-이전 세션: WIP 커밋 + plan 업데이트. 새 세션: worktree 감지 → plan → `git log -5` → 이어서.
-컨텍스트 길어 다른 세션/에이전트로 넘길 때: `handoff` 스킬로 대화를 인수인계 문서로 압축(git WIP과 별개 — 대화 맥락 보존).
+이전: WIP 커밋+plan. 새 세션: worktree 감지→plan→`git log -5`. 다른 세션/에이전트로 넘길 땐 `handoff` 스킬(대화 압축).
