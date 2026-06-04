@@ -16,13 +16,18 @@
   어긋나면 `git pull`이 origin과 충돌, husky가 commit/push 차단, stash 공유 사고로 번짐. 산출물 누적 → cleanup PR 부채
 
 ## 파이프라인
-1. `superpowers:brainstorming` → design
+1. `superpowers:brainstorming` → design  (구조 건드리면 `grill-with-docs`로 ADR·CONTEXT-MAP 누적 — 아래 구조 지식 3축)
 2. (L: 6+파일) `/codex:adversarial-review` + `codex-cli` 프롬프트 → design 검증
 3. `superpowers:writing-plans` → plan
 4. worktree → 5. 구현(TDD, 태스크 경계 커밋) → 6. `superpowers:verification-before-completion`
 7. `/simplify` → `pr-review-toolkit:review-pr` 순차 반복(병렬 금지, 수렴 전 머지 금지)
-8. 머지 게이트 → 9. `claude-md-management:revise-claude-md`
+8. 머지 게이트 → 9. `claude-md-management:revise-claude-md` (+ 구조 변경 시 `ARCHITECTURE.md` 갱신)
 - 학습 루프: 리뷰에서 수정 2개+ 시 반복 패턴을 `patterns.md`에 기록
+- 구조 지식 3축 (작업이 구조를 건드릴 때만 누적, trivial 제외). 문서 0인 레포는 첫 구조성 작업이 시드:
+  - `ADR`(`docs/adr/`) = 비가역·놀라운 구조 결정의 "왜" — `grill-with-docs` 생성
+  - `CONTEXT-MAP.md` = 서비스/컨텍스트 관계 지도 — `grill-with-docs`(멀티컨텍스트)
+  - `ARCHITECTURE.md` = 현재 구조 스냅샷(디렉토리/레이어/흐름) — 수동
+  - `CONTEXT.md`는 용어집 only(구조 아님)
 
 ## 구현 위임
 - **Claude subagent 순차** (`superpowers:subagent-driven-development`): 태스크 순차 의존·소수·검토 필요. 기본. implementer는 `model: "sonnet"` 우선
@@ -47,3 +52,4 @@ worktree에서 자유롭게. 머지 전 `git rebase -i`로 정리: `fix:` squash
 
 ## 핸드오프
 이전 세션: WIP 커밋 + plan 업데이트. 새 세션: worktree 감지 → plan → `git log -5` → 이어서.
+컨텍스트 길어 다른 세션/에이전트로 넘길 때: `handoff` 스킬로 대화를 인수인계 문서로 압축(git WIP과 별개 — 대화 맥락 보존).
