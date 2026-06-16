@@ -7,9 +7,10 @@ input=$(cat)
 COLS=$(tput cols 2>/dev/null || echo 120)
 
 # ── Extract all fields (single jq) ────────────────────────
-IFS=$'\t' read -r model cwd project_dir used_pct total cost duration_ms \
+# 구분자는 US(\037, 비공백) — 탭을 IFS로 쓰면 빈 필드가 병합되어 변수가 밀린다
+IFS=$'\037' read -r model cwd project_dir used_pct total cost duration_ms \
   lines_add lines_del total_in total_out output_style \
-  cache_read cache_create input_tokens wt_name session_id < <(
+  cache_read cache_create input_tokens wt_name session_id effort fast_mode < <(
   echo "$input" | jq -r '[
     (.model.display_name // .model.id // "unknown"),
     (.workspace.current_dir // .cwd // "."),
@@ -27,8 +28,10 @@ IFS=$'\t' read -r model cwd project_dir used_pct total cost duration_ms \
     (.context_window.current_usage.cache_creation_input_tokens // 0),
     (.context_window.current_usage.input_tokens // 0),
     (.worktree.name // ""),
-    (.session_id // "")
-  ] | @tsv'
+    (.session_id // ""),
+    (.effort.level // ""),
+    (.fast_mode // false)
+  ] | @tsv' | tr '\t' '\037'
 )
 
 # ── Session color (hash session_id → 12 hues) ─────────────
@@ -215,8 +218,16 @@ if [ -n "$duration_ms" ] && [ "$duration_ms" != "null" ] && [ "$duration_ms" -gt
   fi
 fi
 
-# ── LINE 1 (session-colored): model · project · worktree · git · account ─
+# ── LINE 1 (session-colored): model · effort · project · worktree · git · account ─
 line1="${B1} ${L1_BOLD}${model}${B1}"
+
+# effort 레벨: 모델 뒤에 항상 표시 (low/medium/high/xhigh/max). 기본 high와 구분용
+if [ -n "$effort" ] && [ "$effort" != "null" ]; then
+  line1+="${L1_BOLD} [${effort}]${B1}"
+fi
+
+# fast mode(/fast): 켜져 있으면 표식
+[ "$fast_mode" = "true" ] && line1+="${L1_TXT} ⚡fast${B1}"
 
 [ -n "$output_style" ] && [ "$output_style" != "null" ] && [ "$output_style" != "default" ] && \
   line1+="${L1_TXT}(${output_style})${B1}"
