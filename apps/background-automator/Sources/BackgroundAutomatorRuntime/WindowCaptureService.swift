@@ -9,6 +9,11 @@ public protocol WindowCapturing: Sendable {
     ) async throws -> WindowCandidate
 
     func capture(windowID: UInt32) async throws -> CGImage
+
+    func captureWindow(
+        bundleIdentifier: String,
+        titleContains: String
+    ) async throws -> WindowCaptureResult
 }
 
 public struct WindowCaptureResult: Sendable {
@@ -36,7 +41,7 @@ extension WindowCaptureError: LocalizedError {
         case let .windowUnavailable(windowID):
             "Window \(windowID) is not currently available."
         case let .staleWindow(windowID):
-            "Window \(windowID) changed or is no longer capturable. Find the target window again."
+            "Window \(windowID) changed or is no longer capturable. Use captureWindow to select again safely."
         case let .captureFailed(windowID, reason):
             "Could not capture window \(windowID): \(reason)"
         }
@@ -48,8 +53,14 @@ protocol WindowCaptureBackend: Sendable {
     func capture(expected: WindowCandidate) async throws -> WindowCaptureResult
 }
 
+private enum PendingSelection: Sendable {
+    case bound(WindowCandidate)
+    case stale
+}
+
 public actor WindowCaptureService: WindowCapturing {
     private let backend: any WindowCaptureBackend
+    private var pendingSelectionsByID: [UInt32: PendingSelection] = [:]
 
     public init() {
         backend = ScreenCaptureKitBackend()
@@ -68,23 +79,40 @@ public actor WindowCaptureService: WindowCapturing {
         titleContains: String
     ) async throws -> WindowCandidate {
         let candidates = try await backend.listCandidates()
-        return try WindowTarget.select(
+        let selected = try WindowTarget.select(
             from: candidates,
             bundleIdentifier: bundleIdentifier,
             titleContains: titleContains
         )
+        try bindForRawCapture(selected)
+        return selected
     }
 
     public func capture(windowID: UInt32) async throws -> CGImage {
-        let candidates = try await backend.listCandidates()
-        guard let expected = candidates.first(where: { $0.windowID == windowID }) else {
+        guard let pending = pendingSelectionsByID[windowID] else {
             throw WindowCaptureError.windowUnavailable(windowID: windowID)
         }
-        guard WindowTarget.isCurrent(expected, matching: expected) else {
+        guard case let .bound(expected) = pending else {
             throw WindowCaptureError.staleWindow(windowID: windowID)
         }
 
-        return try await backend.capture(expected: expected).image
+        let result: WindowCaptureResult
+        do {
+            result = try await backend.capture(expected: expected)
+        } catch let error as WindowCaptureError {
+            if case .staleWindow = error {
+                pendingSelectionsByID[windowID] = .stale
+            }
+            throw error
+        }
+
+        guard
+            case let .bound(latestExpected) = pendingSelectionsByID[windowID],
+            WindowTarget.isCurrent(latestExpected, matching: expected)
+        else {
+            throw WindowCaptureError.staleWindow(windowID: windowID)
+        }
+        return result.image
     }
 
     public func captureWindow(
@@ -98,6 +126,27 @@ public actor WindowCaptureService: WindowCapturing {
             titleContains: titleContains
         )
         return try await backend.capture(expected: expected)
+    }
+
+    private func bindForRawCapture(_ selected: WindowCandidate) throws {
+        switch pendingSelectionsByID[selected.windowID] {
+        case nil:
+            pendingSelectionsByID[selected.windowID] = .bound(selected)
+
+        case let .bound(existing):
+            guard WindowTarget.isCurrent(selected, matching: existing) else {
+                pendingSelectionsByID[selected.windowID] = .stale
+                throw WindowCaptureError.staleWindow(
+                    windowID: selected.windowID
+                )
+            }
+            pendingSelectionsByID[selected.windowID] = .bound(selected)
+
+        case .stale:
+            throw WindowCaptureError.staleWindow(
+                windowID: selected.windowID
+            )
+        }
     }
 }
 

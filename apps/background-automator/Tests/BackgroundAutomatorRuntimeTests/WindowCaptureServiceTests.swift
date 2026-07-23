@@ -59,9 +59,92 @@ func combinedCaptureReturnsFreshWindowMetadata() async throws {
     #expect(result.image.height == 1)
 }
 
+@Test
+func rawCaptureRejectsReplacementAfterFind() async throws {
+    let selected = candidate(windowID: 7, processID: 42)
+    let replacement = candidate(windowID: 7, processID: 99)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [selected],
+        currentCandidate: selected
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    let found = try await service.findWindow(
+        bundleIdentifier: "com.example.target",
+        titleContains: "Game"
+    )
+    #expect(found == selected)
+
+    await backend.replaceCandidates(
+        listedCandidates: [replacement],
+        currentCandidate: replacement
+    )
+
+    await #expect(throws: WindowCaptureError.staleWindow(windowID: 7)) {
+        try await service.capture(windowID: 7)
+    }
+    #expect(await backend.imageCaptureCount == 0)
+}
+
+@Test
+func rawCaptureUsesBoundIdentityWhenWindowIsStable() async throws {
+    let selected = candidate(windowID: 7, processID: 42)
+    let moved = candidate(
+        windowID: 7,
+        processID: 42,
+        frame: CGRect(x: 100, y: 50, width: 1280, height: 720)
+    )
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [selected],
+        currentCandidate: moved
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    _ = try await service.findWindow(
+        bundleIdentifier: "com.example.target",
+        titleContains: "Game"
+    )
+    let image = try await service.capture(windowID: 7)
+
+    #expect(image.width == 1)
+    #expect(await backend.receivedExpected == selected)
+    #expect(await backend.imageCaptureCount == 1)
+}
+
+@Test
+func secondFindCannotRebindReplacementToExistingWindowID() async throws {
+    let selected = candidate(windowID: 7, processID: 42)
+    let replacement = candidate(windowID: 7, processID: 99)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [selected],
+        currentCandidate: selected
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    _ = try await service.findWindow(
+        bundleIdentifier: "com.example.target",
+        titleContains: "Game"
+    )
+    await backend.replaceCandidates(
+        listedCandidates: [replacement],
+        currentCandidate: replacement
+    )
+
+    await #expect(throws: WindowCaptureError.staleWindow(windowID: 7)) {
+        try await service.findWindow(
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+    await #expect(throws: WindowCaptureError.staleWindow(windowID: 7)) {
+        try await service.capture(windowID: 7)
+    }
+    #expect(await backend.imageCaptureCount == 0)
+}
+
 private actor FakeWindowCaptureBackend: WindowCaptureBackend {
-    private let listedCandidates: [WindowCandidate]
-    private let currentCandidate: WindowCandidate
+    private var listedCandidates: [WindowCandidate]
+    private var currentCandidate: WindowCandidate
     private(set) var receivedExpected: WindowCandidate?
     private(set) var imageCaptureCount = 0
 
@@ -75,6 +158,14 @@ private actor FakeWindowCaptureBackend: WindowCaptureBackend {
 
     func listCandidates() async throws -> [WindowCandidate] {
         listedCandidates
+    }
+
+    func replaceCandidates(
+        listedCandidates: [WindowCandidate],
+        currentCandidate: WindowCandidate
+    ) {
+        self.listedCandidates = listedCandidates
+        self.currentCandidate = currentCandidate
     }
 
     func capture(expected: WindowCandidate) async throws -> WindowCaptureResult {
