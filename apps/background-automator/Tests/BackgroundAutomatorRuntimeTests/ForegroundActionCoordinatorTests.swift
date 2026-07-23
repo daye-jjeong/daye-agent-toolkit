@@ -301,7 +301,10 @@ func cancellationReturnedFromWaitStillCleansUpWhenSleeperDoesNotThrow() async {
         }
     }
 
-    expectCancellation(outcome)
+    expectCancellation(
+        outcome,
+        expected: .cancelledAfterClick
+    )
     #expect(fixture.clicker.clicks.count == 1)
     #expect(fixture.pointer.moves.last?.point == CGPoint(x: 12, y: 34))
     #expect(fixture.applications.frontmostIdentity == fixture.original)
@@ -496,7 +499,7 @@ func cancellationDuringPostActionWaitStillRestoresPointerAndFocus() async {
     fixture.sleeper.error = CancellationError()
 
     await expectCoordinatorError(
-        primary: .cancelled,
+        primary: .cancelledAfterClick,
         restorationFailures: []
     ) {
         _ = try await fixture.coordinator.perform(
@@ -506,7 +509,29 @@ func cancellationDuringPostActionWaitStillRestoresPointerAndFocus() async {
         )
     }
 
+    #expect(fixture.clicker.clicks.count == 1)
     #expect(fixture.pointer.moves.last?.point == CGPoint(x: 12, y: 34))
+    #expect(fixture.applications.frontmostIdentity == fixture.original)
+}
+
+@Test
+func postClickCancellationPreservesRestorationFailures() async {
+    let fixture = makeForegroundFixture()
+    fixture.sleeper.error = CancellationError()
+    fixture.pointer.failOnMoveNumber = 2
+
+    await expectCoordinatorError(
+        primary: .cancelledAfterClick,
+        restorationFailures: [.pointerRestoreFailed("pointer")]
+    ) {
+        _ = try await fixture.coordinator.perform(
+            targetApplication: fixture.game,
+            targetBox: CGRect(x: 50, y: 60, width: 20, height: 10),
+            expectedInputGeneration: 11
+        )
+    }
+
+    #expect(fixture.clicker.clicks.count == 1)
     #expect(fixture.applications.frontmostIdentity == fixture.original)
 }
 
@@ -667,12 +692,14 @@ private func runCancellableForegroundAction(
     return await task.value
 }
 
-private func expectCancellation(_ outcome: CancellableActionOutcome) {
+private func expectCancellation(
+    _ outcome: CancellableActionOutcome,
+    expected: ForegroundActionFailure = .cancelled
+) {
     switch outcome {
     case let .coordinatorError(error):
         #expect(
-            error.primaryFailure
-                == ForegroundActionFailure.cancelled
+            error.primaryFailure == expected
         )
         #expect(error.restorationFailures.isEmpty)
     case .succeeded:

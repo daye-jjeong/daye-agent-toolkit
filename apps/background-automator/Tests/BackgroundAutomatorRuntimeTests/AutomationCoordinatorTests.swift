@@ -106,11 +106,12 @@ func screenProgressAlwaysAdoptsNewestRecognizedScene() async throws {
         .continueDialog,
         .missionSelection,
         .enterReady,
-        .running,
     ] {
         _ = try await fixture.coordinator.runCycle()
         #expect(await fixture.coordinator.state == .observing(expected))
     }
+    _ = try await fixture.coordinator.runCycle()
+    #expect(await fixture.coordinator.state == .unknown)
     #expect(await fixture.actioner.requests.isEmpty)
 }
 
@@ -193,12 +194,12 @@ func sceneOnlyAllowsItsOwnRule() async throws {
     _ = try await fixture.coordinator.runCycle()
     _ = try await fixture.coordinator.runCycle()
 
-    #expect(await fixture.coordinator.state == .attention(.sceneRuleMismatch))
+    #expect(await fixture.coordinator.state == .unknown)
     #expect(await fixture.actioner.requests.isEmpty)
 }
 
 @Test
-func validatedEnterRuleDisambiguatesContextualChallengeText() async throws {
+func conflictingSceneTextsRejectOtherwisePlausibleCandidate() async throws {
     let fixture = try CoordinatorFixture(frames: [
         .make(
             scene: .enterReady,
@@ -209,7 +210,29 @@ func validatedEnterRuleDisambiguatesContextualChallengeText() async throws {
     await fixture.coordinator.start()
 
     #expect(try await fixture.coordinator.runCycle() == .noAction)
-    #expect(await fixture.coordinator.state == .observing(.enterReady))
+    #expect(await fixture.coordinator.state == .unknown)
+}
+
+@Test
+func rawRunningTextAloneRemainsUnknown() async throws {
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: .running, sequence: 1),
+    ])
+    await fixture.coordinator.start()
+
+    #expect(try await fixture.coordinator.runCycle() == .noAction)
+    #expect(await fixture.coordinator.state == .unknown)
+}
+
+@Test
+func validatedCandidateAdoptsItsActionScene() async throws {
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: .continueDialog, sequence: 1),
+    ])
+    await fixture.coordinator.start()
+
+    #expect(try await fixture.coordinator.runCycle() == .noAction)
+    #expect(await fixture.coordinator.state == .observing(.continueDialog))
 }
 
 @Test
@@ -365,6 +388,76 @@ func changedUserInputGenerationRearmsFreshStabilityWithoutProgress() async throw
 }
 
 @Test
+func realForegroundPostClickCancellationBlocksAutomaticRetry() async throws {
+    let observer = FakeAutomationObserver(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: .rewardRetry, sequence: 3),
+        .make(scene: .rewardRetry, sequence: 4),
+    ])
+    let foreground = makeRealForegroundAction(
+        sleeper: CancellingPostClickSleeper()
+    )
+    let coordinator = try AutomationCoordinator(
+        rules: coordinatorRules(),
+        observer: observer,
+        inputMonitor: ImmediateIdleMonitor(),
+        actionPerformer: foreground.coordinator,
+        clock: FakeAutomationClock()
+    )
+    await coordinator.start()
+
+    _ = try await coordinator.runCycle()
+    #expect(
+        try await coordinator.runCycle()
+            == .action(.clickOutcomeUncertain)
+    )
+    #expect(
+        await coordinator.state
+            == .attention(.actionOutcomeUncertain)
+    )
+    #expect(try await coordinator.runCycle() == .noAction)
+    #expect(foreground.clicker.clickCount == 1)
+}
+
+@Test
+func taskCancellationAfterRealClickStillLatchesUncertainOutcome() async throws {
+    let observer = FakeAutomationObserver(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: .rewardRetry, sequence: 3),
+    ])
+    let sleeper = BlockingPostClickSleeper()
+    let foreground = makeRealForegroundAction(sleeper: sleeper)
+    let coordinator = try AutomationCoordinator(
+        rules: coordinatorRules(),
+        observer: observer,
+        inputMonitor: ImmediateIdleMonitor(),
+        actionPerformer: foreground.coordinator,
+        clock: FakeAutomationClock()
+    )
+    await coordinator.start()
+    _ = try await coordinator.runCycle()
+
+    let actionCycle = Task {
+        try await coordinator.runCycle()
+    }
+    await sleeper.waitUntilRequested()
+    actionCycle.cancel()
+    await sleeper.releaseSuccessfully()
+
+    #expect(
+        try await actionCycle.value
+            == .action(.clickOutcomeUncertain)
+    )
+    #expect(
+        await coordinator.state
+            == .attention(.actionOutcomeUncertain)
+    )
+    #expect(foreground.clicker.clickCount == 1)
+}
+
+@Test
 func restorationFailurePausesUntilExplicitResume() async throws {
     let error = ForegroundActionCoordinatorError(
         primaryFailure: nil,
@@ -501,6 +594,68 @@ func unknownTransientDoesNotClearPriorActionFailureBlock() async throws {
 }
 
 @Test
+func unvalidatedContinueTextCannotUnlockFailedRetryScene() async throws {
+    let error = ForegroundActionCoordinatorError(
+        primaryFailure: .targetNotFrontmost,
+        restorationFailures: []
+    )
+    let lowConfidenceContinue = AutomationScreenFrame.rawText(
+        "계속하기",
+        confidence: 0.1,
+        sequence: 4
+    )
+    let outOfRegionContinue = AutomationScreenFrame.rawText(
+        "계속하기",
+        confidence: 0.99,
+        sequence: 5,
+        rect: CGRect(x: 20, y: 40, width: 40, height: 20)
+    )
+    let wrongLayoutContinue = AutomationScreenFrame.rawText(
+        "계속하기",
+        confidence: 0.99,
+        sequence: 6,
+        layout: .landscape
+    )
+    let rules = [
+        coordinatorRule(id: "reward_retry", targetText: "다시 하기"),
+        coordinatorRule(
+            id: "continue_dialog",
+            targetText: "계속하기",
+            region: NormalizedRegion(
+                minX: 0,
+                minY: 0.7,
+                maxX: 1,
+                maxY: 1
+            )
+        ),
+    ]
+    let fixture = try CoordinatorFixture(
+        frames: [
+            .make(scene: .rewardRetry, sequence: 1),
+            .make(scene: .rewardRetry, sequence: 2),
+            .make(scene: .rewardRetry, sequence: 3),
+            lowConfidenceContinue,
+            outOfRegionContinue,
+            wrongLayoutContinue,
+            .make(scene: .rewardRetry, sequence: 7),
+        ],
+        actionResults: [.failure(error), .success],
+        rules: rules
+    )
+    await fixture.coordinator.start()
+
+    _ = try await fixture.coordinator.runCycle()
+    _ = try await fixture.coordinator.runCycle()
+    _ = try await fixture.coordinator.runCycle()
+    _ = try await fixture.coordinator.runCycle()
+    _ = try await fixture.coordinator.runCycle()
+    _ = try await fixture.coordinator.runCycle()
+
+    #expect(await fixture.coordinator.state == .attention(.actionFailed))
+    #expect(await fixture.actioner.requests.count == 1)
+}
+
+@Test
 func successfulEnterReadyActionStartsTwoMinuteNoPollingCooldown() async throws {
     let fixture = try CoordinatorFixture(frames: [
         .make(scene: .enterReady, sequence: 1),
@@ -527,7 +682,7 @@ func successfulEnterReadyActionStartsTwoMinuteNoPollingCooldown() async throws {
 
     await fixture.clock.set(.seconds(130))
     #expect(try await fixture.coordinator.runCycle() == .noAction)
-    #expect(await fixture.coordinator.state == .observing(.running))
+    #expect(await fixture.coordinator.state == .unknown)
 }
 
 @Test
@@ -592,6 +747,57 @@ func stoppedCoordinatorCannotCompletePendingAction() async throws {
 }
 
 @Test
+func stopStartDuringObservationInvalidatesOldCycle() async throws {
+    let observer = BlockingAutomationObserver(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+    ])
+    let fixture = try CoordinatorFixture(observer: observer)
+    await fixture.coordinator.start()
+
+    let oldCycle = Task {
+        try await fixture.coordinator.runCycle()
+    }
+    await observer.waitUntilRequested()
+    await fixture.coordinator.stop()
+    await fixture.coordinator.start()
+    await observer.release()
+
+    await #expect(throws: CancellationError.self) {
+        _ = try await oldCycle.value
+    }
+    #expect(await fixture.coordinator.state == .unknown)
+    #expect(await fixture.actioner.requests.isEmpty)
+}
+
+@Test
+func stopStartDuringIdleInvalidatesOldCycle() async throws {
+    let idle = SuspendingIdleMonitor()
+    let fixture = try CoordinatorFixture(
+        frames: [
+            .make(scene: .rewardRetry, sequence: 1),
+            .make(scene: .rewardRetry, sequence: 2),
+        ],
+        idle: idle
+    )
+    await fixture.coordinator.start()
+    _ = try await fixture.coordinator.runCycle()
+
+    let oldCycle = Task {
+        try await fixture.coordinator.runCycle()
+    }
+    await idle.waitUntilRequested()
+    await fixture.coordinator.stop()
+    await fixture.coordinator.start()
+    await idle.release()
+
+    await #expect(throws: CancellationError.self) {
+        _ = try await oldCycle.value
+    }
+    #expect(await fixture.coordinator.state == .unknown)
+    #expect(await fixture.actioner.requests.isEmpty)
+}
+
+@Test
 func stoppingDuringActionDoesNotForceCooldownOrSemanticProgress() async throws {
     let observer = FakeAutomationObserver(frames: [
         .make(scene: .enterReady, sequence: 1),
@@ -620,6 +826,39 @@ func stoppingDuringActionDoesNotForceCooldownOrSemanticProgress() async throws {
         _ = try await task.value
     }
     #expect(await coordinator.state == .stopped)
+}
+
+@Test
+func stopDuringRealPostClickCleanupKeepsStoppedStateAndOneClick() async throws {
+    let observer = FakeAutomationObserver(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: .rewardRetry, sequence: 3),
+    ])
+    let sleeper = BlockingPostClickSleeper()
+    let foreground = makeRealForegroundAction(sleeper: sleeper)
+    let coordinator = try AutomationCoordinator(
+        rules: coordinatorRules(),
+        observer: observer,
+        inputMonitor: ImmediateIdleMonitor(),
+        actionPerformer: foreground.coordinator,
+        clock: FakeAutomationClock()
+    )
+    await coordinator.start()
+    _ = try await coordinator.runCycle()
+
+    let oldCycle = Task {
+        try await coordinator.runCycle()
+    }
+    await sleeper.waitUntilRequested()
+    await coordinator.stop()
+    await sleeper.releaseWithCancellation()
+
+    await #expect(throws: CancellationError.self) {
+        _ = try await oldCycle.value
+    }
+    #expect(await coordinator.state == .stopped)
+    #expect(foreground.clicker.clickCount == 1)
 }
 
 @Test
@@ -658,26 +897,29 @@ private struct CoordinatorFixture {
     init(
         frames: [AutomationScreenFrame],
         actionResults: [FakeAutomationActioner.Result] = [.success],
-        idle: any UserIdleMonitoring = ImmediateIdleMonitor()
+        idle: any UserIdleMonitoring = ImmediateIdleMonitor(),
+        rules: [AutomationRule] = coordinatorRules()
     ) throws {
         let observer = FakeAutomationObserver(frames: frames)
         try self.init(
             observer: observer,
             actionResults: actionResults,
-            idle: idle
+            idle: idle,
+            rules: rules
         )
     }
 
     init(
         observer: any AutomationScreenObserving,
         actionResults: [FakeAutomationActioner.Result] = [.success],
-        idle: any UserIdleMonitoring = ImmediateIdleMonitor()
+        idle: any UserIdleMonitoring = ImmediateIdleMonitor(),
+        rules: [AutomationRule] = coordinatorRules()
     ) throws {
         self.observer = observer
         actioner = FakeAutomationActioner(results: actionResults)
         clock = FakeAutomationClock()
         coordinator = try AutomationCoordinator(
-            rules: coordinatorRules(),
+            rules: rules,
             observer: observer,
             inputMonitor: idle,
             actionPerformer: actioner,
@@ -853,6 +1095,153 @@ private actor SuspendingAutomationActioner: AutomationActionPerforming {
     }
 }
 
+private struct RealForegroundFixture {
+    let coordinator: ForegroundActionCoordinator
+    let clicker: CountingCoordinatorClicker
+}
+
+private func makeRealForegroundAction(
+    sleeper: any ActionSleeping
+) -> RealForegroundFixture {
+    let game = ApplicationIdentity(
+        processIdentifier: coordinatorWindow.processID,
+        bundleIdentifier: coordinatorWindow.bundleIdentifier
+    )
+    let original = ApplicationIdentity(
+        processIdentifier: 1,
+        bundleIdentifier: "com.example.editor"
+    )
+    let applications = CoordinatorApplicationController(
+        frontmost: original,
+        running: [original, game]
+    )
+    let clicker = CountingCoordinatorClicker()
+    let coordinator = ForegroundActionCoordinator(
+        applications: applications,
+        pointer: CoordinatorPointerController(),
+        clicker: clicker,
+        sleeper: sleeper,
+        inputMonitor: ImmediateIdleMonitor()
+    )
+    return RealForegroundFixture(
+        coordinator: coordinator,
+        clicker: clicker
+    )
+}
+
+private final class CoordinatorApplicationController:
+    ApplicationCoordinating,
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var current: ApplicationIdentity
+    private let running: Set<ApplicationIdentity>
+
+    init(
+        frontmost: ApplicationIdentity,
+        running: Set<ApplicationIdentity>
+    ) {
+        current = frontmost
+        self.running = running
+    }
+
+    func frontmostApplication() -> ApplicationIdentity? {
+        lock.withLock { current }
+    }
+
+    func activate(_ application: ApplicationIdentity) throws -> Bool {
+        lock.withLock {
+            current = application
+        }
+        return true
+    }
+
+    func isFrontmost(_ application: ApplicationIdentity) -> Bool {
+        lock.withLock { current == application }
+    }
+
+    func isRunning(_ application: ApplicationIdentity) -> Bool {
+        running.contains(application)
+    }
+}
+
+private final class CoordinatorPointerController:
+    PointerControlling,
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var point = CGPoint(x: 10, y: 10)
+
+    func location() throws -> CGPoint {
+        lock.withLock { point }
+    }
+
+    func move(
+        to point: CGPoint,
+        sourceIdentifier: Int64
+    ) throws {
+        lock.withLock {
+            self.point = point
+        }
+    }
+}
+
+private final class CountingCoordinatorClicker:
+    GlobalClicking,
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var count = 0
+
+    var clickCount: Int {
+        lock.withLock { count }
+    }
+
+    func click(
+        screenPoint: CGPoint,
+        sourceIdentifier: Int64
+    ) throws {
+        lock.withLock {
+            count += 1
+        }
+    }
+}
+
+private struct CancellingPostClickSleeper: ActionSleeping {
+    func sleep(for duration: Duration) async throws {
+        throw CancellationError()
+    }
+}
+
+private actor BlockingPostClickSleeper: ActionSleeping {
+    private var requested = false
+    private var continuation:
+        CheckedContinuation<Void, any Error>?
+
+    func sleep(for duration: Duration) async throws {
+        requested = true
+        try await withCheckedThrowingContinuation {
+            continuation = $0
+        }
+    }
+
+    func waitUntilRequested() async {
+        while !requested {
+            await Task.yield()
+        }
+    }
+
+    func releaseWithCancellation() {
+        continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
+
+    func releaseSuccessfully() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 private actor FakeAutomationClock: AutomationClockReading {
     private var current: Duration = .zero
 
@@ -913,6 +1302,34 @@ private actor SuspendingIdleMonitor: UserIdleMonitoring {
 }
 
 private extension AutomationScreenFrame {
+    static func rawText(
+        _ text: String,
+        confidence: Double,
+        sequence: UInt64,
+        rect: CGRect = CGRect(x: 20, y: 40, width: 40, height: 20),
+        layout: LayoutProfile = .portraitMobile
+    ) -> Self {
+        AutomationScreenFrame(
+            observation: SceneObservation(
+                captureIdentity: try! CaptureIdentity(
+                    sessionID: coordinatorCaptureSession,
+                    sequence: sequence
+                ),
+                imageSize: CGSize(width: 600, height: 900),
+                recognizedTexts: [
+                    RecognizedTextObservation(
+                        text: text,
+                        confidence: confidence,
+                        boundingBox: rect
+                    ),
+                ],
+                actionCandidates: []
+            ),
+            window: coordinatorWindow,
+            layout: layout
+        )
+    }
+
     static func make(
         scene: AutomationScene?,
         sequence: UInt64,
@@ -1082,7 +1499,13 @@ private func coordinatorRules() -> [AutomationRule] {
 private func coordinatorRule(
     id: String,
     requiredTexts: [String]? = nil,
-    targetText: String?
+    targetText: String?,
+    region: NormalizedRegion = NormalizedRegion(
+        minX: 0,
+        minY: 0,
+        maxX: 1,
+        maxY: 1
+    )
 ) -> AutomationRule {
     AutomationRule(
         id: id,
@@ -1100,12 +1523,7 @@ private func coordinatorRule(
                 : nil
         ),
         regions: LayoutRegionMap([
-            .portraitMobile: NormalizedRegion(
-                minX: 0,
-                minY: 0,
-                maxX: 1,
-                maxY: 1
-            ),
+            .portraitMobile: region,
         ]),
         minimumOCRConfidence: 0.8,
         stableObservationCount: 2,

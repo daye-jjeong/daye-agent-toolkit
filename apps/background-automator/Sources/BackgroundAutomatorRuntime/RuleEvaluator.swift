@@ -85,6 +85,18 @@ public struct RuleEvaluator: Sendable {
         return tracker.revalidationMatches(candidate, freshCandidate)
     }
 
+    public func validatedCandidate(
+        observation: SceneObservation?,
+        windowIdentity: WindowCandidate,
+        layout: LayoutProfile
+    ) -> ActionCandidate? {
+        eligibleCandidate(
+            observation: observation,
+            windowIdentity: windowIdentity,
+            layout: layout
+        )
+    }
+
     public mutating func resetForRetry() {
         tracker.resetForRetry()
     }

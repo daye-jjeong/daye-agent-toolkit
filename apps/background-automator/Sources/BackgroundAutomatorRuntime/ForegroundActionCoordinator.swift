@@ -63,6 +63,7 @@ public enum ForegroundActionFailure: Equatable, Sendable {
     case clickFailed(String)
     case postActionWaitFailed(String)
     case cancelled
+    case cancelledAfterClick
 }
 
 public enum ForegroundRestorationFailure: Equatable, Sendable {
@@ -202,6 +203,7 @@ public struct ForegroundActionCoordinator: Sendable {
         var pointerMayHaveChanged = false
         var inputGenerationBeforeClick = expectedInputGeneration
         var primaryFailure: ForegroundActionFailure?
+        var clickCompleted = false
 
         do {
             try Self.checkCancellation()
@@ -293,6 +295,7 @@ public struct ForegroundActionCoordinator: Sendable {
                     sourceIdentifier:
                         AutomatorSyntheticEvent.sourceIdentifier
                 )
+                clickCompleted = true
             } catch is CancellationError {
                 throw ForegroundActionAbort.failure(.cancelled)
             } catch {
@@ -305,18 +308,24 @@ public struct ForegroundActionCoordinator: Sendable {
                 try await sleeper.sleep(for: postActionDelay)
             } catch is CancellationError {
                 throw ForegroundActionAbort.failure(
-                    .cancelled
+                    .cancelledAfterClick
                 )
             } catch {
                 throw ForegroundActionAbort.failure(
                     .postActionWaitFailed(String(describing: error))
                 )
             }
-            try Self.checkCancellation()
+            if Task.isCancelled {
+                throw ForegroundActionAbort.failure(
+                    .cancelledAfterClick
+                )
+            }
         } catch let ForegroundActionAbort.failure(failure) {
             primaryFailure = failure
         } catch is CancellationError {
-            primaryFailure = .cancelled
+            primaryFailure = clickCompleted
+                ? .cancelledAfterClick
+                : .cancelled
         } catch {
             primaryFailure = .postActionWaitFailed(
                 String(describing: error)

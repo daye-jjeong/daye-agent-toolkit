@@ -130,7 +130,7 @@ public actor AutomationCoordinator {
     private let enterReadyCooldown: Duration
 
     private var evaluator: RuleEvaluator
-    private var isStarted = false
+    private var runToken: UUID?
     private var cycleInProgress = false
     private var currentScene: AutomationScene?
     private var sceneFirstRecognizedAt: Duration?
@@ -168,14 +168,14 @@ public actor AutomationCoordinator {
     }
 
     public func start() {
-        isStarted = true
+        runToken = UUID()
         if state == .stopped {
             state = .unknown
         }
     }
 
     public func stop() {
-        isStarted = false
+        runToken = nil
         currentScene = nil
         sceneFirstRecognizedAt = nil
         pendingCandidate = nil
@@ -186,7 +186,7 @@ public actor AutomationCoordinator {
     }
 
     public func resetForRetry() {
-        guard isStarted, state != .pausedRestorationFailure else {
+        guard runToken != nil, state != .pausedRestorationFailure else {
             return
         }
         pendingCandidate = nil
@@ -201,7 +201,7 @@ public actor AutomationCoordinator {
     }
 
     public func resumeAfterRestorationFailure() {
-        guard isStarted, state == .pausedRestorationFailure else {
+        guard runToken != nil, state == .pausedRestorationFailure else {
             return
         }
         pendingCandidate = nil
@@ -216,17 +216,11 @@ public actor AutomationCoordinator {
     }
 
     public func runCycle() async throws -> AutomationCycleResult {
-        guard isStarted else {
+        guard let cycleToken = runToken else {
             return .paused
         }
         guard state != .pausedRestorationFailure else {
             return .paused
-        }
-        if case let .cooldown(_, until) = state {
-            let now = await clock.now()
-            guard now >= until else {
-                return .cooldown
-            }
         }
         guard !cycleInProgress else {
             return .busy
@@ -237,13 +231,30 @@ public actor AutomationCoordinator {
             cycleInProgress = false
         }
 
-        try ensureCanContinue()
-        let frame = try await observer.observe()
-        try ensureCanContinue()
-        let now = await clock.now()
-        try ensureCanContinue()
+        if case let .cooldown(_, until) = state {
+            let now = await clock.now()
+            try ensureCanContinue(token: cycleToken)
+            guard now >= until else {
+                return .cooldown
+            }
+        }
 
-        guard let scene = adopt(frame: frame, at: now) else {
+        try ensureCanContinue(token: cycleToken)
+        let frame = try await observer.observe()
+        try ensureCanContinue(token: cycleToken)
+        let now = await clock.now()
+        try ensureCanContinue(token: cycleToken)
+
+        let validatedCandidate = evaluator.validatedCandidate(
+            observation: frame.observation,
+            windowIdentity: frame.window,
+            layout: frame.layout
+        )
+        guard let scene = adopt(
+            frame: frame,
+            validatedCandidate: validatedCandidate,
+            at: now
+        ) else {
             return .noAction
         }
         guard Self.expectedRuleID(for: scene) != nil else {
@@ -287,31 +298,42 @@ public actor AutomationCoordinator {
                 for: idleThreshold
             )
         } catch is CancellationError {
-            rearmAfterCancellation()
+            rearmAfterCancellation(token: cycleToken)
             throw CancellationError()
         }
-        try ensureCanContinue()
+        try ensureCanContinue(token: cycleToken)
 
         let freshFrame = try await observer.observe()
-        try ensureCanContinue()
+        try ensureCanContinue(token: cycleToken)
         let freshNow = await clock.now()
-        try ensureCanContinue()
-        guard let freshScene = adopt(frame: freshFrame, at: freshNow),
-              freshScene == scene,
-              evaluator.revalidate(
-                  pendingCandidate,
-                  freshObservation: freshFrame.observation,
-                  windowIdentity: freshFrame.window,
-                  layout: freshFrame.layout
-              ),
-              let freshTarget = freshFrame.observation.actionCandidates.first,
-              freshTarget.ruleID == pendingCandidate.ruleID,
-              let imageSize = freshFrame.observation.imageSize,
-              let screenTargetBox = Self.screenTargetBox(
-                  pixelRect: freshTarget.boundingBox,
-                  imageSize: imageSize,
-                  windowFrame: freshFrame.window.frame
-              )
+        try ensureCanContinue(token: cycleToken)
+        let freshValidatedCandidate = evaluator.validatedCandidate(
+            observation: freshFrame.observation,
+            windowIdentity: freshFrame.window,
+            layout: freshFrame.layout
+        )
+        guard
+            let freshScene = adopt(
+                frame: freshFrame,
+                validatedCandidate: freshValidatedCandidate,
+                at: freshNow
+            ),
+            freshScene == scene,
+            evaluator.revalidate(
+                pendingCandidate,
+                freshObservation: freshFrame.observation,
+                windowIdentity: freshFrame.window,
+                layout: freshFrame.layout
+            ),
+            let freshTarget =
+                freshFrame.observation.actionCandidates.first,
+            freshTarget.ruleID == pendingCandidate.ruleID,
+            let imageSize = freshFrame.observation.imageSize,
+            let screenTargetBox = Self.screenTargetBox(
+                pixelRect: freshTarget.boundingBox,
+                imageSize: imageSize,
+                windowFrame: freshFrame.window.frame
+            )
         else {
             self.pendingCandidate = nil
             evaluator.resetForRetry()
@@ -323,15 +345,17 @@ public actor AutomationCoordinator {
             bundleIdentifier: freshFrame.window.bundleIdentifier
         )
         do {
+            try ensureCanContinue(token: cycleToken)
             _ = try await actionPerformer.perform(
                 targetApplication: targetApplication,
                 targetBox: screenTargetBox,
                 expectedInputGeneration: idleSnapshot.generation
             )
-            try ensureCanContinue()
+            try ensureCanContinue(token: cycleToken)
             self.pendingCandidate = nil
             if scene == .enterReady {
                 let cooldownStart = await clock.now()
+                try ensureCanContinue(token: cycleToken)
                 state = .cooldown(
                     scene: .running,
                     until: cooldownStart + enterReadyCooldown
@@ -339,9 +363,10 @@ public actor AutomationCoordinator {
             }
             return .action(.clicked)
         } catch is CancellationError {
-            rearmAfterCancellation()
+            rearmAfterCancellation(token: cycleToken)
             throw CancellationError()
         } catch let error as ForegroundActionCoordinatorError {
+            try ensureCurrentRun(token: cycleToken)
             return handleActionError(error, scene: scene)
         }
     }
@@ -350,6 +375,7 @@ public actor AutomationCoordinator {
 private extension AutomationCoordinator {
     func adopt(
         frame: AutomationScreenFrame,
+        validatedCandidate: ActionCandidate?,
         at now: Duration
     ) -> AutomationScene? {
         if frame.layout == .unsupported {
@@ -364,24 +390,10 @@ private extension AutomationCoordinator {
             recordUnsafeState(.ambiguousObservation)
             return nil
         }
-        let candidateScene = frame.observation.actionCandidates.first
-            .flatMap { Self.scene(forRuleID: $0.ruleID) }
-        let textScenes = Self.scenesRecognizedByText(
-            frame.observation.recognizedTexts
-        )
-        if candidateScene == nil, textScenes.count > 1 {
-            recordUnsafeState(.ambiguousObservation)
-            return nil
-        }
-        let textScene = textScenes.first
-        if let candidateScene,
-           !textScenes.isEmpty,
-           !textScenes.contains(candidateScene)
-        {
-            recordUnsafeState(.sceneRuleMismatch)
-            return nil
-        }
-        guard let scene = candidateScene ?? textScene else {
+        guard
+            let validatedCandidate,
+            let scene = Self.scene(forRuleID: validatedCandidate.ruleID)
+        else {
             currentScene = nil
             sceneFirstRecognizedAt = nil
             pendingCandidate = nil
@@ -430,10 +442,13 @@ private extension AutomationCoordinator {
         state = .attention(attention)
     }
 
-    func rearmAfterCancellation() {
+    func rearmAfterCancellation(token: UUID) {
+        guard runToken == token else {
+            return
+        }
         pendingCandidate = nil
         evaluator.resetForRetry()
-        if isStarted, let currentScene {
+        if let currentScene {
             state = .observing(currentScene)
         }
     }
@@ -452,7 +467,7 @@ private extension AutomationCoordinator {
             evaluator.resetForRetry()
             state = .observing(scene)
             return .action(.cancelled)
-        case .postActionWaitFailed:
+        case .cancelledAfterClick, .postActionWaitFailed:
             blockedScene = scene
             blockedAttention = .actionOutcomeUncertain
             state = .attention(.actionOutcomeUncertain)
@@ -465,9 +480,13 @@ private extension AutomationCoordinator {
         }
     }
 
-    func ensureCanContinue() throws {
+    func ensureCanContinue(token: UUID) throws {
         try Task.checkCancellation()
-        guard isStarted else {
+        try ensureCurrentRun(token: token)
+    }
+
+    func ensureCurrentRun(token: UUID) throws {
+        guard runToken == token else {
             throw CancellationError()
         }
     }
@@ -495,36 +514,6 @@ private extension AutomationCoordinator {
         AutomationScene.allCases.first {
             expectedRuleID(for: $0) == ruleID
         }
-    }
-
-    static func scenesRecognizedByText(
-        _ observations: [RecognizedTextObservation]
-    ) -> Set<AutomationScene> {
-        let texts = Set(observations.map {
-            SceneFingerprint.normalize($0.text)
-        })
-        var scenes: Set<AutomationScene> = []
-        if texts.contains("던전클리어"),
-           texts.contains("화면을터치해주세요")
-        {
-            scenes.insert(.clearTouch)
-        }
-        if texts.contains("다시하기") {
-            scenes.insert(.rewardRetry)
-        }
-        if texts.contains("계속하기") {
-            scenes.insert(.continueDialog)
-        }
-        if texts.contains("도전") {
-            scenes.insert(.missionSelection)
-        }
-        if texts.contains("입장하기") {
-            scenes.insert(.enterReady)
-        }
-        if texts.contains("던전진행중") {
-            scenes.insert(.running)
-        }
-        return scenes
     }
 
     static func containsForbiddenText(
