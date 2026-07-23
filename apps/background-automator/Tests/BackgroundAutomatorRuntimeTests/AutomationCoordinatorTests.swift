@@ -494,6 +494,33 @@ func restorationFailurePausesUntilExplicitResume() async throws {
 }
 
 @Test
+func restorationLatchSurvivesStopAndPausesNextStart() async throws {
+    let error = ForegroundActionCoordinatorError(
+        primaryFailure: nil,
+        restorationFailures: [.pointerRestoreFailed("denied")]
+    )
+    let fixture = try CoordinatorFixture(
+        frames: [
+            .make(scene: .rewardRetry, sequence: 1),
+            .make(scene: .rewardRetry, sequence: 2),
+            .make(scene: .rewardRetry, sequence: 3),
+        ],
+        actionResults: [.failure(error)]
+    )
+    await fixture.coordinator.start()
+    _ = try await fixture.coordinator.runCycle()
+    _ = try await fixture.coordinator.runCycle()
+
+    await fixture.coordinator.stop()
+    #expect(await fixture.coordinator.state == .stopped)
+    await fixture.coordinator.start()
+
+    #expect(await fixture.coordinator.state == .pausedRestorationFailure)
+    #expect(try await fixture.coordinator.runCycle() == .paused)
+    #expect(await fixture.actioner.requests.count == 1)
+}
+
+@Test
 func actionFailureRetriesOnlyAfterExplicitReset() async throws {
     let error = ForegroundActionCoordinatorError(
         primaryFailure: .targetNotFrontmost,
@@ -862,6 +889,83 @@ func stopDuringRealPostClickCleanupKeepsStoppedStateAndOneClick() async throws {
 }
 
 @Test
+func staleRestorationFailurePausesRestartedRunUntilExplicitResume() async throws {
+    let observer = FakeAutomationObserver(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: .rewardRetry, sequence: 3),
+    ])
+    let sleeper = BlockingPostClickSleeper()
+    let pointer = CoordinatorPointerController(failOnMoveNumber: 2)
+    let foreground = makeRealForegroundAction(
+        sleeper: sleeper,
+        pointer: pointer
+    )
+    let coordinator = try AutomationCoordinator(
+        rules: coordinatorRules(),
+        observer: observer,
+        inputMonitor: ImmediateIdleMonitor(),
+        actionPerformer: foreground.coordinator,
+        clock: FakeAutomationClock()
+    )
+    await coordinator.start()
+    _ = try await coordinator.runCycle()
+
+    let staleCycle = Task {
+        try await coordinator.runCycle()
+    }
+    await sleeper.waitUntilRequested()
+    await coordinator.stop()
+    await coordinator.start()
+    await sleeper.releaseWithCancellation()
+
+    #expect(
+        try await staleCycle.value
+            == .action(.restorationFailed)
+    )
+    #expect(await coordinator.state == .pausedRestorationFailure)
+    #expect(try await coordinator.runCycle() == .paused)
+    #expect(foreground.clicker.clickCount == 1)
+
+    await coordinator.resumeAfterRestorationFailure()
+    #expect(await coordinator.state == .unknown)
+}
+
+@Test
+func staleNonRestorationActionErrorCannotOverwriteRestartedRun() async throws {
+    let observer = FakeAutomationObserver(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: .rewardRetry, sequence: 3),
+    ])
+    let sleeper = BlockingPostClickSleeper()
+    let foreground = makeRealForegroundAction(sleeper: sleeper)
+    let coordinator = try AutomationCoordinator(
+        rules: coordinatorRules(),
+        observer: observer,
+        inputMonitor: ImmediateIdleMonitor(),
+        actionPerformer: foreground.coordinator,
+        clock: FakeAutomationClock()
+    )
+    await coordinator.start()
+    _ = try await coordinator.runCycle()
+
+    let staleCycle = Task {
+        try await coordinator.runCycle()
+    }
+    await sleeper.waitUntilRequested()
+    await coordinator.stop()
+    await coordinator.start()
+    await sleeper.releaseWithCancellation()
+
+    await #expect(throws: CancellationError.self) {
+        _ = try await staleCycle.value
+    }
+    #expect(await coordinator.state == .unknown)
+    #expect(foreground.clicker.clickCount == 1)
+}
+
+@Test
 func concurrentCyclesNeverOverlapOrDuplicateActions() async throws {
     let observer = BlockingAutomationObserver(
         frames: [
@@ -1101,7 +1205,8 @@ private struct RealForegroundFixture {
 }
 
 private func makeRealForegroundAction(
-    sleeper: any ActionSleeping
+    sleeper: any ActionSleeping,
+    pointer: any PointerControlling = CoordinatorPointerController()
 ) -> RealForegroundFixture {
     let game = ApplicationIdentity(
         processIdentifier: coordinatorWindow.processID,
@@ -1118,7 +1223,7 @@ private func makeRealForegroundAction(
     let clicker = CountingCoordinatorClicker()
     let coordinator = ForegroundActionCoordinator(
         applications: applications,
-        pointer: CoordinatorPointerController(),
+        pointer: pointer,
         clicker: clicker,
         sleeper: sleeper,
         inputMonitor: ImmediateIdleMonitor()
@@ -1171,6 +1276,12 @@ private final class CoordinatorPointerController:
 {
     private let lock = NSLock()
     private var point = CGPoint(x: 10, y: 10)
+    private var moveCount = 0
+    private let failOnMoveNumber: Int?
+
+    init(failOnMoveNumber: Int? = nil) {
+        self.failOnMoveNumber = failOnMoveNumber
+    }
 
     func location() throws -> CGPoint {
         lock.withLock { point }
@@ -1180,10 +1291,18 @@ private final class CoordinatorPointerController:
         to point: CGPoint,
         sourceIdentifier: Int64
     ) throws {
-        lock.withLock {
+        try lock.withLock {
+            moveCount += 1
+            if moveCount == failOnMoveNumber {
+                throw CoordinatorPointerError.restoreFailed
+            }
             self.point = point
         }
     }
+}
+
+private enum CoordinatorPointerError: Error {
+    case restoreFailed
 }
 
 private final class CountingCoordinatorClicker:

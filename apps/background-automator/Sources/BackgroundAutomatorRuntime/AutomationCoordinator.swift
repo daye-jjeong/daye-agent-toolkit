@@ -137,6 +137,7 @@ public actor AutomationCoordinator {
     private var pendingCandidate: ActionCandidate?
     private var blockedScene: AutomationScene?
     private var blockedAttention: AutomationAttention?
+    private var restorationFailureLatched = false
 
     public init(
         rules: [AutomationRule],
@@ -169,7 +170,9 @@ public actor AutomationCoordinator {
 
     public func start() {
         runToken = UUID()
-        if state == .stopped {
+        if restorationFailureLatched {
+            state = .pausedRestorationFailure
+        } else if state == .stopped {
             state = .unknown
         }
     }
@@ -186,7 +189,11 @@ public actor AutomationCoordinator {
     }
 
     public func resetForRetry() {
-        guard runToken != nil, state != .pausedRestorationFailure else {
+        guard
+            runToken != nil,
+            !restorationFailureLatched,
+            state != .pausedRestorationFailure
+        else {
             return
         }
         pendingCandidate = nil
@@ -201,9 +208,10 @@ public actor AutomationCoordinator {
     }
 
     public func resumeAfterRestorationFailure() {
-        guard runToken != nil, state == .pausedRestorationFailure else {
+        guard runToken != nil, restorationFailureLatched else {
             return
         }
+        restorationFailureLatched = false
         pendingCandidate = nil
         blockedScene = nil
         blockedAttention = nil
@@ -219,7 +227,10 @@ public actor AutomationCoordinator {
         guard let cycleToken = runToken else {
             return .paused
         }
-        guard state != .pausedRestorationFailure else {
+        guard
+            !restorationFailureLatched,
+            state != .pausedRestorationFailure
+        else {
             return .paused
         }
         guard !cycleInProgress else {
@@ -366,6 +377,10 @@ public actor AutomationCoordinator {
             rearmAfterCancellation(token: cycleToken)
             throw CancellationError()
         } catch let error as ForegroundActionCoordinatorError {
+            if !error.restorationFailures.isEmpty {
+                latchRestorationFailure()
+                return .action(.restorationFailed)
+            }
             try ensureCurrentRun(token: cycleToken)
             return handleActionError(error, scene: scene)
         }
@@ -459,7 +474,7 @@ private extension AutomationCoordinator {
     ) -> AutomationCycleResult {
         pendingCandidate = nil
         if !error.restorationFailures.isEmpty {
-            state = .pausedRestorationFailure
+            latchRestorationFailure()
             return .action(.restorationFailed)
         }
         switch error.primaryFailure {
@@ -478,6 +493,14 @@ private extension AutomationCoordinator {
             state = .attention(.actionFailed)
             return .action(.failedBeforeClick)
         }
+    }
+
+    func latchRestorationFailure() {
+        restorationFailureLatched = true
+        guard runToken != nil else {
+            return
+        }
+        state = .pausedRestorationFailure
     }
 
     func ensureCanContinue(token: UUID) throws {
