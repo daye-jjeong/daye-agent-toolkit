@@ -8,6 +8,7 @@ public enum RuleEvaluatorError: Error, Equatable, Sendable {
 }
 
 public struct RuleEvaluator: Sendable {
+    private let rules: [AutomationRule]
     private let rulesByID: [String: AutomationRule]
     private var tracker: StableObservationTracker
 
@@ -15,19 +16,25 @@ public struct RuleEvaluator: Sendable {
         rules: [AutomationRule],
         targetRectangleTolerancePixels: Double = 2
     ) throws {
-        var rulesByID: [String: AutomationRule] = [:]
-        for rule in rules {
-            guard Self.isValid(rule) else {
+        do {
+            try AutomationRuleValidator.validate(rules)
+        } catch let error as AutomationRuleValidationError {
+            switch error {
+            case let .duplicateRuleID(ruleID):
+                throw RuleEvaluatorError.duplicateRuleID(ruleID)
+            case let .malformed(ruleID, _):
                 throw RuleEvaluatorError.invalidRuleConfiguration(
-                    ruleID: rule.id
+                    ruleID: ruleID
                 )
             }
-            guard rulesByID[rule.id] == nil else {
-                throw RuleEvaluatorError.duplicateRuleID(rule.id)
-            }
+        }
+
+        var rulesByID: [String: AutomationRule] = [:]
+        for rule in rules {
             rulesByID[rule.id] = rule
         }
 
+        self.rules = rules
         self.rulesByID = rulesByID
         tracker = try StableObservationTracker(
             targetRectangleTolerancePixels:
@@ -48,7 +55,11 @@ public struct RuleEvaluator: Sendable {
             ),
             let rule = rulesByID[candidate.ruleID]
         else {
-            tracker.reset()
+            _ = tracker.record(
+                nil,
+                requiredObservationCount:
+                    RuleSafetyMinimums.stableObservationCount
+            )
             return nil
         }
 
@@ -71,7 +82,11 @@ public struct RuleEvaluator: Sendable {
         ) else {
             return false
         }
-        return tracker.equivalent(candidate, freshCandidate)
+        return tracker.revalidationMatches(candidate, freshCandidate)
+    }
+
+    public mutating func resetForRetry() {
+        tracker.resetForRetry()
     }
 }
 
@@ -85,10 +100,19 @@ private extension RuleEvaluator {
             layout != .unsupported,
             ActionCandidate.isValid(windowIdentity),
             let observation,
+            let captureIdentity = observation.captureIdentity,
+            let imageSize = observation.imageSize,
+            Self.isValid(imageSize),
             !containsBlockedSceneSkip(observation),
             observation.actionCandidates.count == 1,
             let observedCandidate = observation.actionCandidates.first,
-            rulesByID[observedCandidate.ruleID] != nil
+            rulesByID[observedCandidate.ruleID] != nil,
+            Self.validatedCandidates(
+                rules: rules,
+                observation: observation,
+                layout: layout,
+                imageSize: imageSize
+            ) == [observedCandidate]
         else {
             return nil
         }
@@ -101,6 +125,7 @@ private extension RuleEvaluator {
                 observation: observation,
                 actionCandidate: observedCandidate
             ),
+            captureIdentity: captureIdentity,
             targetPixelRect: observedCandidate.boundingBox
         )
     }
@@ -113,16 +138,26 @@ private extension RuleEvaluator {
         }
     }
 
-    static func isValid(_ rule: AutomationRule) -> Bool {
-        !rule.id.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ).isEmpty
-            && rule.id == rule.id.trimmingCharacters(
-                in: .whitespacesAndNewlines
+    static func validatedCandidates(
+        rules: [AutomationRule],
+        observation: SceneObservation,
+        layout: LayoutProfile,
+        imageSize: CGSize
+    ) -> [SceneActionCandidate] {
+        rules.compactMap {
+            SceneObserver.actionCandidate(
+                for: $0,
+                observations: observation.recognizedTexts,
+                layout: layout,
+                imageSize: imageSize
             )
-            && rule.minimumOCRConfidence.isFinite
-            && (0 ... 1).contains(rule.minimumOCRConfidence)
-            && rule.stableObservationCount >=
-                RuleSafetyMinimums.stableObservationCount
+        }
+    }
+
+    static func isValid(_ imageSize: CGSize) -> Bool {
+        imageSize.width.isFinite
+            && imageSize.height.isFinite
+            && imageSize.width > 0
+            && imageSize.height > 0
     }
 }

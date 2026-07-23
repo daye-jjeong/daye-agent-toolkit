@@ -1,5 +1,6 @@
 import BackgroundAutomatorCore
 import CoreGraphics
+import Foundation
 import Testing
 
 @testable import BackgroundAutomatorRuntime
@@ -7,18 +8,19 @@ import Testing
 @Test
 func evaluatorRequiresConsecutiveStableObservations() throws {
     var evaluator = try RuleEvaluator(rules: [evaluatorRule()])
-    let scene = evaluatorScene()
+    let firstScene = evaluatorScene(captureSequence: 1)
+    let secondScene = evaluatorScene(captureSequence: 2)
     let window = evaluatorWindow()
 
     #expect(
         evaluator.evaluate(
-            observation: scene,
+            observation: firstScene,
             windowIdentity: window,
             layout: .portraitMobile
         ) == nil
     )
     let candidate = evaluator.evaluate(
-        observation: scene,
+        observation: secondScene,
         windowIdentity: window,
         layout: .portraitMobile
     )
@@ -123,7 +125,7 @@ func evaluatorComposesWithSceneObserverSafetyFiltering() async throws {
             recognizedForEvaluator("다시 하기"),
             recognizedForEvaluator(
                 "다시 하기",
-                rect: CGRect(x: 120, y: 70, width: 60, height: 20)
+                rect: CGRect(x: 80, y: 70, width: 40, height: 20)
             ),
         ],
         rule: rule
@@ -192,20 +194,22 @@ func finalRevalidationRequiresFreshMatchingCapture() throws {
         rules: [evaluatorRule()],
         targetRectangleTolerancePixels: 2
     )
-    let scene = evaluatorScene()
+    let firstScene = evaluatorScene(captureSequence: 10)
+    let secondScene = evaluatorScene(captureSequence: 11)
     let window = evaluatorWindow()
     _ = evaluator.evaluate(
-        observation: scene,
+        observation: firstScene,
         windowIdentity: window,
         layout: .portraitMobile
     )
     let evaluatedCandidate = evaluator.evaluate(
-        observation: scene,
+        observation: secondScene,
         windowIdentity: window,
         layout: .portraitMobile
     )
     let candidate = try #require(evaluatedCandidate)
     let freshWithinTolerance = evaluatorScene(
+        captureSequence: 12,
         targetRect: CGRect(x: 41, y: 74, width: 41, height: 16)
     )
 
@@ -215,6 +219,192 @@ func finalRevalidationRequiresFreshMatchingCapture() throws {
         windowIdentity: window,
         layout: .portraitMobile
     ))
+}
+
+@Test
+func finalRevalidationRejectsSameOlderAndRestartedCaptureIdentities() throws {
+    let evaluator = try RuleEvaluator(rules: [evaluatorRule()])
+    let candidate = try evaluatorActionCandidate(captureSequence: 10)
+
+    #expect(!evaluator.revalidate(
+        candidate,
+        freshObservation: evaluatorScene(captureSequence: 10),
+        windowIdentity: evaluatorWindow(),
+        layout: .portraitMobile
+    ))
+    #expect(!evaluator.revalidate(
+        candidate,
+        freshObservation: evaluatorScene(captureSequence: 9),
+        windowIdentity: evaluatorWindow(),
+        layout: .portraitMobile
+    ))
+    #expect(!evaluator.revalidate(
+        candidate,
+        freshObservation: evaluatorScene(
+            captureSequence: 11,
+            captureSessionID: UUID(
+                uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+            )!
+        ),
+        windowIdentity: evaluatorWindow(),
+        layout: .portraitMobile
+    ))
+}
+
+@Test
+func maliciousProgrammaticCandidatesAreRejected() throws {
+    let rule = evaluatorRule()
+    let maliciousCandidates = [
+        SceneActionCandidate(
+            ruleID: "retry",
+            targetText: "확인",
+            boundingBox: evaluatorTargetRect,
+            confidence: 0.95
+        ),
+        SceneActionCandidate(
+            ruleID: "retry",
+            targetText: "다시 하기",
+            boundingBox: CGRect(x: 150, y: 75, width: 40, height: 15),
+            confidence: 0.95
+        ),
+        SceneActionCandidate(
+            ruleID: "retry",
+            targetText: "다시 하기",
+            boundingBox: evaluatorTargetRect,
+            confidence: .nan
+        ),
+        SceneActionCandidate(
+            ruleID: "retry",
+            targetText: "다시 하기",
+            boundingBox: evaluatorTargetRect,
+            confidence: 0
+        ),
+        SceneActionCandidate(
+            ruleID: "retry",
+            targetText: "다시 하기",
+            boundingBox: evaluatorTargetRect,
+            confidence: 0.79
+        ),
+        SceneActionCandidate(
+            ruleID: "retry",
+            targetText: "다시 하기",
+            boundingBox: evaluatorTargetRect,
+            confidence: 1.01
+        ),
+    ]
+
+    for (offset, malicious) in maliciousCandidates.enumerated() {
+        var evaluator = try RuleEvaluator(rules: [rule])
+        for sequence in [UInt64(offset * 2 + 1), UInt64(offset * 2 + 2)] {
+            let scene = evaluatorScene(
+                captureSequence: sequence,
+                actionCandidate: malicious
+            )
+            #expect(evaluator.evaluate(
+                observation: scene,
+                windowIdentity: evaluatorWindow(),
+                layout: .portraitMobile
+            ) == nil)
+        }
+    }
+}
+
+@Test
+func forgedSafePointCandidateIsRejected() throws {
+    let safeRule = evaluatorRule(
+        requiredTexts: ["화면을 터치해주세요"],
+        targetText: nil,
+        safePointRegion: NormalizedRegion(
+            minX: 0.4,
+            minY: 0.4,
+            maxX: 0.6,
+            maxY: 0.6
+        )
+    )
+    let forged = SceneActionCandidate(
+        ruleID: "retry",
+        targetText: nil,
+        boundingBox: CGRect(x: 70, y: 40, width: 40, height: 20),
+        confidence: 0.95
+    )
+    var evaluator = try RuleEvaluator(rules: [safeRule])
+
+    for sequence in UInt64(1) ... 2 {
+        let scene = evaluatorScene(
+            captureSequence: sequence,
+            recognizedTexts: [
+                recognizedForEvaluator("화면을 터치해주세요"),
+            ],
+            actionCandidate: forged
+        )
+        #expect(evaluator.evaluate(
+            observation: scene,
+            windowIdentity: evaluatorWindow(),
+            layout: .portraitMobile
+        ) == nil)
+    }
+}
+
+@Test
+func evaluatorUsesCompleteSharedRuleValidation() {
+    let invalidTiming = evaluatorRule(
+        postActionDelaySeconds: .nan,
+        cooldownSeconds: 0
+    )
+    let invalidAction = evaluatorRule(
+        targetText: nil,
+        safePointRegion: nil
+    )
+    let contextFreeSafePoint = evaluatorRule(
+        requiredTexts: [],
+        targetText: nil,
+        safePointRegion: NormalizedRegion(
+            minX: 0.4,
+            minY: 0.4,
+            maxX: 0.6,
+            maxY: 0.6
+        )
+    )
+    let emptyRegions = evaluatorRule(
+        regions: LayoutRegionMap([:])
+    )
+    let unsupportedRegion = evaluatorRule(
+        regions: LayoutRegionMap([
+            .unsupported: NormalizedRegion(
+                minX: 0,
+                minY: 0,
+                maxX: 1,
+                maxY: 1
+            ),
+        ])
+    )
+    let malformedRegion = evaluatorRule(
+        regions: LayoutRegionMap([
+            .portraitMobile: NormalizedRegion(
+                minX: .nan,
+                minY: 0,
+                maxX: 1,
+                maxY: 1
+            ),
+        ])
+    )
+    let blankForbiddenText = evaluatorRule(
+        forbiddenTexts: [" "]
+    )
+
+    for rule in [
+        invalidTiming,
+        invalidAction,
+        contextFreeSafePoint,
+        emptyRegions,
+        unsupportedRegion,
+        malformedRegion,
+        blankForbiddenText,
+    ] {
+        #expect(throws: RuleEvaluatorError.invalidRuleConfiguration(ruleID: "retry")) {
+            try RuleEvaluator(rules: [rule])
+        }
+    }
 }
 
 @Test
@@ -228,6 +418,11 @@ func finalRevalidationRejectsChangedSafetyIdentityOrGeometry() throws {
     )
     let candidate = try evaluatorActionCandidate()
     let changedRule = SceneObservation(
+        captureIdentity: try CaptureIdentity(
+            sessionID: evaluatorCaptureSessionID,
+            sequence: 2
+        ),
+        imageSize: CGSize(width: 200, height: 100),
         recognizedTexts: evaluatorScene().recognizedTexts,
         actionCandidates: [
             SceneActionCandidate(
@@ -239,12 +434,14 @@ func finalRevalidationRejectsChangedSafetyIdentityOrGeometry() throws {
         ]
     )
     let changedScene = evaluatorScene(
+        captureSequence: 2,
         recognizedTexts: [
             recognizedForEvaluator("다시 하기"),
             recognizedForEvaluator("새 문맥"),
         ]
     )
     let movedTarget = evaluatorScene(
+        captureSequence: 2,
         targetRect: CGRect(x: 43, y: 75, width: 40, height: 15)
     )
     let movedFrame = evaluatorWindow(
@@ -265,13 +462,13 @@ func finalRevalidationRejectsChangedSafetyIdentityOrGeometry() throws {
     ))
     #expect(!evaluator.revalidate(
         candidate,
-        freshObservation: evaluatorScene(),
+        freshObservation: evaluatorScene(captureSequence: 2),
         windowIdentity: movedFrame,
         layout: .portraitMobile
     ))
     #expect(!evaluator.revalidate(
         candidate,
-        freshObservation: evaluatorScene(),
+        freshObservation: evaluatorScene(captureSequence: 2),
         windowIdentity: evaluatorWindow(),
         layout: .landscape
     ))
@@ -292,41 +489,55 @@ private let evaluatorTargetRect = CGRect(
 
 private func evaluatorRule(
     id: String = "retry",
-    targetText: String = "다시 하기"
+    requiredTexts: [String]? = nil,
+    forbiddenTexts: [String] = ["장면 넘기기"],
+    targetText: String? = "다시 하기",
+    safePointRegion: NormalizedRegion? = nil,
+    postActionDelaySeconds: Double = 0.5,
+    cooldownSeconds: Double = 2,
+    regions: LayoutRegionMap? = nil
 ) -> AutomationRule {
     AutomationRule(
         id: id,
-        requiredTexts: [targetText],
-        forbiddenTexts: ["장면 넘기기"],
+        requiredTexts: requiredTexts ?? targetText.map { [$0] } ?? [],
+        forbiddenTexts: forbiddenTexts,
         action: AutomationAction(
             targetText: targetText,
-            safePointRegion: nil
+            safePointRegion: safePointRegion
         ),
-        regions: LayoutRegionMap([
+        regions: regions ?? LayoutRegionMap([
             .portraitMobile: NormalizedRegion(
                 minX: 0,
                 minY: 0,
-                maxX: 1,
+                maxX: 0.6,
                 maxY: 1
             ),
         ]),
         minimumOCRConfidence: 0.8,
         stableObservationCount: 2,
-        postActionDelaySeconds: 0.5,
-        cooldownSeconds: 2
+        postActionDelaySeconds: postActionDelaySeconds,
+        cooldownSeconds: cooldownSeconds
     )
 }
 
 private func evaluatorScene(
+    captureSequence: UInt64 = 1,
+    captureSessionID: UUID = evaluatorCaptureSessionID,
     recognizedTexts: [RecognizedTextObservation]? = nil,
-    targetRect: CGRect = evaluatorTargetRect
+    targetRect: CGRect = evaluatorTargetRect,
+    actionCandidate: SceneActionCandidate? = nil
 ) -> SceneObservation {
     SceneObservation(
+        captureIdentity: try! CaptureIdentity(
+            sessionID: captureSessionID,
+            sequence: captureSequence
+        ),
+        imageSize: CGSize(width: 200, height: 100),
         recognizedTexts: recognizedTexts ?? [
             recognizedForEvaluator("다시 하기", rect: targetRect),
         ],
         actionCandidates: [
-            SceneActionCandidate(
+            actionCandidate ?? SceneActionCandidate(
                 ruleID: "retry",
                 targetText: "다시 하기",
                 boundingBox: targetRect,
@@ -337,7 +548,8 @@ private func evaluatorScene(
 }
 
 private func evaluatorWindow(
-    frame: CGRect = CGRect(x: 0, y: 0, width: 626, height: 949)
+    frame: CGRect = CGRect(x: 0, y: 0, width: 626, height: 949),
+    launchTime: Double = 1_000
 ) -> WindowCandidate {
     WindowCandidate(
         windowID: 7,
@@ -345,11 +557,16 @@ private func evaluatorWindow(
         bundleIdentifier: "com.example.game",
         title: "Mabinogi Mobile",
         frame: frame,
-        isOnScreen: true
+        isOnScreen: true,
+        processLifetimeIdentity: try! ProcessLifetimeIdentity(
+            launchTimeIntervalSinceReferenceDate: launchTime
+        )
     )
 }
 
-private func evaluatorActionCandidate() throws -> ActionCandidate {
+private func evaluatorActionCandidate(
+    captureSequence: UInt64 = 1
+) throws -> ActionCandidate {
     try ActionCandidate(
         ruleID: "retry",
         windowIdentity: evaluatorWindow(),
@@ -357,6 +574,10 @@ private func evaluatorActionCandidate() throws -> ActionCandidate {
         sceneFingerprint: SceneFingerprint(
             semanticTexts: ["다시 하기"],
             targetText: "다시 하기"
+        ),
+        captureIdentity: try CaptureIdentity(
+            sessionID: evaluatorCaptureSessionID,
+            sequence: captureSequence
         ),
         targetPixelRect: evaluatorTargetRect
     )
@@ -393,10 +614,18 @@ private func evaluatorObservedScene(
     )
     return try await observer.observe(
         image: evaluatorImage(),
+        captureIdentity: try CaptureIdentity(
+            sessionID: evaluatorCaptureSessionID,
+            sequence: 1
+        ),
         layout: .portraitMobile,
         rules: [rule]
     )
 }
+
+private let evaluatorCaptureSessionID = UUID(
+    uuidString: "11111111-2222-3333-4444-555555555555"
+)!
 
 private func evaluatorImage() -> CGImage {
     let colorSpace = CGColorSpaceCreateDeviceRGB()

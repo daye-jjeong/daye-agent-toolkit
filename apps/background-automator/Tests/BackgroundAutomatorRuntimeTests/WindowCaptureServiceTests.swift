@@ -1,7 +1,85 @@
 import CoreGraphics
+import Foundation
 import Testing
 
 @testable import BackgroundAutomatorRuntime
+
+@Test
+func captureResultsReceiveMonotonicSessionBoundIdentities() async throws {
+    let visible = candidate(windowID: 7)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [visible],
+        currentCandidate: visible
+    )
+    let sessionID = UUID(
+        uuidString: "12345678-1234-1234-1234-123456789ABC"
+    )!
+    let service = WindowCaptureService(
+        backend: backend,
+        captureSessionID: sessionID
+    )
+
+    let first = try await service.captureWindow(matching: visible)
+    let second = try await service.captureWindow(matching: visible)
+
+    #expect(first.captureIdentity.sessionID == sessionID)
+    #expect(first.captureIdentity.sequence == 1)
+    #expect(second.captureIdentity.sequence == 2)
+    #expect(second.captureIdentity.isStrictlyNewer(
+        than: first.captureIdentity
+    ))
+}
+
+@Test
+func captureSessionRestartDoesNotCompareAsNewer() async throws {
+    let visible = candidate(windowID: 7)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [visible],
+        currentCandidate: visible
+    )
+    let firstService = WindowCaptureService(
+        backend: backend,
+        captureSessionID: UUID(
+            uuidString: "AAAAAAAA-1234-1234-1234-123456789ABC"
+        )!
+    )
+    let restartedService = WindowCaptureService(
+        backend: backend,
+        captureSessionID: UUID(
+            uuidString: "BBBBBBBB-1234-1234-1234-123456789ABC"
+        )!
+    )
+
+    let beforeRestart = try await firstService.captureWindow(
+        matching: visible
+    )
+    let afterRestart = try await restartedService.captureWindow(
+        matching: visible
+    )
+
+    #expect(!afterRestart.captureIdentity.isStrictlyNewer(
+        than: beforeRestart.captureIdentity
+    ))
+}
+
+@Test
+func captureSequenceOverflowFailsSafeWithoutWrapping() async throws {
+    let visible = candidate(windowID: 7)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [visible],
+        currentCandidate: visible
+    )
+    let service = WindowCaptureService(
+        backend: backend,
+        nextCaptureSequence: .max
+    )
+
+    let final = try await service.captureWindow(matching: visible)
+    #expect(final.captureIdentity.sequence == .max)
+    await #expect(throws: WindowCaptureError.captureSequenceExhausted) {
+        try await service.captureWindow(matching: visible)
+    }
+}
 
 @Test
 func combinedCaptureRejectsReplacementReusingWindowID() async {
@@ -334,7 +412,7 @@ private actor FakeWindowCaptureBackend: WindowCaptureBackend {
         self.currentCandidate = currentCandidate
     }
 
-    func capture(expected: WindowCandidate) async throws -> WindowCaptureResult {
+    func capture(expected: WindowCandidate) async throws -> WindowCaptureFrame {
         receivedExpected = expected
         guard WindowTarget.isCurrent(currentCandidate, matching: expected) else {
             throw WindowCaptureError.staleWindow(windowID: expected.windowID)
@@ -344,7 +422,7 @@ private actor FakeWindowCaptureBackend: WindowCaptureBackend {
         }
 
         imageCaptureCount += 1
-        return WindowCaptureResult(
+        return WindowCaptureFrame(
             image: makeImage(),
             candidate: currentCandidate
         )
@@ -372,7 +450,10 @@ private func candidate(
         bundleIdentifier: bundleIdentifier,
         title: title,
         frame: frame,
-        isOnScreen: isOnScreen
+        isOnScreen: isOnScreen,
+        processLifetimeIdentity: try! ProcessLifetimeIdentity(
+            launchTimeIntervalSinceReferenceDate: 1_000
+        )
     )
 }
 

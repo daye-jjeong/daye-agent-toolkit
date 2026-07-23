@@ -44,13 +44,19 @@ public struct SceneActionCandidate: Equatable, Sendable {
 }
 
 public struct SceneObservation: Equatable, Sendable {
+    public let captureIdentity: CaptureIdentity?
+    public let imageSize: CGSize?
     public let recognizedTexts: [RecognizedTextObservation]
     public let actionCandidates: [SceneActionCandidate]
 
     public init(
+        captureIdentity: CaptureIdentity? = nil,
+        imageSize: CGSize? = nil,
         recognizedTexts: [RecognizedTextObservation],
         actionCandidates: [SceneActionCandidate]
     ) {
+        self.captureIdentity = captureIdentity
+        self.imageSize = imageSize
         self.recognizedTexts = recognizedTexts
         self.actionCandidates = actionCandidates
     }
@@ -70,10 +76,51 @@ public struct SceneObserver: Sendable {
         layout: LayoutProfile,
         rules: [AutomationRule]
     ) async throws -> SceneObservation {
+        try await observe(
+            image: image,
+            captureIdentity: nil,
+            layout: layout,
+            rules: rules
+        )
+    }
+
+    public func observe(
+        capture: WindowCaptureResult,
+        layout: LayoutProfile,
+        rules: [AutomationRule]
+    ) async throws -> SceneObservation {
+        try await observe(
+            image: capture.image,
+            captureIdentity: capture.captureIdentity,
+            layout: layout,
+            rules: rules
+        )
+    }
+
+    func observe(
+        image: CGImage,
+        captureIdentity: CaptureIdentity,
+        layout: LayoutProfile,
+        rules: [AutomationRule]
+    ) async throws -> SceneObservation {
+        try await observe(
+            image: image,
+            captureIdentity: Optional(captureIdentity),
+            layout: layout,
+            rules: rules
+        )
+    }
+
+    private func observe(
+        image: CGImage,
+        captureIdentity: CaptureIdentity?,
+        layout: LayoutProfile,
+        rules: [AutomationRule]
+    ) async throws -> SceneObservation {
         let observations = try await textRecognizer.recognizeText(in: image)
         let imageSize = CGSize(width: image.width, height: image.height)
         let candidates = rules.compactMap {
-            actionCandidate(
+            Self.actionCandidate(
                 for: $0,
                 observations: observations,
                 layout: layout,
@@ -81,14 +128,16 @@ public struct SceneObserver: Sendable {
             )
         }
         return SceneObservation(
+            captureIdentity: captureIdentity,
+            imageSize: imageSize,
             recognizedTexts: observations,
             actionCandidates: candidates
         )
     }
 }
 
-private extension SceneObserver {
-    func actionCandidate(
+extension SceneObserver {
+    static func actionCandidate(
         for rule: AutomationRule,
         observations: [RecognizedTextObservation],
         layout: LayoutProfile,
@@ -101,32 +150,32 @@ private extension SceneObserver {
             return nil
         }
         if let targetText = rule.action.targetText,
-           Self.blockedActionTexts.contains(where: {
+           blockedActionTexts.contains(where: {
                semanticText($0) == semanticText(targetText)
            }) {
             return nil
         }
 
         let blockingObservations = observations.filter {
-            isValidConfidence($0.confidence)
-                && isUsable(
+            Self.isValidConfidence($0.confidence)
+                && Self.isUsable(
                     $0.boundingBox,
                     imageSize: imageSize
                 )
         }
-        guard !containsForbiddenText(
-            rule.forbiddenTexts + Self.blockedActionTexts,
+        guard !Self.containsForbiddenText(
+            rule.forbiddenTexts + blockedActionTexts,
             in: blockingObservations
         ) else {
             return nil
         }
 
         let confidentObservations = observations.filter {
-            isValidConfidence($0.confidence)
+            Self.isValidConfidence($0.confidence)
                 && $0.confidence >= rule.minimumOCRConfidence
         }
         let observationsInRegion = confidentObservations.filter {
-            isCentered(
+            Self.isCentered(
                 $0.boundingBox,
                 in: region,
                 imageSize: imageSize
@@ -135,7 +184,7 @@ private extension SceneObserver {
         var requiredObservations: [RecognizedTextObservation] = []
         for requiredText in rule.requiredTexts {
             let matches = observationsInRegion.filter {
-                semanticText($0.text) == semanticText(requiredText)
+                Self.semanticText($0.text) == Self.semanticText(requiredText)
             }
             guard matches.count == 1, let match = matches.first else {
                 return nil
@@ -145,7 +194,7 @@ private extension SceneObserver {
 
         if let targetText = rule.action.targetText {
             let targets = observationsInRegion.filter {
-                semanticText($0.text) == semanticText(targetText)
+                Self.semanticText($0.text) == Self.semanticText(targetText)
             }
             guard targets.count == 1, let target = targets.first else {
                 return nil
@@ -161,7 +210,7 @@ private extension SceneObserver {
 
         guard
             let safePointRegion = rule.action.safePointRegion,
-            let safePointBoundingBox = pixelRect(
+            let safePointBoundingBox = Self.pixelRect(
                 for: safePointRegion,
                 imageSize: imageSize
             ),
@@ -180,33 +229,33 @@ private extension SceneObserver {
         )
     }
 
-    func containsForbiddenText(
+    private static func containsForbiddenText(
         _ forbiddenTexts: [String],
         in observations: [RecognizedTextObservation]
     ) -> Bool {
-        let forbidden = Set(forbiddenTexts.map(semanticText))
+        let forbidden = Set(forbiddenTexts.map(Self.semanticText))
         return observations.contains {
-            forbidden.contains(semanticText($0.text))
+            forbidden.contains(Self.semanticText($0.text))
         }
     }
 
-    func isValidConfidence(_ confidence: Double) -> Bool {
+    private static func isValidConfidence(_ confidence: Double) -> Bool {
         confidence.isFinite && (0 ... 1).contains(confidence)
     }
 
-    func semanticText(_ text: String) -> String {
+    private static func semanticText(_ text: String) -> String {
         text.unicodeScalars
             .filter { !CharacterSet.whitespacesAndNewlines.contains($0) }
             .map(String.init)
             .joined()
     }
 
-    func isCentered(
+    private static func isCentered(
         _ boundingBox: CGRect,
         in region: NormalizedRegion,
         imageSize: CGSize
     ) -> Bool {
-        guard isUsable(boundingBox, imageSize: imageSize) else {
+        guard Self.isUsable(boundingBox, imageSize: imageSize) else {
             return false
         }
 
@@ -216,7 +265,7 @@ private extension SceneObserver {
             && (region.minY ... region.maxY).contains(normalizedY)
     }
 
-    func isUsable(
+    private static func isUsable(
         _ boundingBox: CGRect,
         imageSize: CGSize
     ) -> Bool {
@@ -245,7 +294,7 @@ private extension SceneObserver {
             && boundingBox.origin.y < imageSize.height
     }
 
-    func pixelRect(
+    private static func pixelRect(
         for region: NormalizedRegion,
         imageSize: CGSize
     ) -> CGRect? {

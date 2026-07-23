@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 @preconcurrency import ScreenCaptureKit
@@ -19,10 +20,43 @@ public protocol WindowCapturing: Sendable {
 public struct WindowCaptureResult: Sendable {
     public let image: CGImage
     public let candidate: WindowCandidate
+    public let captureIdentity: CaptureIdentity
 
-    public init(image: CGImage, candidate: WindowCandidate) {
+    public init(
+        image: CGImage,
+        candidate: WindowCandidate,
+        captureIdentity: CaptureIdentity
+    ) {
         self.image = image
         self.candidate = candidate
+        self.captureIdentity = captureIdentity
+    }
+}
+
+public enum CaptureIdentityError: Error, Equatable, Sendable {
+    case invalidSequence
+}
+
+public struct CaptureIdentity: Equatable, Sendable {
+    public let sessionID: UUID
+    public let sequence: UInt64
+
+    public init(
+        sessionID: UUID,
+        sequence: UInt64
+    ) throws {
+        guard sequence > 0 else {
+            throw CaptureIdentityError.invalidSequence
+        }
+        self.sessionID = sessionID
+        self.sequence = sequence
+    }
+
+    public func isStrictlyNewer(
+        than other: CaptureIdentity
+    ) -> Bool {
+        sessionID == other.sessionID
+            && sequence > other.sequence
     }
 }
 
@@ -44,6 +78,7 @@ public enum WindowCaptureError: Error, Equatable, Sendable {
     case windowUnavailable(windowID: UInt32)
     case staleWindow(windowID: UInt32)
     case captureFailed(windowID: UInt32, reason: String)
+    case captureSequenceExhausted
 }
 
 extension WindowCaptureError: LocalizedError {
@@ -57,6 +92,8 @@ extension WindowCaptureError: LocalizedError {
             "Window \(windowID) changed or is no longer capturable. Use captureWindow to select again safely."
         case let .captureFailed(windowID, reason):
             "Could not capture window \(windowID): \(reason)"
+        case .captureSequenceExhausted:
+            "Capture identity sequence is exhausted; restart the automator before capturing again."
         }
     }
 }
@@ -66,7 +103,12 @@ protocol WindowCaptureBackend: Sendable {
     func accessibilityWindow(
         matching candidate: WindowCandidate
     ) async throws -> AccessibilityWindowState
-    func capture(expected: WindowCandidate) async throws -> WindowCaptureResult
+    func capture(expected: WindowCandidate) async throws -> WindowCaptureFrame
+}
+
+struct WindowCaptureFrame: Sendable {
+    let image: CGImage
+    let candidate: WindowCandidate
 }
 
 private enum PendingSelection: Sendable {
@@ -77,13 +119,23 @@ private enum PendingSelection: Sendable {
 public actor WindowCaptureService: WindowCapturing {
     private let backend: any WindowCaptureBackend
     private var pendingSelectionsByID: [UInt32: PendingSelection] = [:]
+    private let captureSessionID: UUID
+    private var nextCaptureSequence: UInt64
 
     public init() {
         backend = ScreenCaptureKitBackend()
+        captureSessionID = UUID()
+        nextCaptureSequence = 1
     }
 
-    init(backend: any WindowCaptureBackend) {
+    init(
+        backend: any WindowCaptureBackend,
+        captureSessionID: UUID = UUID(),
+        nextCaptureSequence: UInt64 = 1
+    ) {
         self.backend = backend
+        self.captureSessionID = captureSessionID
+        self.nextCaptureSequence = nextCaptureSequence
     }
 
     public func listWindows() async throws -> [WindowCandidate] {
@@ -120,7 +172,7 @@ public actor WindowCaptureService: WindowCapturing {
             throw WindowCaptureError.staleWindow(windowID: windowID)
         }
 
-        let result: WindowCaptureResult
+        let result: WindowCaptureFrame
         do {
             result = try await backend.capture(expected: expected)
         } catch let error as WindowCaptureError {
@@ -136,6 +188,7 @@ public actor WindowCaptureService: WindowCapturing {
         else {
             throw WindowCaptureError.staleWindow(windowID: windowID)
         }
+        _ = try makeCaptureIdentity()
         return result.image
     }
 
@@ -157,13 +210,15 @@ public actor WindowCaptureService: WindowCapturing {
         ) else {
             throw WindowTargetError.notFound
         }
-        return try await backend.capture(expected: expected)
+        let frame = try await backend.capture(expected: expected)
+        return try captureResult(from: frame)
     }
 
     public func captureWindow(
         matching expected: WindowCandidate
     ) async throws -> WindowCaptureResult {
-        try await backend.capture(expected: expected)
+        let frame = try await backend.capture(expected: expected)
+        return try captureResult(from: frame)
     }
 
     public func visibilityDiagnostic(
@@ -205,6 +260,32 @@ public actor WindowCaptureService: WindowCapturing {
             )
         }
     }
+
+    private func captureResult(
+        from frame: WindowCaptureFrame
+    ) throws -> WindowCaptureResult {
+        WindowCaptureResult(
+            image: frame.image,
+            candidate: frame.candidate,
+            captureIdentity: try makeCaptureIdentity()
+        )
+    }
+
+    private func makeCaptureIdentity() throws -> CaptureIdentity {
+        guard nextCaptureSequence > 0 else {
+            throw WindowCaptureError.captureSequenceExhausted
+        }
+        let identity = try CaptureIdentity(
+            sessionID: captureSessionID,
+            sequence: nextCaptureSequence
+        )
+        if nextCaptureSequence == .max {
+            nextCaptureSequence = 0
+        } else {
+            nextCaptureSequence += 1
+        }
+        return identity
+    }
 }
 
 private actor ScreenCaptureKitBackend: WindowCaptureBackend {
@@ -244,7 +325,7 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
         )
     }
 
-    func capture(expected: WindowCandidate) async throws -> WindowCaptureResult {
+    func capture(expected: WindowCandidate) async throws -> WindowCaptureFrame {
         let currentWindows = try await loadWindows()
         guard
             let window = currentWindows.first(where: {
@@ -295,7 +376,7 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
                 contentFilter: filter,
                 configuration: configuration
             )
-            return WindowCaptureResult(image: image, candidate: current)
+            return WindowCaptureFrame(image: image, candidate: current)
         } catch {
             throw WindowCaptureError.captureFailed(
                 windowID: expected.windowID,
@@ -323,6 +404,14 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
         coreGraphicsWindow: CoreGraphicsWindowState?
     ) -> WindowCandidate {
         let processID = window.owningApplication?.processID ?? 0
+        let launchTime = NSRunningApplication(
+            processIdentifier: processID
+        )?.launchDate?.timeIntervalSinceReferenceDate
+        let processLifetimeIdentity = launchTime.flatMap {
+            try? ProcessLifetimeIdentity(
+                launchTimeIntervalSinceReferenceDate: $0
+            )
+        }
         return WindowCandidate(
             windowID: window.windowID,
             processID: processID,
@@ -333,7 +422,8 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
                 screenCaptureKitIsOnScreen: window.isOnScreen,
                 processID: processID,
                 coreGraphicsWindow: coreGraphicsWindow
-            )
+            ),
+            processLifetimeIdentity: processLifetimeIdentity
         )
     }
 }

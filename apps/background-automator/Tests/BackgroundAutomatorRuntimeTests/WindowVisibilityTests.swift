@@ -173,6 +173,9 @@ private func windowCandidate(
         bundleIdentifier: "com.example.target",
         title: title,
         frame: frame,
-        isOnScreen: true
+        isOnScreen: true,
+        processLifetimeIdentity: try! ProcessLifetimeIdentity(
+            launchTimeIntervalSinceReferenceDate: 1_000
+        )
     )
 }

@@ -137,6 +137,31 @@ func currentWindowValidationRejectsChangedIdentity(current: WindowCandidate) {
 }
 
 @Test
+func currentWindowValidationRejectsReusedIDsAfterProcessRelaunch() {
+    let expected = candidate(windowID: 1, launchTime: 1_000)
+    let relaunched = candidate(windowID: 1, launchTime: 2_000)
+
+    #expect(!WindowTarget.isCurrent(relaunched, matching: expected))
+}
+
+@Test
+func unknownProcessLifetimeIsNotSelectableOrRevalidatable() {
+    let unknown = candidate(
+        windowID: 1,
+        hasKnownProcessLifetime: false
+    )
+
+    #expect(throws: WindowTargetError.notFound) {
+        try WindowTarget.select(
+            from: [unknown],
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+    #expect(!WindowTarget.isCurrent(unknown, matching: unknown))
+}
+
+@Test
 func currentWindowValidationRejectsOffscreenWindow() {
     let expected = candidate(windowID: 1)
     let offscreen = candidate(windowID: 1, isOnScreen: false)
@@ -163,7 +188,9 @@ private func candidate(
     bundleIdentifier: String = "com.example.target",
     title: String = "Game",
     frame: CGRect = CGRect(x: 0, y: 0, width: 800, height: 600),
-    isOnScreen: Bool = true
+    isOnScreen: Bool = true,
+    launchTime: Double = 1_000,
+    hasKnownProcessLifetime: Bool = true
 ) -> WindowCandidate {
     WindowCandidate(
         windowID: windowID,
@@ -171,6 +198,11 @@ private func candidate(
         bundleIdentifier: bundleIdentifier,
         title: title,
         frame: frame,
-        isOnScreen: isOnScreen
+        isOnScreen: isOnScreen,
+        processLifetimeIdentity: hasKnownProcessLifetime
+            ? (try! ProcessLifetimeIdentity(
+                launchTimeIntervalSinceReferenceDate: launchTime
+            ))
+            : nil
     )
 }

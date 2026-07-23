@@ -153,6 +153,32 @@ private extension RuleLoader {
     }
 
     func validateSemantics(_ rules: [AutomationRule]) throws {
+        do {
+            try AutomationRuleValidator.validate(rules)
+        } catch let error as AutomationRuleValidationError {
+            switch error {
+            case let .duplicateRuleID(ruleID):
+                throw RuleLoaderError.malformedSemantics(
+                    ruleID: ruleID,
+                    reason: "id must be unique"
+                )
+            case let .malformed(ruleID, reason):
+                throw RuleLoaderError.malformedSemantics(
+                    ruleID: ruleID,
+                    reason: reason
+                )
+            }
+        }
+    }
+}
+
+enum AutomationRuleValidationError: Error, Equatable, Sendable {
+    case duplicateRuleID(String)
+    case malformed(ruleID: String, reason: String)
+}
+
+enum AutomationRuleValidator {
+    static func validate(_ rules: [AutomationRule]) throws {
         var identifiers: Set<String> = []
 
         for rule in rules {
@@ -161,7 +187,8 @@ private extension RuleLoader {
                 throw malformed(rule, "id must not be empty")
             }
             guard identifiers.insert(trimmedID).inserted else {
-                throw malformed(rule, "id must be unique")
+                throw AutomationRuleValidationError
+                    .duplicateRuleID(rule.id)
             }
             guard trimmedID == rule.id else {
                 throw malformed(
@@ -170,9 +197,9 @@ private extension RuleLoader {
                 )
             }
 
-            try validateTexts(rule)
-            try validateAction(rule)
-            try validateRegions(rule)
+            try Self.validateTexts(rule)
+            try Self.validateAction(rule)
+            try Self.validateRegions(rule)
 
             guard rule.minimumOCRConfidence.isFinite,
                   (0 ... 1).contains(rule.minimumOCRConfidence) else {
@@ -207,7 +234,7 @@ private extension RuleLoader {
         }
     }
 
-    func validateTexts(_ rule: AutomationRule) throws {
+    private static func validateTexts(_ rule: AutomationRule) throws {
         let texts = rule.requiredTexts + rule.forbiddenTexts
         guard texts.allSatisfy({
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -216,7 +243,7 @@ private extension RuleLoader {
         }
     }
 
-    func validateAction(_ rule: AutomationRule) throws {
+    private static func validateAction(_ rule: AutomationRule) throws {
         let hasTargetText = rule.action.targetText != nil
         let hasSafePoint = rule.action.safePointRegion != nil
         guard hasTargetText != hasSafePoint else {
@@ -235,7 +262,7 @@ private extension RuleLoader {
         }
 
         if let safePoint = rule.action.safePointRegion,
-           !isValid(safePoint) {
+           !Self.isValid(safePoint) {
             throw malformed(
                 rule,
                 "safePointRegion must be normalized and non-empty"
@@ -250,7 +277,7 @@ private extension RuleLoader {
         }
     }
 
-    func validateRegions(_ rule: AutomationRule) throws {
+    private static func validateRegions(_ rule: AutomationRule) throws {
         guard !rule.regions.entries.isEmpty else {
             throw malformed(rule, "at least one search region is required")
         }
@@ -262,7 +289,7 @@ private extension RuleLoader {
                     "unsupported layout cannot define a search region"
                 )
             }
-            guard isValid(region) else {
+            guard Self.isValid(region) else {
                 throw malformed(
                     rule,
                     "\(layout.rawValue) search region must be normalized and non-empty"
@@ -271,17 +298,17 @@ private extension RuleLoader {
         }
     }
 
-    func isValid(_ region: NormalizedRegion) -> Bool {
+    private static func isValid(_ region: NormalizedRegion) -> Bool {
         let values = [region.minX, region.minY, region.maxX, region.maxY]
         return values.allSatisfy { $0.isFinite && (0 ... 1).contains($0) }
             && region.minX < region.maxX
             && region.minY < region.maxY
     }
 
-    func malformed(
+    private static func malformed(
         _ rule: AutomationRule,
         _ reason: String
-    ) -> RuleLoaderError {
-        .malformedSemantics(ruleID: rule.id, reason: reason)
+    ) -> AutomationRuleValidationError {
+        .malformed(ruleID: rule.id, reason: reason)
     }
 }

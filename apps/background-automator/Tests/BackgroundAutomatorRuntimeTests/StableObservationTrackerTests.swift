@@ -1,5 +1,6 @@
 import BackgroundAutomatorCore
 import CoreGraphics
+import Foundation
 import Testing
 
 @testable import BackgroundAutomatorRuntime
@@ -24,9 +25,11 @@ func twoEquivalentObservationsProduceLatestImmutableCandidate() throws {
         targetRectangleTolerancePixels: 2
     )
     let first = trackerCandidate(
+        captureSequence: 1,
         targetPixelRect: CGRect(x: 100, y: 200, width: 80, height: 30)
     )
     let second = trackerCandidate(
+        captureSequence: 2,
         targetPixelRect: CGRect(x: 101, y: 199, width: 81, height: 31)
     )
 
@@ -41,12 +44,13 @@ func changedLayoutResetsStableStreak() throws {
     var tracker = try StableObservationTracker(
         targetRectangleTolerancePixels: 2
     )
-    let portrait = trackerCandidate(layout: .portraitMobile)
-    let landscape = trackerCandidate(layout: .landscape)
+    let portrait = trackerCandidate(captureSequence: 1, layout: .portraitMobile)
+    let landscape = trackerCandidate(captureSequence: 2, layout: .landscape)
+    let nextLandscape = trackerCandidate(captureSequence: 3, layout: .landscape)
 
     #expect(tracker.record(portrait, requiredObservationCount: 2) == nil)
     #expect(tracker.record(landscape, requiredObservationCount: 2) == nil)
-    #expect(tracker.record(landscape, requiredObservationCount: 2) == landscape)
+    #expect(tracker.record(nextLandscape, requiredObservationCount: 2) == nextLandscape)
 }
 
 @Test
@@ -54,20 +58,26 @@ func changedWindowOrCapturedFrameResetsStableStreak() throws {
     var tracker = try StableObservationTracker(
         targetRectangleTolerancePixels: 2
     )
-    let original = trackerCandidate()
+    let original = trackerCandidate(captureSequence: 1)
     let movedFrame = trackerCandidate(
+        captureSequence: 2,
         window: trackerWindow(
             frame: CGRect(x: 10, y: 0, width: 626, height: 949)
         )
     )
     let replacedWindow = trackerCandidate(
+        captureSequence: 3,
+        window: trackerWindow(windowID: 99)
+    )
+    let nextReplacedWindow = trackerCandidate(
+        captureSequence: 4,
         window: trackerWindow(windowID: 99)
     )
 
     #expect(tracker.record(original, requiredObservationCount: 2) == nil)
     #expect(tracker.record(movedFrame, requiredObservationCount: 2) == nil)
     #expect(tracker.record(replacedWindow, requiredObservationCount: 2) == nil)
-    #expect(tracker.record(replacedWindow, requiredObservationCount: 2) == replacedWindow)
+    #expect(tracker.record(nextReplacedWindow, requiredObservationCount: 2) == nextReplacedWindow)
 }
 
 @Test
@@ -75,19 +85,24 @@ func changedRuleOrSceneFingerprintResetsStableStreak() throws {
     var tracker = try StableObservationTracker(
         targetRectangleTolerancePixels: 2
     )
-    let first = trackerCandidate()
-    let otherRule = trackerCandidate(ruleID: "continue")
+    let first = trackerCandidate(captureSequence: 1)
+    let otherRule = trackerCandidate(captureSequence: 2, ruleID: "continue")
     let otherScene = trackerCandidate(
+        captureSequence: 3,
         fingerprint: SceneFingerprint(
             semanticTexts: ["계속 하기", "추가 문맥"],
             targetText: "계속 하기"
         )
     )
+    let nextOtherScene = trackerCandidate(
+        captureSequence: 4,
+        fingerprint: otherScene.sceneFingerprint
+    )
 
     #expect(tracker.record(first, requiredObservationCount: 2) == nil)
     #expect(tracker.record(otherRule, requiredObservationCount: 2) == nil)
     #expect(tracker.record(otherScene, requiredObservationCount: 2) == nil)
-    #expect(tracker.record(otherScene, requiredObservationCount: 2) == otherScene)
+    #expect(tracker.record(nextOtherScene, requiredObservationCount: 2) == nextOtherScene)
 }
 
 @Test
@@ -95,12 +110,14 @@ func nilObservationResetsStableStreak() throws {
     var tracker = try StableObservationTracker(
         targetRectangleTolerancePixels: 2
     )
-    let candidate = trackerCandidate()
+    let candidate = trackerCandidate(captureSequence: 1)
+    let secondCandidate = trackerCandidate(captureSequence: 2)
+    let thirdCandidate = trackerCandidate(captureSequence: 3)
 
     #expect(tracker.record(candidate, requiredObservationCount: 2) == nil)
     #expect(tracker.record(nil, requiredObservationCount: 2) == nil)
-    #expect(tracker.record(candidate, requiredObservationCount: 2) == nil)
-    #expect(tracker.record(candidate, requiredObservationCount: 2) == candidate)
+    #expect(tracker.record(secondCandidate, requiredObservationCount: 2) == nil)
+    #expect(tracker.record(thirdCandidate, requiredObservationCount: 2) == thirdCandidate)
 }
 
 @Test
@@ -109,9 +126,11 @@ func targetRectangleToleranceCoversPositionAndSizeInPixels() throws {
         targetRectangleTolerancePixels: 2
     )
     let original = trackerCandidate(
+        captureSequence: 1,
         targetPixelRect: CGRect(x: 100, y: 200, width: 80, height: 30)
     )
     let inside = trackerCandidate(
+        captureSequence: 2,
         targetPixelRect: CGRect(x: 102, y: 198, width: 82, height: 28)
     )
 
@@ -130,13 +149,83 @@ func targetRectangleOutsideToleranceResetsStreak(changedRect: CGRect) throws {
         targetRectangleTolerancePixels: 2
     )
     let original = trackerCandidate(
+        captureSequence: 1,
         targetPixelRect: CGRect(x: 100, y: 200, width: 80, height: 30)
     )
-    let changed = trackerCandidate(targetPixelRect: changedRect)
+    let changed = trackerCandidate(
+        captureSequence: 2,
+        targetPixelRect: changedRect
+    )
+    let nextChanged = trackerCandidate(
+        captureSequence: 3,
+        targetPixelRect: changedRect
+    )
 
     #expect(tracker.record(original, requiredObservationCount: 2) == nil)
     #expect(tracker.record(changed, requiredObservationCount: 2) == nil)
-    #expect(tracker.record(changed, requiredObservationCount: 2) == changed)
+    #expect(tracker.record(nextChanged, requiredObservationCount: 2) == nextChanged)
+}
+
+@Test
+func stableCandidateEmitsOnceUntilSceneChangeOrExplicitReset() throws {
+    var tracker = try StableObservationTracker(
+        targetRectangleTolerancePixels: 2
+    )
+    let first = trackerCandidate(captureSequence: 1)
+    let second = trackerCandidate(captureSequence: 2)
+    let third = trackerCandidate(captureSequence: 3)
+    let changed = trackerCandidate(
+        captureSequence: 4,
+        fingerprint: SceneFingerprint(
+            semanticTexts: ["계속 하기"],
+            targetText: "계속 하기"
+        )
+    )
+    let changedAgain = trackerCandidate(
+        captureSequence: 5,
+        fingerprint: changed.sceneFingerprint
+    )
+
+    #expect(tracker.record(first, requiredObservationCount: 2) == nil)
+    #expect(tracker.record(second, requiredObservationCount: 2) == second)
+    #expect(tracker.record(third, requiredObservationCount: 2) == nil)
+    #expect(tracker.record(changed, requiredObservationCount: 2) == nil)
+    #expect(tracker.record(changedAgain, requiredObservationCount: 2) == changedAgain)
+
+    tracker.resetForRetry()
+    let retryFirst = trackerCandidate(
+        captureSequence: 6,
+        fingerprint: changed.sceneFingerprint
+    )
+    let retrySecond = trackerCandidate(
+        captureSequence: 7,
+        fingerprint: changed.sceneFingerprint
+    )
+    #expect(tracker.record(retryFirst, requiredObservationCount: 2) == nil)
+    #expect(tracker.record(retrySecond, requiredObservationCount: 2) == retrySecond)
+}
+
+@Test
+func reusedPIDAndWindowIDWithDifferentProcessLifetimeResetsStreak() throws {
+    var tracker = try StableObservationTracker(
+        targetRectangleTolerancePixels: 2
+    )
+    let original = trackerCandidate(
+        captureSequence: 1,
+        window: trackerWindow(launchTime: 1_000)
+    )
+    let relaunched = trackerCandidate(
+        captureSequence: 2,
+        window: trackerWindow(launchTime: 2_000)
+    )
+    let relaunchedAgain = trackerCandidate(
+        captureSequence: 3,
+        window: trackerWindow(launchTime: 2_000)
+    )
+
+    #expect(tracker.record(original, requiredObservationCount: 2) == nil)
+    #expect(tracker.record(relaunched, requiredObservationCount: 2) == nil)
+    #expect(tracker.record(relaunchedAgain, requiredObservationCount: 2) == relaunchedAgain)
 }
 
 @Test(arguments: [
@@ -150,6 +239,64 @@ func invalidTargetRectangleToleranceIsRejected(tolerance: Double) {
             targetRectangleTolerancePixels: tolerance
         )
     }
+}
+
+@Test
+func captureIdentityRejectsZeroAndOrdersOnlyWithinOneSession() throws {
+    #expect(throws: CaptureIdentityError.invalidSequence) {
+        try CaptureIdentity(
+            sessionID: trackerCaptureSessionID,
+            sequence: 0
+        )
+    }
+
+    let first = try CaptureIdentity(
+        sessionID: trackerCaptureSessionID,
+        sequence: 1
+    )
+    let second = try CaptureIdentity(
+        sessionID: trackerCaptureSessionID,
+        sequence: 2
+    )
+    let restarted = try CaptureIdentity(
+        sessionID: UUID(
+            uuidString: "AAAAAAAA-1111-2222-3333-BBBBBBBBBBBB"
+        )!,
+        sequence: 3
+    )
+
+    #expect(second.isStrictlyNewer(than: first))
+    #expect(!first.isStrictlyNewer(than: second))
+    #expect(!first.isStrictlyNewer(than: first))
+    #expect(!restarted.isStrictlyNewer(than: first))
+}
+
+@Test
+func duplicateOrOlderCaptureDoesNotAdvanceStability() throws {
+    var tracker = try StableObservationTracker(
+        targetRectangleTolerancePixels: 2
+    )
+
+    #expect(tracker.record(
+        trackerCandidate(captureSequence: 2),
+        requiredObservationCount: 2
+    ) == nil)
+    #expect(tracker.record(
+        trackerCandidate(captureSequence: 2),
+        requiredObservationCount: 2
+    ) == nil)
+    #expect(tracker.record(
+        trackerCandidate(captureSequence: 1),
+        requiredObservationCount: 2
+    ) == nil)
+    #expect(tracker.record(
+        trackerCandidate(captureSequence: 3),
+        requiredObservationCount: 2
+    ) == nil)
+    #expect(tracker.record(
+        trackerCandidate(captureSequence: 4),
+        requiredObservationCount: 2
+    ) != nil)
 }
 
 @Test(arguments: [
@@ -168,12 +315,17 @@ func malformedTargetRectanglesAreRejected(rect: CGRect) {
                 semanticTexts: ["다시 하기"],
                 targetText: "다시 하기"
             ),
+            captureIdentity: try CaptureIdentity(
+                sessionID: trackerCaptureSessionID,
+                sequence: 1
+            ),
             targetPixelRect: rect
         )
     }
 }
 
 private func trackerCandidate(
+    captureSequence: UInt64 = 1,
     ruleID: String = "retry",
     window: WindowCandidate = trackerWindow(),
     layout: LayoutProfile = .portraitMobile,
@@ -188,13 +340,18 @@ private func trackerCandidate(
         windowIdentity: window,
         layout: layout,
         sceneFingerprint: fingerprint,
+        captureIdentity: try! CaptureIdentity(
+            sessionID: trackerCaptureSessionID,
+            sequence: captureSequence
+        ),
         targetPixelRect: targetPixelRect
     )
 }
 
 private func trackerWindow(
     windowID: UInt32 = 7,
-    frame: CGRect = CGRect(x: 0, y: 0, width: 626, height: 949)
+    frame: CGRect = CGRect(x: 0, y: 0, width: 626, height: 949),
+    launchTime: Double = 1_000
 ) -> WindowCandidate {
     WindowCandidate(
         windowID: windowID,
@@ -202,6 +359,13 @@ private func trackerWindow(
         bundleIdentifier: "com.example.game",
         title: "Mabinogi Mobile",
         frame: frame,
-        isOnScreen: true
+        isOnScreen: true,
+        processLifetimeIdentity: try! ProcessLifetimeIdentity(
+            launchTimeIntervalSinceReferenceDate: launchTime
+        )
     )
 }
+
+private let trackerCaptureSessionID = UUID(
+    uuidString: "99999999-8888-7777-6666-555555555555"
+)!

@@ -478,6 +478,49 @@ func fixtureImagesHaveStableMinimalDimensions() throws {
     #expect(landscape.height == 200)
 }
 
+@Test
+func captureResultIdentityIsCarriedIntoSceneObservation() async throws {
+    let image = try fixtureImage(named: "portrait-reward")
+    let captureIdentity = try CaptureIdentity(
+        sessionID: UUID(
+            uuidString: "13572468-2468-1357-2468-135724681357"
+        )!,
+        sequence: 42
+    )
+    let capture = WindowCaptureResult(
+        image: image,
+        candidate: WindowCandidate(
+            windowID: 7,
+            processID: 42,
+            bundleIdentifier: "com.example.game",
+            title: "Game",
+            frame: CGRect(x: 0, y: 0, width: 200, height: 300),
+            isOnScreen: true,
+            processLifetimeIdentity: try ProcessLifetimeIdentity(
+                launchTimeIntervalSinceReferenceDate: 1_000
+            )
+        ),
+        captureIdentity: captureIdentity
+    )
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "다시 하기",
+                rect: CGRect(x: 60, y: 240, width: 80, height: 30)
+            ),
+        ])
+    )
+
+    let result = try await observer.observe(
+        capture: capture,
+        layout: .portraitMobile,
+        rules: [retryRule()]
+    )
+
+    #expect(result.captureIdentity == captureIdentity)
+    #expect(result.imageSize == CGSize(width: 200, height: 300))
+}
+
 private struct FakeTextRecognizer: TextRecognizing {
     let observations: [RecognizedTextObservation]
 

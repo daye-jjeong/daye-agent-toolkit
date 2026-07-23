@@ -55,6 +55,7 @@ public struct ActionCandidate: Equatable, Sendable {
     public let windowIdentity: WindowCandidate
     public let layout: LayoutProfile
     public let sceneFingerprint: SceneFingerprint
+    public let captureIdentity: CaptureIdentity
     public let targetPixelRect: CGRect
 
     public init(
@@ -62,6 +63,7 @@ public struct ActionCandidate: Equatable, Sendable {
         windowIdentity: WindowCandidate,
         layout: LayoutProfile,
         sceneFingerprint: SceneFingerprint,
+        captureIdentity: CaptureIdentity,
         targetPixelRect: CGRect
     ) throws {
         guard
@@ -85,6 +87,7 @@ public struct ActionCandidate: Equatable, Sendable {
         self.windowIdentity = windowIdentity
         self.layout = layout
         self.sceneFingerprint = sceneFingerprint
+        self.captureIdentity = captureIdentity
         self.targetPixelRect = targetPixelRect
     }
 
@@ -117,6 +120,7 @@ public struct ActionCandidate: Equatable, Sendable {
         return window.windowID != 0
             && window.processID > 0
             && !window.bundleIdentifier.isEmpty
+            && window.processLifetimeIdentity != nil
             && window.isOnScreen
             && values.allSatisfy(\.isFinite)
             && frame.size.width > 0
@@ -135,6 +139,8 @@ public struct StableObservationTracker: Sendable {
 
     private var previousCandidate: ActionCandidate?
     private var consecutiveObservationCount = 0
+    private var lastSeenCaptureIdentity: CaptureIdentity?
+    private var latchedCandidate: ActionCandidate?
 
     public init(
         targetRectangleTolerancePixels: Double = 2
@@ -159,12 +165,26 @@ public struct StableObservationTracker: Sendable {
                 RuleSafetyMinimums.stableObservationCount,
             let candidate
         else {
-            reset()
+            resetStreak()
             return nil
         }
 
+        guard acceptCaptureIdentity(candidate.captureIdentity) else {
+            resetStreak()
+            return nil
+        }
+
+        if let latchedCandidate {
+            guard !equivalentTarget(latchedCandidate, candidate) else {
+                resetStreak()
+                return nil
+            }
+            self.latchedCandidate = nil
+            resetStreak()
+        }
+
         if let previousCandidate,
-           equivalent(previousCandidate, candidate) {
+           equivalentTarget(previousCandidate, candidate) {
             consecutiveObservationCount += 1
         } else {
             previousCandidate = candidate
@@ -174,15 +194,31 @@ public struct StableObservationTracker: Sendable {
         guard consecutiveObservationCount >= requiredObservationCount else {
             return nil
         }
+        latchedCandidate = candidate
+        resetStreak()
         return candidate
     }
 
-    public mutating func reset() {
+    public mutating func resetForRetry() {
+        latchedCandidate = nil
+        resetStreak()
+    }
+
+    private mutating func resetStreak() {
         previousCandidate = nil
         consecutiveObservationCount = 0
     }
 
-    public func equivalent(
+    public func revalidationMatches(
+        _ first: ActionCandidate,
+        _ second: ActionCandidate
+    ) -> Bool {
+        second.captureIdentity.isStrictlyNewer(
+            than: first.captureIdentity
+        ) && equivalentTarget(first, second)
+    }
+
+    private func equivalentTarget(
         _ first: ActionCandidate,
         _ second: ActionCandidate
     ) -> Bool {
@@ -194,6 +230,30 @@ public struct StableObservationTracker: Sendable {
                 first.targetPixelRect,
                 second.targetPixelRect
             )
+    }
+
+    private mutating func acceptCaptureIdentity(
+        _ captureIdentity: CaptureIdentity
+    ) -> Bool {
+        guard let lastSeenCaptureIdentity else {
+            self.lastSeenCaptureIdentity = captureIdentity
+            return true
+        }
+        guard
+            captureIdentity.sessionID ==
+                lastSeenCaptureIdentity.sessionID
+        else {
+            resetForRetry()
+            self.lastSeenCaptureIdentity = captureIdentity
+            return true
+        }
+        guard captureIdentity.isStrictlyNewer(
+            than: lastSeenCaptureIdentity
+        ) else {
+            return false
+        }
+        self.lastSeenCaptureIdentity = captureIdentity
+        return true
     }
 
     private func rectanglesAreWithinTolerance(
