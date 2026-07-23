@@ -361,10 +361,14 @@ do {
 
         try await Task.sleep(for: .milliseconds(500))
         let after = try await captureService.captureWindow(
-            bundleIdentifier: bundleIdentifier,
-            titleContains: title
+            matching: before.candidate
         )
         try writePNG(after.image, to: afterPath)
+        print("afterWindowID=\(after.candidate.windowID)")
+        print("afterPID=\(after.candidate.processID)")
+        print(
+            "afterFrame=(\(frameDescription(after.candidate.frame)))"
+        )
         print("after=\(afterPath)")
     }
 } catch {

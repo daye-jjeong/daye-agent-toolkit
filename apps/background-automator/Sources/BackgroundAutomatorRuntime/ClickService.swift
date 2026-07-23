@@ -19,10 +19,13 @@ public enum CoordinateConverter {
             throw CoordinateError.outOfRange
         }
 
-        return CGPoint(
-            x: windowFrame.minX + normalizedX * windowFrame.width,
-            y: windowFrame.minY + normalizedY * windowFrame.height
-        )
+        let x = normalizedX == 1
+            ? windowFrame.maxX.nextDown
+            : windowFrame.minX + normalizedX * windowFrame.width
+        let y = normalizedY == 1
+            ? windowFrame.maxY.nextDown
+            : windowFrame.minY + normalizedY * windowFrame.height
+        return CGPoint(x: x, y: y)
     }
 }
 

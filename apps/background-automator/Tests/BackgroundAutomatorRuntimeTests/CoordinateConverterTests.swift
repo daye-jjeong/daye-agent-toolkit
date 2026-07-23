@@ -33,7 +33,10 @@ func acceptsInclusiveNormalizedBoundaries() throws {
     )
 
     #expect(minimum == CGPoint(x: 100, y: 200))
-    #expect(maximum == CGPoint(x: 1_300, y: 1_000))
+    #expect(maximum.x == frame.maxX.nextDown)
+    #expect(maximum.y == frame.maxY.nextDown)
+    #expect(maximum.x < frame.maxX)
+    #expect(maximum.y < frame.maxY)
 }
 
 @Test(arguments: [-0.001, 1.001])

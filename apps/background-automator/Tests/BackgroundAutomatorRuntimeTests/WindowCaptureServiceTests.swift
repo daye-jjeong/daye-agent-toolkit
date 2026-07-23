@@ -60,6 +60,55 @@ func combinedCaptureReturnsFreshWindowMetadata() async throws {
 }
 
 @Test
+func identityBoundCaptureRejectsReplacementReusingWindowID() async {
+    let expected = candidate(
+        windowID: 7,
+        processID: 42,
+        title: "Game"
+    )
+    let replacement = candidate(
+        windowID: 7,
+        processID: 99,
+        title: "Game"
+    )
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [replacement],
+        currentCandidate: replacement
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    await #expect(throws: WindowCaptureError.staleWindow(windowID: 7)) {
+        try await service.captureWindow(matching: expected)
+    }
+
+    #expect(await backend.receivedExpected == expected)
+    #expect(await backend.imageCaptureCount == 0)
+}
+
+@Test
+func identityBoundCaptureReturnsFreshMetadataForSameWindow() async throws {
+    let expected = candidate(
+        windowID: 7,
+        frame: CGRect(x: 0, y: 0, width: 800, height: 600)
+    )
+    let moved = candidate(
+        windowID: 7,
+        frame: CGRect(x: 200, y: 100, width: 1_280, height: 720)
+    )
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [moved],
+        currentCandidate: moved
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    let result = try await service.captureWindow(matching: expected)
+
+    #expect(result.candidate == moved)
+    #expect(await backend.receivedExpected == expected)
+    #expect(await backend.imageCaptureCount == 1)
+}
+
+@Test
 func combinedCaptureRejectsWindowMinimizedAtSelection() async {
     let minimized = candidate(windowID: 7, isOnScreen: false)
     let backend = FakeWindowCaptureBackend(

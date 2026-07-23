@@ -160,6 +160,12 @@ public actor WindowCaptureService: WindowCapturing {
         return try await backend.capture(expected: expected)
     }
 
+    public func captureWindow(
+        matching expected: WindowCandidate
+    ) async throws -> WindowCaptureResult {
+        try await backend.capture(expected: expected)
+    }
+
     public func visibilityDiagnostic(
         bundleIdentifier: String,
         titleContains: String
