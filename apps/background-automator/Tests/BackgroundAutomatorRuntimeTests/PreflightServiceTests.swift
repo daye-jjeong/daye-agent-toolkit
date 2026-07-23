@@ -25,6 +25,29 @@ func preflightRejectsUnconfiguredTargetWithoutCheckingPermissions() async {
     #expect(await permissions.requestedCapabilities.isEmpty)
 }
 
+@Test
+func preflightRejectsBlankExactWindowTitleAsUnconfigured() async {
+    let permissions = FakePermissionChecker()
+    let service = PreflightService(
+        permissions: permissions,
+        environment: FakePreflightEnvironment()
+    )
+
+    let result = await service.check(
+        configuration: TargetConfiguration(
+            bundleIdentifier: "com.example.game",
+            titleContains: " "
+        )
+    )
+
+    #expect(result == .needsAttention(.targetNotConfigured))
+    #expect(await permissions.checkedCapabilities.isEmpty)
+    #expect(
+        PreflightIssue.targetNotConfigured.koreanGuidance
+            .contains("정확한 창 제목")
+    )
+}
+
 @Test(arguments: [
     (
         PermissionCapability.screenRecording,
@@ -110,6 +133,28 @@ func preflightRequiresVisibleNonMinimizedTargetWindow() async {
 }
 
 @Test
+func preflightReportsAmbiguousExactWindowsWithCount() async {
+    let service = PreflightService(
+        permissions: FakePermissionChecker(),
+        environment: FakePreflightEnvironment(
+            visibleWindowError: WindowTargetError.ambiguous(count: 2)
+        )
+    )
+
+    let result = await service.check(configuration: configuredTarget)
+
+    #expect(
+        result == .needsAttention(
+            .ambiguousTargetWindows(count: 2)
+        )
+    )
+    #expect(
+        PreflightIssue.ambiguousTargetWindows(count: 2)
+            .koreanGuidance.contains("2개")
+    )
+}
+
+@Test
 func preflightRejectsUnsupportedWindowLayout() async {
     let environment = FakePreflightEnvironment(
         window: preflightWindow(
@@ -150,6 +195,7 @@ func preflightReturnsReadyContextForSupportedVisibleWindow() async throws {
     .inputMonitoringUnavailable,
     .targetNotRunning,
     .targetWindowUnavailable,
+    .ambiguousTargetWindows(count: 2),
     .unsupportedLayout,
 ])
 func everyPreflightIssueHasConciseKoreanGuidance(
@@ -208,15 +254,18 @@ private actor FakePreflightEnvironment:
     private(set) var requestedBundleIdentifiers: [String] = []
     private let applicationRunning: Bool
     private let window: WindowCandidate?
+    private let visibleWindowError: (any Error)?
 
     init(
         isApplicationRunning: Bool = true,
         window: WindowCandidate? = preflightWindow(
             frame: CGRect(x: 0, y: 0, width: 626, height: 949)
-        )
+        ),
+        visibleWindowError: (any Error)? = nil
     ) {
         applicationRunning = isApplicationRunning
         self.window = window
+        self.visibleWindowError = visibleWindowError
     }
 
     func isApplicationRunning(
@@ -228,7 +277,10 @@ private actor FakePreflightEnvironment:
 
     func visibleWindow(
         configuration: TargetConfiguration
-    ) async -> WindowCandidate? {
-        window
+    ) async throws -> WindowCandidate? {
+        if let visibleWindowError {
+            throw visibleWindowError
+        }
+        return window
     }
 }

@@ -43,22 +43,44 @@ public struct SceneActionCandidate: Equatable, Sendable {
     }
 }
 
+public struct RuleAppearanceEvidence: Equatable, Sendable {
+    public let contextBoundingBox: CGRect
+    public let targetBoundingBox: CGRect
+    public let contextStatistics: AppearanceStatistics
+    public let targetStatistics: AppearanceStatistics
+
+    public init(
+        contextBoundingBox: CGRect,
+        targetBoundingBox: CGRect,
+        contextStatistics: AppearanceStatistics,
+        targetStatistics: AppearanceStatistics
+    ) {
+        self.contextBoundingBox = contextBoundingBox
+        self.targetBoundingBox = targetBoundingBox
+        self.contextStatistics = contextStatistics
+        self.targetStatistics = targetStatistics
+    }
+}
+
 public struct SceneObservation: Equatable, Sendable {
     public let captureIdentity: CaptureIdentity?
     public let imageSize: CGSize?
     public let recognizedTexts: [RecognizedTextObservation]
     public let actionCandidates: [SceneActionCandidate]
+    public let appearanceEvidence: [String: RuleAppearanceEvidence]
 
     public init(
         captureIdentity: CaptureIdentity? = nil,
         imageSize: CGSize? = nil,
         recognizedTexts: [RecognizedTextObservation],
-        actionCandidates: [SceneActionCandidate]
+        actionCandidates: [SceneActionCandidate],
+        appearanceEvidence: [String: RuleAppearanceEvidence] = [:]
     ) {
         self.captureIdentity = captureIdentity
         self.imageSize = imageSize
         self.recognizedTexts = recognizedTexts
         self.actionCandidates = actionCandidates
+        self.appearanceEvidence = appearanceEvidence
     }
 }
 
@@ -66,9 +88,15 @@ public struct SceneObserver: Sendable {
     private static let blockedActionTexts = ["장면 넘기기"]
 
     private let textRecognizer: any TextRecognizing
+    private let appearanceAnalyzer: any AppearanceAnalyzing
 
-    public init(textRecognizer: any TextRecognizing = VisionTextRecognizer()) {
+    public init(
+        textRecognizer: any TextRecognizing = VisionTextRecognizer(),
+        appearanceAnalyzer: any AppearanceAnalyzing =
+            PixelAppearanceAnalyzer()
+    ) {
         self.textRecognizer = textRecognizer
+        self.appearanceAnalyzer = appearanceAnalyzer
     }
 
     public func observe(
@@ -119,19 +147,33 @@ public struct SceneObserver: Sendable {
     ) async throws -> SceneObservation {
         let observations = try await textRecognizer.recognizeText(in: image)
         let imageSize = CGSize(width: image.width, height: image.height)
+        var appearanceEvidence: [String: RuleAppearanceEvidence] = [:]
+        for rule in rules {
+            if let evidence = Self.appearanceEvidence(
+                for: rule,
+                observations: observations,
+                image: image,
+                layout: layout,
+                analyzer: appearanceAnalyzer
+            ) {
+                appearanceEvidence[rule.id] = evidence
+            }
+        }
         let candidates = rules.compactMap {
             Self.actionCandidate(
                 for: $0,
                 observations: observations,
                 layout: layout,
-                imageSize: imageSize
+                imageSize: imageSize,
+                appearanceEvidence: appearanceEvidence[$0.id]
             )
         }
         return SceneObservation(
             captureIdentity: captureIdentity,
             imageSize: imageSize,
             recognizedTexts: observations,
-            actionCandidates: candidates
+            actionCandidates: candidates,
+            appearanceEvidence: appearanceEvidence
         )
     }
 }
@@ -141,7 +183,8 @@ extension SceneObserver {
         for rule: AutomationRule,
         observations: [RecognizedTextObservation],
         layout: LayoutProfile,
-        imageSize: CGSize
+        imageSize: CGSize,
+        appearanceEvidence: RuleAppearanceEvidence? = nil
     ) -> SceneActionCandidate? {
         guard
             layout != .unsupported,
@@ -199,6 +242,16 @@ extension SceneObserver {
             guard targets.count == 1, let target = targets.first else {
                 return nil
             }
+            guard Self.matchesAppearance(
+                rule: rule,
+                observations: confidentObservations,
+                target: target,
+                layout: layout,
+                imageSize: imageSize,
+                evidence: appearanceEvidence
+            ) else {
+                return nil
+            }
 
             return SceneActionCandidate(
                 ruleID: rule.id,
@@ -227,6 +280,119 @@ extension SceneObserver {
             boundingBox: safePointBoundingBox,
             confidence: confidence
         )
+    }
+
+    private static func appearanceEvidence(
+        for rule: AutomationRule,
+        observations: [RecognizedTextObservation],
+        image: CGImage,
+        layout: LayoutProfile,
+        analyzer: any AppearanceAnalyzing
+    ) -> RuleAppearanceEvidence? {
+        guard
+            let appearance = rule.appearance,
+            let targetText = rule.action.targetText,
+            let targetRegion = rule.regions[layout],
+            let contextRegion = appearance.contextRegions[layout]
+        else {
+            return nil
+        }
+        let imageSize = CGSize(width: image.width, height: image.height)
+        let confident = observations.filter {
+            Self.isValidConfidence($0.confidence)
+                && $0.confidence >= rule.minimumOCRConfidence
+                && Self.isUsable($0.boundingBox, imageSize: imageSize)
+        }
+        let targets = confident.filter {
+            Self.semanticText($0.text) == Self.semanticText(targetText)
+                && Self.isCentered(
+                    $0.boundingBox,
+                    in: targetRegion,
+                    imageSize: imageSize
+                )
+        }
+        let contexts = confident.filter {
+            Self.semanticText($0.text)
+                == Self.semanticText(appearance.contextText)
+                && Self.isCentered(
+                    $0.boundingBox,
+                    in: contextRegion,
+                    imageSize: imageSize
+                )
+        }
+        guard
+            targets.count == 1,
+            contexts.count == 1,
+            let target = targets.first,
+            let context = contexts.first,
+            let contextStatistics = analyzer.statistics(
+                in: image,
+                around: context.boundingBox
+            ),
+            let targetStatistics = analyzer.statistics(
+                in: image,
+                around: target.boundingBox
+            )
+        else {
+            return nil
+        }
+        return RuleAppearanceEvidence(
+            contextBoundingBox: context.boundingBox,
+            targetBoundingBox: target.boundingBox,
+            contextStatistics: contextStatistics,
+            targetStatistics: targetStatistics
+        )
+    }
+
+    private static func matchesAppearance(
+        rule: AutomationRule,
+        observations: [RecognizedTextObservation],
+        target: RecognizedTextObservation,
+        layout: LayoutProfile,
+        imageSize: CGSize,
+        evidence: RuleAppearanceEvidence?
+    ) -> Bool {
+        guard let appearance = rule.appearance else {
+            return true
+        }
+        guard
+            let contextRegion = appearance.contextRegions[layout],
+            let evidence,
+            evidence.targetBoundingBox == target.boundingBox
+        else {
+            return false
+        }
+        let contexts = observations.filter {
+            Self.semanticText($0.text)
+                == Self.semanticText(appearance.contextText)
+                && Self.isCentered(
+                    $0.boundingBox,
+                    in: contextRegion,
+                    imageSize: imageSize
+                )
+        }
+        guard
+            contexts.count == 1,
+            contexts.first?.boundingBox
+                == evidence.contextBoundingBox,
+            evidence.contextStatistics.sampleCount > 0,
+            evidence.targetStatistics.sampleCount > 0,
+            appearance.contextRange.contains(
+                saturation:
+                    evidence.contextStatistics.medianSaturation,
+                luminance:
+                    evidence.contextStatistics.medianLuminance
+            ),
+            appearance.targetRange.contains(
+                saturation:
+                    evidence.targetStatistics.medianSaturation,
+                luminance:
+                    evidence.targetStatistics.medianLuminance
+            )
+        else {
+            return false
+        }
+        return true
     }
 
     private static func containsForbiddenText(

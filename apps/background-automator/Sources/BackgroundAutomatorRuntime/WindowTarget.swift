@@ -52,11 +52,20 @@ public struct WindowCandidate: Equatable, Sendable {
 
 public enum WindowTargetError: Error, Equatable, Sendable {
     case notFound
+    case ambiguous(count: Int)
+    case invalidConfiguration
 }
 
 extension WindowTargetError: LocalizedError {
     public var errorDescription: String? {
-        "No visible window matched the exact bundle identifier and title filter."
+        switch self {
+        case .notFound:
+            "No visible window matched the exact bundle identifier and window title."
+        case let .ambiguous(count):
+            "\(count) visible windows matched. Enter one exact unique window title."
+        case .invalidConfiguration:
+            "Bundle identifier and exact window title are required."
+        }
     }
 }
 
@@ -87,24 +96,35 @@ public enum WindowTarget {
         bundleIdentifier: String,
         titleContains: String
     ) throws -> WindowCandidate {
-        guard let selected = candidates
-            .filter({
-                $0.bundleIdentifier == bundleIdentifier
-                    && $0.title.range(of: titleContains, options: .caseInsensitive) != nil
-                    && $0.isOnScreen
-                    && $0.processLifetimeIdentity != nil
-                    && $0.frame.size.width > 0
-                    && $0.frame.size.height > 0
-            })
-            .max(by: { area(of: $0) < area(of: $1) })
+        let exactTitle = titleContains.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard
+            !bundleIdentifier.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty,
+            !exactTitle.isEmpty
         else {
-            throw WindowTargetError.notFound
+            throw WindowTargetError.invalidConfiguration
         }
 
+        let eligible = candidates.filter {
+            $0.bundleIdentifier == bundleIdentifier
+                && $0.title.compare(
+                    exactTitle,
+                    options: .caseInsensitive
+                ) == .orderedSame
+                && $0.isOnScreen
+                && $0.processLifetimeIdentity != nil
+                && $0.frame.size.width > 0
+                && $0.frame.size.height > 0
+        }
+        guard !eligible.isEmpty else {
+            throw WindowTargetError.notFound
+        }
+        guard eligible.count == 1, let selected = eligible.first else {
+            throw WindowTargetError.ambiguous(count: eligible.count)
+        }
         return selected
-    }
-
-    private static func area(of candidate: WindowCandidate) -> CGFloat {
-        candidate.frame.size.width * candidate.frame.size.height
     }
 }

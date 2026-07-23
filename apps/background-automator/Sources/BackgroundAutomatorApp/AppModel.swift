@@ -61,6 +61,12 @@ final class AppModel: ObservableObject {
         permissionCapability(for: lastPreflightIssue) != nil
     }
 
+    var areTargetFieldsLocked: Bool {
+        isRunning
+            || startPending
+            || AutomationTargetFieldPolicy.isLocked(status: status)
+    }
+
     func toggleAutomation() {
         guard status != .stopping else {
             return
@@ -156,15 +162,22 @@ private extension AppModel {
         "BackgroundAutomator.targetTitleContains"
 
     func beginStart() {
-        let token = lifecycleGate.begin()
+        let session = lifecycleGate.beginStart(
+            target: TargetConfiguration(
+                bundleIdentifier: bundleIdentifier,
+                titleContains: titleContains
+            )
+        )
         startPending = true
         status = .checkingPreflight
         operationTask = Task { [weak self] in
             guard let self else {
                 return
             }
-            await self.start(token: token)
-            guard self.lifecycleGate.isCurrent(token) else {
+            await self.start(session: session)
+            guard
+                self.lifecycleGate.isCurrent(session.token)
+            else {
                 return
             }
             self.startPending = false
@@ -185,13 +198,11 @@ private extension AppModel {
     }
 
     func start(
-        token: AutomationLifecycleGate.Token
+        session: AutomationLifecycleGate.StartSession
     ) async {
-        saveConfiguration()
-        let configuration = TargetConfiguration(
-            bundleIdentifier: bundleIdentifier,
-            titleContains: titleContains
-        )
+        let token = session.token
+        let configuration = session.target
+        saveConfiguration(configuration)
         let preflight = await preflightService.check(
             configuration: configuration
         )
@@ -351,13 +362,13 @@ private extension AppModel {
         status = .projecting(state)
     }
 
-    func saveConfiguration() {
+    func saveConfiguration(_ configuration: TargetConfiguration) {
         defaults.set(
-            bundleIdentifier,
+            configuration.bundleIdentifier,
             forKey: Self.bundleIdentifierKey
         )
         defaults.set(
-            titleContains,
+            configuration.titleContains,
             forKey: Self.titleContainsKey
         )
     }

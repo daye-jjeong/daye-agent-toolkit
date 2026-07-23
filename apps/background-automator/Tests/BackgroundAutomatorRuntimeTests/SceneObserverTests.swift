@@ -212,6 +212,196 @@ func duplicateTargetsInsideSearchRegionAreRejectedAsAmbiguous() async throws {
 }
 
 @Test
+func enterReadyRequiresGreySelectionAndEnabledTargetAppearance() async throws {
+    let contextRect = CGRect(x: 50, y: 190, width: 70, height: 24)
+    let targetRect = CGRect(x: 55, y: 240, width: 90, height: 28)
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized("도전", rect: contextRect),
+            recognized("입장하기", rect: targetRect),
+        ]),
+        appearanceAnalyzer: FakeAppearanceAnalyzer([
+            (contextRect, .init(
+                medianSaturation: 0.08,
+                medianLuminance: 0.55,
+                sampleCount: 100
+            )),
+            (targetRect, .init(
+                medianSaturation: 0.45,
+                medianLuminance: 0.55,
+                sampleCount: 100
+            )),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [enterReadyAppearanceRule()]
+    )
+
+    let candidate = try #require(result.actionCandidates.first)
+    #expect(candidate.ruleID == "enter_ready")
+    #expect(candidate.boundingBox == targetRect)
+}
+
+@Test
+func enterReadyRejectsColoredUnselectedChallenge() async throws {
+    let fixture = appearanceObserver(
+        context: .init(
+            medianSaturation: 0.6,
+            medianLuminance: 0.55,
+            sampleCount: 100
+        ),
+        target: enabledTargetAppearance
+    )
+
+    let result = try await fixture.observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [enterReadyAppearanceRule()]
+    )
+
+    #expect(result.actionCandidates.isEmpty)
+}
+
+@Test
+func enterReadyRejectsGreySelectionWhenEntryButtonIsDim() async throws {
+    let fixture = appearanceObserver(
+        context: selectedGreyAppearance,
+        target: .init(
+            medianSaturation: 0.45,
+            medianLuminance: 0.1,
+            sampleCount: 100
+        )
+    )
+
+    let result = try await fixture.observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [enterReadyAppearanceRule()]
+    )
+
+    #expect(result.actionCandidates.isEmpty)
+}
+
+@Test
+func enterReadyRejectsAmbiguousDuplicateChallengeContext() async throws {
+    let contextRect = appearanceContextRect
+    let targetRect = appearanceTargetRect
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized("도전", rect: contextRect),
+            recognized(
+                "도전",
+                rect: contextRect.offsetBy(dx: 40, dy: 0)
+            ),
+            recognized("입장하기", rect: targetRect),
+        ]),
+        appearanceAnalyzer: FakeAppearanceAnalyzer([
+            (contextRect, selectedGreyAppearance),
+            (targetRect, enabledTargetAppearance),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [enterReadyAppearanceRule()]
+    )
+
+    #expect(result.actionCandidates.isEmpty)
+}
+
+@Test(arguments: [
+    LayoutProfile.portraitMobile,
+    .landscape,
+])
+func enterReadyAppearanceUsesLayoutSpecificNormalizedContextRegion(
+    layout: LayoutProfile
+) async throws {
+    let fixture = appearanceObserver(
+        context: selectedGreyAppearance,
+        target: enabledTargetAppearance
+    )
+    let image = layout == .portraitMobile
+        ? try fixtureImage(named: "portrait-reward")
+        : try fixtureImage(named: "landscape-clear-touch")
+
+    let result = try await fixture.observer.observe(
+        image: image,
+        layout: layout,
+        rules: [enterReadyAppearanceRule()]
+    )
+
+    #expect(result.actionCandidates.count == 1)
+}
+
+@Test
+func enterReadyFailsClosedWhenAppearancePixelsAreUnavailable() async throws {
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized("도전", rect: appearanceContextRect),
+            recognized("입장하기", rect: appearanceTargetRect),
+        ]),
+        appearanceAnalyzer: FakeAppearanceAnalyzer([])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [enterReadyAppearanceRule()]
+    )
+
+    #expect(result.actionCandidates.isEmpty)
+}
+
+@Test
+func appearanceSeparatesActiveMissionFromGreyEnterReady() async throws {
+    let activeObserver = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized("도전", rect: appearanceContextRect),
+            recognized("입장하기", rect: appearanceTargetRect),
+        ]),
+        appearanceAnalyzer: FakeAppearanceAnalyzer([
+            (appearanceContextRect, .init(
+                medianSaturation: 0.5,
+                medianLuminance: 0.55,
+                sampleCount: 100
+            )),
+            (appearanceTargetRect, .init(
+                medianSaturation: 0.05,
+                medianLuminance: 0.1,
+                sampleCount: 100
+            )),
+        ])
+    )
+    let selectedObserver = appearanceObserver(
+        context: selectedGreyAppearance,
+        target: enabledTargetAppearance
+    ).observer
+    let rules = [
+        missionSelectionAppearanceRule(),
+        enterReadyAppearanceRule(),
+    ]
+    let image = try fixtureImage(named: "portrait-reward")
+
+    let active = try await activeObserver.observe(
+        image: image,
+        layout: .portraitMobile,
+        rules: rules
+    )
+    let selected = try await selectedObserver.observe(
+        image: image,
+        layout: .portraitMobile,
+        rules: rules
+    )
+
+    #expect(active.actionCandidates.map(\.ruleID) == ["mission_selection"])
+    #expect(selected.actionCandidates.map(\.ruleID) == ["enter_ready"])
+}
+
+@Test
 func duplicateRequiredContextInsideRegionIsRejectedAsAmbiguous() async throws {
     let observer = SceneObserver(
         textRecognizer: FakeTextRecognizer([
@@ -535,6 +725,183 @@ private struct FakeTextRecognizer: TextRecognizing {
     }
 }
 
+private struct FakeAppearanceAnalyzer: AppearanceAnalyzing {
+    let entries: [(CGRect, AppearanceStatistics)]
+
+    init(_ entries: [(CGRect, AppearanceStatistics)]) {
+        self.entries = entries
+    }
+
+    func statistics(
+        in image: CGImage,
+        around textBoundingBox: CGRect
+    ) -> AppearanceStatistics? {
+        entries.first { $0.0 == textBoundingBox }?.1
+    }
+}
+
+private let appearanceContextRect = CGRect(
+    x: 50,
+    y: 120,
+    width: 70,
+    height: 24
+)
+private let appearanceTargetRect = CGRect(
+    x: 55,
+    y: 160,
+    width: 90,
+    height: 28
+)
+private let selectedGreyAppearance = AppearanceStatistics(
+    medianSaturation: 0.08,
+    medianLuminance: 0.55,
+    sampleCount: 100
+)
+private let enabledTargetAppearance = AppearanceStatistics(
+    medianSaturation: 0.45,
+    medianLuminance: 0.55,
+    sampleCount: 100
+)
+
+private func appearanceObserver(
+    context: AppearanceStatistics,
+    target: AppearanceStatistics
+) -> (
+    observer: SceneObserver,
+    contextRect: CGRect,
+    targetRect: CGRect
+) {
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized("도전", rect: appearanceContextRect),
+            recognized("입장하기", rect: appearanceTargetRect),
+        ]),
+        appearanceAnalyzer: FakeAppearanceAnalyzer([
+            (appearanceContextRect, context),
+            (appearanceTargetRect, target),
+        ])
+    )
+    return (observer, appearanceContextRect, appearanceTargetRect)
+}
+
+private func enterReadyAppearanceRule() -> AutomationRule {
+    AutomationRule(
+        id: "enter_ready",
+        requiredTexts: ["입장하기"],
+        forbiddenTexts: ["장면 넘기기"],
+        action: AutomationAction(
+            targetText: "입장하기",
+            safePointRegion: nil
+        ),
+        regions: LayoutRegionMap([
+            .portraitMobile: NormalizedRegion(
+                minX: 0,
+                minY: 0,
+                maxX: 1,
+                maxY: 1
+            ),
+            .landscape: NormalizedRegion(
+                minX: 0,
+                minY: 0,
+                maxX: 1,
+                maxY: 1
+            ),
+        ]),
+        appearance: AutomationAppearanceConstraint(
+            contextText: "도전",
+            contextRegions: LayoutRegionMap([
+                .portraitMobile: NormalizedRegion(
+                    minX: 0,
+                    minY: 0,
+                    maxX: 1,
+                    maxY: 0.8
+                ),
+                .landscape: NormalizedRegion(
+                    minX: 0,
+                    minY: 0,
+                    maxX: 1,
+                    maxY: 0.8
+                ),
+            ]),
+            contextRange: AppearanceRange(
+                minimumSaturation: 0,
+                maximumSaturation: 0.22,
+                minimumLuminance: 0.15,
+                maximumLuminance: 0.9
+            ),
+            targetRange: AppearanceRange(
+                minimumSaturation: 0.12,
+                maximumSaturation: 1,
+                minimumLuminance: 0.25,
+                maximumLuminance: 0.95
+            )
+        ),
+        minimumOCRConfidence: 0.8,
+        stableObservationCount: 2,
+        postActionDelaySeconds: 0.5,
+        cooldownSeconds: 120
+    )
+}
+
+private func missionSelectionAppearanceRule() -> AutomationRule {
+    AutomationRule(
+        id: "mission_selection",
+        requiredTexts: ["도전"],
+        forbiddenTexts: ["장면 넘기기"],
+        action: AutomationAction(
+            targetText: "도전",
+            safePointRegion: nil
+        ),
+        regions: LayoutRegionMap([
+            .portraitMobile: NormalizedRegion(
+                minX: 0,
+                minY: 0,
+                maxX: 1,
+                maxY: 1
+            ),
+            .landscape: NormalizedRegion(
+                minX: 0,
+                minY: 0,
+                maxX: 1,
+                maxY: 1
+            ),
+        ]),
+        appearance: AutomationAppearanceConstraint(
+            contextText: "도전",
+            contextRegions: LayoutRegionMap([
+                .portraitMobile: NormalizedRegion(
+                    minX: 0,
+                    minY: 0,
+                    maxX: 1,
+                    maxY: 1
+                ),
+                .landscape: NormalizedRegion(
+                    minX: 0,
+                    minY: 0,
+                    maxX: 1,
+                    maxY: 1
+                ),
+            ]),
+            contextRange: AppearanceRange(
+                minimumSaturation: 0.25,
+                maximumSaturation: 1,
+                minimumLuminance: 0.25,
+                maximumLuminance: 0.95
+            ),
+            targetRange: AppearanceRange(
+                minimumSaturation: 0.25,
+                maximumSaturation: 1,
+                minimumLuminance: 0.25,
+                maximumLuminance: 0.95
+            )
+        ),
+        minimumOCRConfidence: 0.8,
+        stableObservationCount: 2,
+        postActionDelaySeconds: 0.5,
+        cooldownSeconds: 2
+    )
+}
+
 private func recognized(
     _ text: String,
     confidence: Double = 0.9,
@@ -569,7 +936,8 @@ private func makeRule(
             maxX: 0.8,
             maxY: 1
         ),
-    ])
+    ]),
+    appearance: AutomationAppearanceConstraint? = nil
 ) -> AutomationRule {
     AutomationRule(
         id: id,
@@ -580,6 +948,7 @@ private func makeRule(
             safePointRegion: nil
         ),
         regions: regions,
+        appearance: appearance,
         minimumOCRConfidence: 0.8,
         stableObservationCount: 2,
         postActionDelaySeconds: 0.5,

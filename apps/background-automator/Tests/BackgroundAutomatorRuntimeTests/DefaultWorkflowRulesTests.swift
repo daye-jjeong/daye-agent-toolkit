@@ -69,6 +69,41 @@ func textActionsUseExactOCRTargetBoundingBoxConfiguration(
 }
 
 @Test
+func enterReadyRequiresGreyChallengeAndEnabledEntryAppearance() throws {
+    let rule = try workflowRule("enter_ready")
+    let appearance = try #require(rule.appearance)
+
+    #expect(appearance.contextText == "도전")
+    #expect(
+        appearance.contextRange.maximumSaturation <= 0.25
+    )
+    #expect(
+        appearance.targetRange.minimumSaturation >= 0.1
+    )
+    #expect(
+        appearance.targetRange.minimumLuminance >= 0.2
+    )
+    #expect(appearance.contextRegions[.landscape] != nil)
+    #expect(appearance.contextRegions[.portraitMobile] != nil)
+}
+
+@Test
+func missionSelectionKeepsOCRTargetAndRequiresActiveAppearance() throws {
+    let rule = try workflowRule("mission_selection")
+    let appearance = try #require(rule.appearance)
+    let enterAppearance = try #require(
+        workflowRule("enter_ready").appearance
+    )
+
+    #expect(rule.action.targetText == "도전")
+    #expect(appearance.contextText == "도전")
+    #expect(
+        appearance.contextRange.minimumSaturation
+            > enterAppearance.contextRange.maximumSaturation
+    )
+}
+
+@Test
 func runningRuleIsExplicitlyNonActionableUntilLiveCalibration() throws {
     let rule = try workflowRule("running")
 

@@ -122,6 +122,35 @@
           "maxY": 0.95
         }
       },
+      "appearance": {
+        "contextText": "도전",
+        "contextRegions": {
+          "landscape": {
+            "minX": 0.15,
+            "minY": 0.25,
+            "maxX": 0.85,
+            "maxY": 0.95
+          },
+          "portrait-mobile": {
+            "minX": 0.05,
+            "minY": 0.25,
+            "maxX": 0.95,
+            "maxY": 0.95
+          }
+        },
+        "contextRange": {
+          "minimumSaturation": 0.25,
+          "maximumSaturation": 1.0,
+          "minimumLuminance": 0.25,
+          "maximumLuminance": 0.95
+        },
+        "targetRange": {
+          "minimumSaturation": 0.25,
+          "maximumSaturation": 1.0,
+          "minimumLuminance": 0.25,
+          "maximumLuminance": 0.95
+        }
+      },
       "minimumOCRConfidence": 0.85,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
@@ -150,6 +179,35 @@
           "minY": 0.45,
           "maxX": 0.95,
           "maxY": 1.0
+        }
+      },
+      "appearance": {
+        "contextText": "도전",
+        "contextRegions": {
+          "landscape": {
+            "minX": 0.05,
+            "minY": 0.15,
+            "maxX": 0.95,
+            "maxY": 0.95
+          },
+          "portrait-mobile": {
+            "minX": 0.05,
+            "minY": 0.15,
+            "maxX": 0.95,
+            "maxY": 0.95
+          }
+        },
+        "contextRange": {
+          "minimumSaturation": 0.0,
+          "maximumSaturation": 0.22,
+          "minimumLuminance": 0.15,
+          "maximumLuminance": 0.9
+        },
+        "targetRange": {
+          "minimumSaturation": 0.12,
+          "maximumSaturation": 1.0,
+          "minimumLuminance": 0.25,
+          "maximumLuminance": 0.95
         }
       },
       "minimumOCRConfidence": 0.85,

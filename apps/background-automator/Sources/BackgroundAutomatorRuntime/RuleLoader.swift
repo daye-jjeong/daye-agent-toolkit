@@ -104,6 +104,7 @@ private extension RuleLoader {
                     "forbiddenTexts",
                     "action",
                     "regions",
+                    "appearance",
                     "minimumOCRConfidence",
                     "stableObservationCount",
                     "postActionDelaySeconds",
@@ -129,6 +130,43 @@ private extension RuleLoader {
                         )
                     }
                     try validateRegionKeys(region)
+                }
+            }
+
+            if let appearance = rule["appearance"] as? [String: Any] {
+                try rejectUnknownKeys(
+                    in: appearance,
+                    allowed: [
+                        "contextText",
+                        "contextRegions",
+                        "contextRange",
+                        "targetRange",
+                    ]
+                )
+                if let contextRegions =
+                    appearance["contextRegions"] as? [String: Any]
+                {
+                    for value in contextRegions.values {
+                        guard let region = value as? [String: Any] else {
+                            throw RuleLoaderError.malformedDocument(
+                                "appearance context region must be an object"
+                            )
+                        }
+                        try validateRegionKeys(region)
+                    }
+                }
+                for key in ["contextRange", "targetRange"] {
+                    if let range = appearance[key] as? [String: Any] {
+                        try rejectUnknownKeys(
+                            in: range,
+                            allowed: [
+                                "minimumSaturation",
+                                "maximumSaturation",
+                                "minimumLuminance",
+                                "maximumLuminance",
+                            ]
+                        )
+                    }
                 }
             }
         }
@@ -200,6 +238,7 @@ enum AutomationRuleValidator {
             try Self.validateTexts(rule)
             try Self.validateAction(rule)
             try Self.validateRegions(rule)
+            try Self.validateAppearance(rule)
 
             guard rule.minimumOCRConfidence.isFinite,
                   (0 ... 1).contains(rule.minimumOCRConfidence) else {
@@ -305,6 +344,74 @@ enum AutomationRuleValidator {
                 )
             }
         }
+    }
+
+    private static func validateAppearance(
+        _ rule: AutomationRule
+    ) throws {
+        guard let appearance = rule.appearance else {
+            return
+        }
+        guard rule.action.targetText != nil else {
+            throw malformed(
+                rule,
+                "appearance constraint requires a text target action"
+            )
+        }
+        guard !appearance.contextText.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty else {
+            throw malformed(
+                rule,
+                "appearance contextText must not be empty"
+            )
+        }
+        guard Self.isValid(appearance.contextRange) else {
+            throw malformed(
+                rule,
+                "appearance context range must use normalized coherent bounds"
+            )
+        }
+        guard Self.isValid(appearance.targetRange) else {
+            throw malformed(
+                rule,
+                "appearance target range must use normalized coherent bounds"
+            )
+        }
+        guard
+            Set(rule.regions.entries.keys).isSubset(
+                of: Set(appearance.contextRegions.entries.keys)
+            )
+        else {
+            throw malformed(
+                rule,
+                "appearance context region is required for every action layout"
+            )
+        }
+        for (layout, region) in appearance.contextRegions.entries {
+            guard layout != .unsupported, Self.isValid(region) else {
+                throw malformed(
+                    rule,
+                    "\(layout.rawValue) appearance context region must be normalized and non-empty"
+                )
+            }
+        }
+    }
+
+    private static func isValid(
+        _ range: AppearanceRange
+    ) -> Bool {
+        let values = [
+            range.minimumSaturation,
+            range.maximumSaturation,
+            range.minimumLuminance,
+            range.maximumLuminance,
+        ]
+        return values.allSatisfy {
+            $0.isFinite && (0 ... 1).contains($0)
+        }
+            && range.minimumSaturation <= range.maximumSaturation
+            && range.minimumLuminance <= range.maximumLuminance
     }
 
     private static func isValid(_ region: NormalizedRegion) -> Bool {

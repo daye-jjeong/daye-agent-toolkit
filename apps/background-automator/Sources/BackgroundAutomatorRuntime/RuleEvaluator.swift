@@ -161,7 +161,9 @@ private extension RuleEvaluator {
                 for: $0,
                 observations: observation.recognizedTexts,
                 layout: layout,
-                imageSize: imageSize
+                imageSize: imageSize,
+                appearanceEvidence:
+                    observation.appearanceEvidence[$0.id]
             )
         }
     }

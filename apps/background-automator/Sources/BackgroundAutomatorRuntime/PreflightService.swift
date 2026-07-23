@@ -18,6 +18,9 @@ public struct TargetConfiguration: Equatable, Sendable {
         !bundleIdentifier
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
+            && !titleContains
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
     }
 }
 
@@ -28,12 +31,13 @@ public enum PreflightIssue: Equatable, Sendable {
     case inputMonitoringUnavailable
     case targetNotRunning
     case targetWindowUnavailable
+    case ambiguousTargetWindows(count: Int)
     case unsupportedLayout
 
     public var koreanGuidance: String {
         switch self {
         case .targetNotConfigured:
-            "대상 앱의 번들 ID를 먼저 입력해 주세요."
+            "번들 ID와 정확한 창 제목을 입력해 주세요."
         case .screenRecordingDenied:
             "시스템 설정에서 화면 기록 권한을 허용해 주세요."
         case .accessibilityDenied:
@@ -43,7 +47,9 @@ public enum PreflightIssue: Equatable, Sendable {
         case .targetNotRunning:
             "설정한 대상 앱을 실행해 주세요."
         case .targetWindowUnavailable:
-            "대상 창을 화면에 보이게 하고 최소화를 해제해 주세요."
+            "정확한 제목의 창 하나만 열고 최소화를 해제해 주세요."
+        case let .ambiguousTargetWindows(count):
+            "같은 제목의 창이 \(count)개입니다. 고유한 정확한 창 제목을 입력해 주세요."
         case .unsupportedLayout:
             "대상 창을 지원되는 가로 또는 모바일 세로 크기로 조정해 주세요."
         }
@@ -79,7 +85,7 @@ public protocol PreflightEnvironmentChecking: Sendable {
 
     func visibleWindow(
         configuration: TargetConfiguration
-    ) async -> WindowCandidate?
+    ) async throws -> WindowCandidate?
 }
 
 public struct ProductionPreflightEnvironment:
@@ -104,8 +110,8 @@ public struct ProductionPreflightEnvironment:
 
     public func visibleWindow(
         configuration: TargetConfiguration
-    ) async -> WindowCandidate? {
-        try? await captureService.findWindow(
+    ) async throws -> WindowCandidate? {
+        try await captureService.findWindow(
             bundleIdentifier: configuration.bundleIdentifier,
             titleContains: configuration.titleContains
         )
@@ -147,11 +153,26 @@ public struct PreflightService: Sendable {
         else {
             return .needsAttention(.targetNotRunning)
         }
-        guard
-            let window = await environment.visibleWindow(
+        let window: WindowCandidate?
+        do {
+            window = try await environment.visibleWindow(
                 configuration: configuration
             )
-        else {
+        } catch let error as WindowTargetError {
+            switch error {
+            case let .ambiguous(count):
+                return .needsAttention(
+                    .ambiguousTargetWindows(count: count)
+                )
+            case .invalidConfiguration:
+                return .needsAttention(.targetNotConfigured)
+            case .notFound:
+                return .needsAttention(.targetWindowUnavailable)
+            }
+        } catch {
+            return .needsAttention(.targetWindowUnavailable)
+        }
+        guard let window else {
             return .needsAttention(.targetWindowUnavailable)
         }
 

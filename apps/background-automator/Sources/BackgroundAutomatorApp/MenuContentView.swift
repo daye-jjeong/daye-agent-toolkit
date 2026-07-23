@@ -31,13 +31,13 @@ struct MenuContentView: View {
                 text: $model.bundleIdentifier
             )
                 .textFieldStyle(.roundedBorder)
-                .disabled(model.isRunning)
+                .disabled(model.areTargetFieldsLocked)
             TextField(
-                "창 제목 포함 문자열 (선택)",
+                "정확한 창 제목 (필수)",
                 text: $model.titleContains
             )
                 .textFieldStyle(.roundedBorder)
-                .disabled(model.isRunning)
+                .disabled(model.areTargetFieldsLocked)
 
             Button(model.primaryActionTitle) {
                 model.toggleAutomation()

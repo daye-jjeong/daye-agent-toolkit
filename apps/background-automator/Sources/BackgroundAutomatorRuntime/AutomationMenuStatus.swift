@@ -68,6 +68,19 @@ public struct AutomationLifecycleGate: Sendable {
         fileprivate let generation: UInt64
     }
 
+    public struct StartSession: Equatable, Sendable {
+        public let token: Token
+        public let target: TargetConfiguration
+
+        fileprivate init(
+            token: Token,
+            target: TargetConfiguration
+        ) {
+            self.token = token
+            self.target = target
+        }
+    }
+
     private var generation: UInt64 = 0
 
     public init() {}
@@ -77,12 +90,39 @@ public struct AutomationLifecycleGate: Sendable {
         return Token(generation: generation)
     }
 
+    public mutating func beginStart(
+        target: TargetConfiguration
+    ) -> StartSession {
+        StartSession(token: begin(), target: target)
+    }
+
     public mutating func invalidate() {
         generation &+= 1
     }
 
     public func isCurrent(_ token: Token) -> Bool {
         token.generation == generation
+    }
+}
+
+public enum AutomationTargetFieldPolicy {
+    public static func isLocked(
+        status: AutomationMenuStatus
+    ) -> Bool {
+        switch status {
+        case .stopped, .needsAttention:
+            false
+        case .checkingPreflight,
+             .observing,
+             .combatWait,
+             .buttonDetected,
+             .waitingForUserIdle,
+             .clicking,
+             .cooldown,
+             .pausedRestorationFailure,
+             .stopping:
+            true
+        }
     }
 }
 

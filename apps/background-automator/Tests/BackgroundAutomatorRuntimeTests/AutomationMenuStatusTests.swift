@@ -77,3 +77,58 @@ func lifecycleGateInvalidatesPendingStartWhenStopped() {
 
     #expect(!gate.isCurrent(pendingStart))
 }
+
+@Test
+func startSessionFreezesTargetAndRestartUsesNewSnapshot() {
+    var gate = AutomationLifecycleGate()
+    var bundleIdentifier = "com.example.first"
+    var exactTitle = "First Window"
+    let first = gate.beginStart(
+        target: TargetConfiguration(
+            bundleIdentifier: bundleIdentifier,
+            titleContains: exactTitle
+        )
+    )
+
+    bundleIdentifier = "com.example.second"
+    exactTitle = "Second Window"
+    let second = gate.beginStart(
+        target: TargetConfiguration(
+            bundleIdentifier: bundleIdentifier,
+            titleContains: exactTitle
+        )
+    )
+
+    #expect(first.target.bundleIdentifier == "com.example.first")
+    #expect(first.target.titleContains == "First Window")
+    #expect(second.target.bundleIdentifier == "com.example.second")
+    #expect(second.target.titleContains == "Second Window")
+    #expect(!gate.isCurrent(first.token))
+    #expect(gate.isCurrent(second.token))
+}
+
+@Test(arguments: [
+    AutomationMenuStatus.checkingPreflight,
+    .observing,
+    .combatWait,
+    .buttonDetected,
+    .waitingForUserIdle,
+    .clicking,
+    .cooldown,
+    .stopping,
+])
+func targetFieldsStayLockedWhileStartOrRunOwnsSnapshot(
+    status: AutomationMenuStatus
+) {
+    #expect(AutomationTargetFieldPolicy.isLocked(status: status))
+}
+
+@Test(arguments: [
+    AutomationMenuStatus.stopped,
+    .needsAttention("설정 필요"),
+])
+func targetFieldsUnlockOnlyInSafeEditableStates(
+    status: AutomationMenuStatus
+) {
+    #expect(!AutomationTargetFieldPolicy.isLocked(status: status))
+}

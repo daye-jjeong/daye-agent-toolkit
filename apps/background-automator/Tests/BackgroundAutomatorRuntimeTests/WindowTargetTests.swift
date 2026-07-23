@@ -24,7 +24,7 @@ func matchesTitleCaseInsensitively() throws {
     let selected = try WindowTarget.select(
         from: [expected],
         bundleIdentifier: "com.example.target",
-        titleContains: "great game"
+        titleContains: "my great game window"
     )
 
     #expect(selected == expected)
@@ -86,7 +86,7 @@ func throwsNotFoundWhenNoCandidateMatches() {
 }
 
 @Test
-func selectsLargestVisibleDuplicate() throws {
+func rejectsMultipleExactVisibleMatchesAsAmbiguous() throws {
     let small = candidate(
         windowID: 1,
         frame: CGRect(x: 0, y: 0, width: 640, height: 480)
@@ -101,13 +101,38 @@ func selectsLargestVisibleDuplicate() throws {
         isOnScreen: false
     )
 
+    #expect(throws: WindowTargetError.ambiguous(count: 2)) {
+        try WindowTarget.select(
+            from: [small, largerButOffscreen, large],
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+}
+
+@Test
+func exactTitleSelectsOneOfSeveralWindowsFromSameBundle() throws {
+    let game = candidate(windowID: 1, title: "Mabinogi Mobile")
+    let settings = candidate(windowID: 2, title: "Mabinogi Settings")
+
     let selected = try WindowTarget.select(
-        from: [small, largerButOffscreen, large],
+        from: [settings, game],
         bundleIdentifier: "com.example.target",
-        titleContains: "Game"
+        titleContains: "Mabinogi Mobile"
     )
 
-    #expect(selected == large)
+    #expect(selected == game)
+}
+
+@Test
+func rejectsBlankExactTitleConfiguration() {
+    #expect(throws: WindowTargetError.invalidConfiguration) {
+        try WindowTarget.select(
+            from: [candidate(windowID: 1)],
+            bundleIdentifier: "com.example.target",
+            titleContains: " "
+        )
+    }
 }
 
 @Test

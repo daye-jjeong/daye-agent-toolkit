@@ -376,6 +376,107 @@ func rejectsUnknownRegionField() throws {
     }
 }
 
+@Test
+func acceptsValidatedAppearanceConstraint() throws {
+    let data = try makeRuleDocument(
+        id: "enter_ready",
+        requiredTexts: ["입장하기"],
+        action: ["targetText": "입장하기"],
+        appearance: validAppearance()
+    )
+
+    let rule = try #require(
+        RuleLoader().load(data: data).first
+    )
+
+    #expect(rule.appearance?.contextText == "도전")
+    #expect(
+        rule.appearance?.contextRange.maximumSaturation == 0.22
+    )
+}
+
+@Test
+func rejectsOutOfRangeAppearanceThreshold() throws {
+    var appearance = validAppearance()
+    var target = try #require(
+        appearance["targetRange"] as? [String: Any]
+    )
+    target["minimumLuminance"] = 1.1
+    appearance["targetRange"] = target
+    let data = try makeRuleDocument(
+        id: "enter_ready",
+        action: ["targetText": "입장하기"],
+        appearance: appearance
+    )
+
+    #expect(throws: RuleLoaderError.malformedSemantics(
+        ruleID: "enter_ready",
+        reason: "appearance target range must use normalized coherent bounds"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
+@Test
+func rejectsIncoherentAppearanceRange() throws {
+    var appearance = validAppearance()
+    appearance["contextRange"] = [
+        "minimumSaturation": 0.4,
+        "maximumSaturation": 0.2,
+        "minimumLuminance": 0.1,
+        "maximumLuminance": 0.9,
+    ]
+    let data = try makeRuleDocument(
+        id: "enter_ready",
+        action: ["targetText": "입장하기"],
+        appearance: appearance
+    )
+
+    #expect(throws: RuleLoaderError.malformedSemantics(
+        ruleID: "enter_ready",
+        reason: "appearance context range must use normalized coherent bounds"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
+@Test
+func rejectsAppearanceWithoutContextRegionForActionLayout() throws {
+    var appearance = validAppearance()
+    appearance["contextRegions"] = [
+        "portrait-mobile": validRegion(),
+    ]
+    let data = try makeRuleDocument(
+        id: "enter_ready",
+        action: ["targetText": "입장하기"],
+        appearance: appearance
+    )
+
+    #expect(throws: RuleLoaderError.malformedSemantics(
+        ruleID: "enter_ready",
+        reason: "appearance context region is required for every action layout"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
+@Test
+func rejectsUnknownAppearanceField() throws {
+    var appearance = validAppearance()
+    appearance["fixedGreyPixel"] = 42
+    let data = try makeRuleDocument(
+        id: "enter_ready",
+        action: ["targetText": "입장하기"],
+        appearance: appearance
+    )
+
+    #expect(throws: RuleLoaderError.malformedDocument(
+        "unknown field: fixedGreyPixel"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
 private func validRegion() -> [String: Any] {
     [
         "minX": 0.2,
@@ -385,17 +486,39 @@ private func validRegion() -> [String: Any] {
     ]
 }
 
+private func validAppearance() -> [String: Any] {
+    [
+        "contextText": "도전",
+        "contextRegions": [
+            "landscape": validRegion(),
+        ],
+        "contextRange": [
+            "minimumSaturation": 0.0,
+            "maximumSaturation": 0.22,
+            "minimumLuminance": 0.15,
+            "maximumLuminance": 0.9,
+        ],
+        "targetRange": [
+            "minimumSaturation": 0.12,
+            "maximumSaturation": 1.0,
+            "minimumLuminance": 0.25,
+            "maximumLuminance": 0.95,
+        ],
+    ]
+}
+
 private func makeRule(
     id: String = "test_rule",
     requiredTexts: [String] = ["다시 하기"],
     action: [String: Any] = ["targetText": "다시 하기"],
     regions: [String: Any] = ["landscape": validRegion()],
+    appearance: [String: Any]? = nil,
     minimumOCRConfidence: Double = 0.8,
     stableObservationCount: Int = 2,
     postActionDelaySeconds: Double = 0.5,
     cooldownSeconds: Double = 0.5
 ) -> [String: Any] {
-    [
+    var rule: [String: Any] = [
         "id": id,
         "requiredTexts": requiredTexts,
         "forbiddenTexts": ["장면 넘기기"],
@@ -406,6 +529,10 @@ private func makeRule(
         "postActionDelaySeconds": postActionDelaySeconds,
         "cooldownSeconds": cooldownSeconds,
     ]
+    if let appearance {
+        rule["appearance"] = appearance
+    }
+    return rule
 }
 
 private func makeRuleDocument(
@@ -413,6 +540,7 @@ private func makeRuleDocument(
     requiredTexts: [String] = ["다시 하기"],
     action: [String: Any] = ["targetText": "다시 하기"],
     regions: [String: Any] = ["landscape": validRegion()],
+    appearance: [String: Any]? = nil,
     minimumOCRConfidence: Double = 0.8,
     stableObservationCount: Int = 2,
     postActionDelaySeconds: Double = 0.5,
@@ -425,6 +553,7 @@ private func makeRuleDocument(
                 requiredTexts: requiredTexts,
                 action: action,
                 regions: regions,
+                appearance: appearance,
                 minimumOCRConfidence: minimumOCRConfidence,
                 stableObservationCount: stableObservationCount,
                 postActionDelaySeconds: postActionDelaySeconds,
