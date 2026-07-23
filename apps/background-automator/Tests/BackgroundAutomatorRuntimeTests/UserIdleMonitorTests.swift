@@ -480,6 +480,101 @@ func failedDisabledTapReenableMarksTapUnhealthyAndAllowsRecovery()
     #expect(driver.startCount == 2)
 }
 
+@Test
+func successfulTapReenableStartsConservativeMonitoringEpoch()
+    throws
+{
+    let clock = ContinuousClock()
+    let original = clock.now
+    let recoveryTime = original.advanced(by: .seconds(5))
+    let state = LockedTestUserInputState(
+        generation: 30,
+        lastInputAt: original
+    )
+    let recorder = InputObservationRecorder()
+    let driver = RecordingEventTapLifecycleDriver()
+    let tap = PassiveInputEventTap(
+        observe: { sourceIdentifier in
+            recorder.record(sourceIdentifier)
+        },
+        onRecovery: {
+            state.recordMonitoringStart(at: recoveryTime)
+        },
+        driver: driver
+    )
+    #expect(try tap.start())
+    let event = try #require(
+        CGEvent(
+            mouseEventSource: nil,
+            mouseType: .mouseMoved,
+            mouseCursorPosition: .zero,
+            mouseButton: .left
+        )
+    )
+    driver.setHealth(isValid: true, isEnabled: false)
+
+    _ = tap.context.handle(
+        type: .tapDisabledByUserInput,
+        event: event
+    )
+
+    #expect(tap.isRunning)
+    #expect(
+        state.snapshot
+            == UserInputSnapshot(
+                generation: 31,
+                lastInputAt: recoveryTime
+            )
+    )
+    #expect(recorder.sourceIdentifiers.isEmpty)
+}
+
+@Test
+func recoveryEpochDoesNotOverwriteNewerConcurrentInput()
+    throws
+{
+    let clock = ContinuousClock()
+    let original = clock.now
+    let recoveryTime = original.advanced(by: .seconds(5))
+    let newerInput = original.advanced(by: .seconds(6))
+    let state = LockedTestUserInputState(
+        generation: 40,
+        lastInputAt: original
+    )
+    state.recordInput(at: newerInput)
+    let driver = RecordingEventTapLifecycleDriver()
+    let tap = PassiveInputEventTap(
+        observe: { _ in },
+        onRecovery: {
+            state.recordMonitoringStart(at: recoveryTime)
+        },
+        driver: driver
+    )
+    #expect(try tap.start())
+    let event = try #require(
+        CGEvent(
+            mouseEventSource: nil,
+            mouseType: .mouseMoved,
+            mouseCursorPosition: .zero,
+            mouseButton: .left
+        )
+    )
+    driver.setHealth(isValid: true, isEnabled: false)
+
+    _ = tap.context.handle(
+        type: .tapDisabledByTimeout,
+        event: event
+    )
+
+    #expect(
+        state.snapshot
+            == UserInputSnapshot(
+                generation: 42,
+                lastInputAt: newerInput
+            )
+    )
+}
+
 private enum TestInputEventTapError: Error {
     case permissionDenied
 }
@@ -628,6 +723,42 @@ private final class ControlledNow: @unchecked Sendable {
     func set(_ value: ContinuousClock.Instant) {
         lock.withLock {
             storedValue = value
+        }
+    }
+}
+
+private final class LockedTestUserInputState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var state: UserInputState
+
+    init(
+        generation: UInt64,
+        lastInputAt: ContinuousClock.Instant
+    ) {
+        state = UserInputState(
+            generation: generation,
+            lastInputAt: lastInputAt
+        )
+    }
+
+    var snapshot: UserInputSnapshot {
+        lock.withLock { state.snapshot }
+    }
+
+    func recordInput(at timestamp: ContinuousClock.Instant) {
+        lock.withLock {
+            state.recordInput(
+                at: timestamp,
+                sourceIdentifier: nil
+            )
+        }
+    }
+
+    func recordMonitoringStart(
+        at timestamp: ContinuousClock.Instant
+    ) {
+        lock.withLock {
+            state.recordMonitoringStart(at: timestamp)
         }
     }
 }

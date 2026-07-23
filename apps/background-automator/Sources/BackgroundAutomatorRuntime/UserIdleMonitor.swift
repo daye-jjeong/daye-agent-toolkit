@@ -130,6 +130,11 @@ public final class UserIdleMonitor: UserIdleMonitoring {
                     at: clock.now,
                     sourceIdentifier: sourceIdentifier
                 )
+            },
+            onRecovery: {
+                stateStore.recordMonitoringStart(
+                    at: clock.now
+                )
             }
         )
         self.init(
@@ -407,11 +412,11 @@ private final class EventTapLifecycleController:
         }
     }
 
-    func reenable() {
+    func reenable() -> Bool {
         lock.withLock {
             guard driver.isValid else {
                 recoveryFailed = true
-                return
+                return false
             }
 
             let recovered = driver.reenable()
@@ -420,7 +425,9 @@ private final class EventTapLifecycleController:
                 || !driver.isEnabled
             {
                 recoveryFailed = true
+                return false
             }
+            return true
         }
     }
 
@@ -447,12 +454,24 @@ final class PassiveInputEventTap: InputEventTapping {
     ) {
         self.init(
             observe: observe,
+            onRecovery: {}
+        )
+    }
+
+    convenience init(
+        observe: @escaping @Sendable (Int64) -> Void,
+        onRecovery: @escaping @Sendable () -> Void
+    ) {
+        self.init(
+            observe: observe,
+            onRecovery: onRecovery,
             driver: CoreGraphicsEventTapDriver()
         )
     }
 
     init(
         observe: @escaping @Sendable (Int64) -> Void,
+        onRecovery: @escaping @Sendable () -> Void = {},
         driver: any EventTapLifecycleDriving
     ) {
         let lifecycle = EventTapLifecycleController(
@@ -462,7 +481,9 @@ final class PassiveInputEventTap: InputEventTapping {
         self.context = InputEventTapContext(
             observe: observe,
             reenable: {
-                lifecycle.reenable()
+                if lifecycle.reenable() {
+                    onRecovery()
+                }
             }
         )
     }
