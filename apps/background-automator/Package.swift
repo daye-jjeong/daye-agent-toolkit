@@ -50,7 +50,17 @@ let package = Package(
         ),
         .testTarget(
             name: "BackgroundAutomatorRuntimeTests",
-            dependencies: ["BackgroundAutomatorRuntime"]
+            dependencies: ["BackgroundAutomatorRuntime"],
+            path: "Tests",
+            exclude: [
+                "BackgroundAutomatorCoreTests",
+            ],
+            sources: [
+                "BackgroundAutomatorRuntimeTests",
+            ],
+            resources: [
+                .copy("Fixtures"),
+            ]
         ),
     ]
 )
