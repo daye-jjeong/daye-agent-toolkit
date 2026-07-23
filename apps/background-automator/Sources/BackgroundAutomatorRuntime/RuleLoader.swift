@@ -19,14 +19,31 @@ public struct RuleSafetyMinimums: Sendable {
 
 public struct RuleLoader: Sendable {
     public static let supportedSchemaVersion = 1
+    static let runtimeResourceBundleName =
+        "BackgroundAutomator_BackgroundAutomatorRuntime.bundle"
 
     public init() {}
 
     public func loadDefaultRules() throws -> [AutomationRule] {
+        if
+            let resourceRoot = Bundle.main.resourceURL,
+            packagedRulesURL(resourceRoot: resourceRoot) != nil
+        {
+            return try loadDefaultRules(resourceRoot: resourceRoot)
+        }
+
         guard let url = Bundle.module.url(
             forResource: "default-rules",
             withExtension: "json"
         ) else {
+            throw RuleLoaderError.resourceNotFound
+        }
+
+        return try load(data: Data(contentsOf: url))
+    }
+
+    func loadDefaultRules(resourceRoot: URL) throws -> [AutomationRule] {
+        guard let url = packagedRulesURL(resourceRoot: resourceRoot) else {
             throw RuleLoaderError.resourceNotFound
         }
 
@@ -57,6 +74,19 @@ public struct RuleLoader: Sendable {
 }
 
 private extension RuleLoader {
+    func packagedRulesURL(resourceRoot: URL) -> URL? {
+        let url = resourceRoot
+            .appendingPathComponent(
+                Self.runtimeResourceBundleName,
+                isDirectory: true
+            )
+            .appendingPathComponent("default-rules.json")
+
+        return FileManager.default.fileExists(atPath: url.path)
+            ? url
+            : nil
+    }
+
     struct RuleDocument: Codable, Equatable, Sendable {
         let schemaVersion: Int
         let rules: [AutomationRule]

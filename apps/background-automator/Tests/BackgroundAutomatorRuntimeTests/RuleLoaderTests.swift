@@ -15,6 +15,44 @@ func decodesPortraitRetryRuleFromBundledDefaults() throws {
 }
 
 @Test
+func loadsPackagedDefaultsFromApplicationResources() throws {
+    let fileManager = FileManager.default
+    let resourceRoot = fileManager.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let runtimeBundle = resourceRoot.appendingPathComponent(
+        "BackgroundAutomator_BackgroundAutomatorRuntime.bundle",
+        isDirectory: true
+    )
+    try fileManager.createDirectory(
+        at: runtimeBundle,
+        withIntermediateDirectories: true
+    )
+    defer {
+        try? fileManager.removeItem(at: resourceRoot)
+    }
+
+    let rulesDocument = try #require(
+        """
+        {
+          "schemaVersion": 1,
+          "rules": []
+        }
+        """.data(using: .utf8)
+    )
+    try rulesDocument.write(
+        to: runtimeBundle.appendingPathComponent(
+            "default-rules.json"
+        )
+    )
+
+    let rules = try RuleLoader().loadDefaultRules(
+        resourceRoot: resourceRoot
+    )
+
+    #expect(rules.isEmpty)
+}
+
+@Test
 func rejectsUnsupportedSchemaVersion() throws {
     let data = try #require(
         """
