@@ -121,6 +121,12 @@ public actor WindowCaptureService: WindowCapturing {
     private var pendingSelectionsByID: [UInt32: PendingSelection] = [:]
     private let captureSessionID: UUID
     private var nextCaptureSequence: UInt64
+    private var captureInFlight = false
+    private var captureWaiters: [CheckedContinuation<Void, Never>] = []
+
+    var queuedCaptureCount: Int {
+        captureWaiters.count
+    }
 
     public init() {
         backend = ScreenCaptureKitBackend()
@@ -172,6 +178,12 @@ public actor WindowCaptureService: WindowCapturing {
             throw WindowCaptureError.staleWindow(windowID: windowID)
         }
 
+        await acquireCaptureSlot()
+        defer {
+            releaseCaptureSlot()
+        }
+        try Task.checkCancellation()
+
         let result: WindowCaptureFrame
         do {
             result = try await backend.capture(expected: expected)
@@ -181,6 +193,7 @@ public actor WindowCaptureService: WindowCapturing {
             }
             throw error
         }
+        try Task.checkCancellation()
 
         guard
             case let .bound(latestExpected) = pendingSelectionsByID[windowID],
@@ -210,14 +223,26 @@ public actor WindowCaptureService: WindowCapturing {
         ) else {
             throw WindowTargetError.notFound
         }
+        await acquireCaptureSlot()
+        defer {
+            releaseCaptureSlot()
+        }
+        try Task.checkCancellation()
         let frame = try await backend.capture(expected: expected)
+        try Task.checkCancellation()
         return try captureResult(from: frame)
     }
 
     public func captureWindow(
         matching expected: WindowCandidate
     ) async throws -> WindowCaptureResult {
+        await acquireCaptureSlot()
+        defer {
+            releaseCaptureSlot()
+        }
+        try Task.checkCancellation()
         let frame = try await backend.capture(expected: expected)
+        try Task.checkCancellation()
         return try captureResult(from: frame)
     }
 
@@ -269,6 +294,24 @@ public actor WindowCaptureService: WindowCapturing {
             candidate: frame.candidate,
             captureIdentity: try makeCaptureIdentity()
         )
+    }
+
+    private func acquireCaptureSlot() async {
+        guard captureInFlight else {
+            captureInFlight = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            captureWaiters.append(continuation)
+        }
+    }
+
+    private func releaseCaptureSlot() {
+        guard !captureWaiters.isEmpty else {
+            captureInFlight = false
+            return
+        }
+        captureWaiters.removeFirst().resume()
     }
 
     private func makeCaptureIdentity() throws -> CaptureIdentity {

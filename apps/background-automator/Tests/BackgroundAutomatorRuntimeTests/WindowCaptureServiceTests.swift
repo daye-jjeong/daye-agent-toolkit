@@ -5,6 +5,117 @@ import Testing
 @testable import BackgroundAutomatorRuntime
 
 @Test
+func concurrentCapturesAreSerializedInIdentityOrder() async throws {
+    let visible = candidate(windowID: 7)
+    let backend = ControlledCaptureBackend(candidate: visible)
+    let service = WindowCaptureService(backend: backend)
+
+    let firstTask = Task {
+        try await service.captureWindow(matching: visible)
+    }
+    await backend.waitUntilCaptureStarts(1)
+
+    let secondTask = Task {
+        try await service.captureWindow(matching: visible)
+    }
+    let concurrentStart = await waitForQueuedCaptureOrConcurrentStart(
+        service: service,
+        backend: backend
+    )
+
+    #expect(!concurrentStart)
+    #expect(await backend.captureStartCount == 1)
+
+    await backend.completeCapture(1)
+    let first = try await firstTask.value
+    await backend.waitUntilCaptureStarts(2)
+    await backend.completeCapture(2)
+    let second = try await secondTask.value
+
+    #expect(first.captureIdentity.sequence == 1)
+    #expect(second.captureIdentity.sequence == 2)
+    #expect(second.captureIdentity.isStrictlyNewer(
+        than: first.captureIdentity
+    ))
+    #expect(!(await backend.concurrentStartDetected))
+}
+
+@Test
+func cancelledCaptureWaiterReleasesQueueWithoutStartingBackend() async throws {
+    let visible = candidate(windowID: 7)
+    let backend = ControlledCaptureBackend(candidate: visible)
+    let service = WindowCaptureService(backend: backend)
+
+    let firstTask = Task {
+        try await service.captureWindow(matching: visible)
+    }
+    await backend.waitUntilCaptureStarts(1)
+
+    let cancelledTask = Task {
+        try await service.captureWindow(matching: visible)
+    }
+    _ = await waitForQueuedCaptureOrConcurrentStart(
+        service: service,
+        backend: backend
+    )
+    cancelledTask.cancel()
+
+    let thirdTask = Task {
+        try await service.captureWindow(matching: visible)
+    }
+    await waitUntilQueuedCaptureCount(
+        2,
+        service: service,
+        backend: backend
+    )
+
+    await backend.completeCapture(1)
+    let first = try await firstTask.value
+    await #expect(throws: CancellationError.self) {
+        try await cancelledTask.value
+    }
+    await backend.waitUntilCaptureStarts(2)
+    await backend.completeCapture(2)
+    let third = try await thirdTask.value
+
+    #expect(first.captureIdentity.sequence == 1)
+    #expect(third.captureIdentity.sequence == 2)
+    #expect(await backend.captureStartCount == 2)
+    #expect(!(await backend.concurrentStartDetected))
+}
+
+@Test
+func failedCaptureReleasesQueueForNextWaiter() async throws {
+    let visible = candidate(windowID: 7)
+    let backend = ControlledCaptureBackend(candidate: visible)
+    let service = WindowCaptureService(backend: backend)
+
+    let failingTask = Task {
+        try await service.captureWindow(matching: visible)
+    }
+    await backend.waitUntilCaptureStarts(1)
+
+    let nextTask = Task {
+        try await service.captureWindow(matching: visible)
+    }
+    _ = await waitForQueuedCaptureOrConcurrentStart(
+        service: service,
+        backend: backend
+    )
+
+    await backend.failCapture(1)
+    await #expect(throws: ControlledCaptureError.failed) {
+        try await failingTask.value
+    }
+    await backend.waitUntilCaptureStarts(2)
+    await backend.completeCapture(2)
+    let next = try await nextTask.value
+
+    #expect(next.captureIdentity.sequence == 1)
+    #expect(!(await backend.concurrentStartDetected))
+}
+
+@Test
 func captureResultsReceiveMonotonicSessionBoundIdentities() async throws {
     let visible = candidate(windowID: 7)
     let backend = FakeWindowCaptureBackend(
@@ -433,6 +544,128 @@ private actor FakeWindowCaptureBackend: WindowCaptureBackend {
             return accessibilityMinimizedResponses.first ?? false
         }
         return accessibilityMinimizedResponses.removeFirst()
+    }
+}
+
+private enum ControlledCaptureError: Error {
+    case failed
+}
+
+private actor ControlledCaptureBackend: WindowCaptureBackend {
+    private let candidate: WindowCandidate
+    private var activeCaptureCount = 0
+    private var captureContinuations: [
+        Int: CheckedContinuation<WindowCaptureFrame, any Error>
+    ] = [:]
+    private var startWaiters: [
+        (count: Int, continuation: CheckedContinuation<Void, Never>)
+    ] = []
+
+    private(set) var captureStartCount = 0
+    private(set) var concurrentStartDetected = false
+
+    init(candidate: WindowCandidate) {
+        self.candidate = candidate
+    }
+
+    func listCandidates() async throws -> [WindowCandidate] {
+        [candidate]
+    }
+
+    func accessibilityWindow(
+        matching candidate: WindowCandidate
+    ) async throws -> AccessibilityWindowState {
+        AccessibilityWindowState(
+            title: candidate.title,
+            frame: candidate.frame,
+            isMinimized: false
+        )
+    }
+
+    func capture(
+        expected: WindowCandidate
+    ) async throws -> WindowCaptureFrame {
+        captureStartCount += 1
+        let captureNumber = captureStartCount
+        if activeCaptureCount > 0 {
+            concurrentStartDetected = true
+        }
+        activeCaptureCount += 1
+        defer {
+            activeCaptureCount -= 1
+        }
+
+        return try await withCheckedThrowingContinuation {
+            continuation in
+            captureContinuations[captureNumber] = continuation
+            resumeStartWaiters()
+        }
+    }
+
+    func waitUntilCaptureStarts(_ count: Int) async {
+        guard captureStartCount < count else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            startWaiters.append((count, continuation))
+        }
+    }
+
+    func completeCapture(_ number: Int) {
+        captureContinuations.removeValue(forKey: number)?.resume(
+            returning: WindowCaptureFrame(
+                image: makeImage(),
+                candidate: candidate
+            )
+        )
+    }
+
+    func failCapture(_ number: Int) {
+        captureContinuations.removeValue(forKey: number)?.resume(
+            throwing: ControlledCaptureError.failed
+        )
+    }
+
+    private func resumeStartWaiters() {
+        var pending: [
+            (count: Int, continuation: CheckedContinuation<Void, Never>)
+        ] = []
+        for waiter in startWaiters {
+            if captureStartCount >= waiter.count {
+                waiter.continuation.resume()
+            } else {
+                pending.append(waiter)
+            }
+        }
+        startWaiters = pending
+    }
+}
+
+private func waitForQueuedCaptureOrConcurrentStart(
+    service: WindowCaptureService,
+    backend: ControlledCaptureBackend
+) async -> Bool {
+    while true {
+        if await service.queuedCaptureCount > 0 {
+            return false
+        }
+        if await backend.captureStartCount > 1 {
+            return true
+        }
+        await Task.yield()
+    }
+}
+
+private func waitUntilQueuedCaptureCount(
+    _ count: Int,
+    service: WindowCaptureService,
+    backend: ControlledCaptureBackend
+) async {
+    while await service.queuedCaptureCount < count {
+        if await backend.concurrentStartDetected {
+            return
+        }
+        await Task.yield()
     }
 }
 
