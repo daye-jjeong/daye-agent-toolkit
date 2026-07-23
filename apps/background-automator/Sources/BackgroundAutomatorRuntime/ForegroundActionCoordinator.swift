@@ -62,7 +62,7 @@ public enum ForegroundActionFailure: Equatable, Sendable {
     case pointerMoveFailed(String)
     case clickFailed(String)
     case postActionWaitFailed(String)
-    case postActionWaitCancelled
+    case cancelled
 }
 
 public enum ForegroundRestorationFailure: Equatable, Sendable {
@@ -204,21 +204,29 @@ public struct ForegroundActionCoordinator: Sendable {
         var primaryFailure: ForegroundActionFailure?
 
         do {
+            try Self.checkCancellation()
+
             if !gameWasAlreadyFrontmost {
                 activationMayHaveChangedFocus = true
+                let activated: Bool
                 do {
-                    guard try applications.activate(targetApplication) else {
-                        throw ForegroundActionAbort.failure(
-                            .targetActivationFailed("returned false")
-                        )
-                    }
-                } catch let abort as ForegroundActionAbort {
-                    throw abort
+                    activated = try applications.activate(
+                        targetApplication
+                    )
+                } catch is CancellationError {
+                    throw ForegroundActionAbort.failure(.cancelled)
                 } catch {
+                    try Self.checkCancellation()
                     throw ForegroundActionAbort.failure(
                         .targetActivationFailed(
                             String(describing: error)
                         )
+                    )
+                }
+                try Self.checkCancellation()
+                guard activated else {
+                    throw ForegroundActionAbort.failure(
+                        .targetActivationFailed("returned false")
                     )
                 }
             }
@@ -228,6 +236,7 @@ public struct ForegroundActionCoordinator: Sendable {
             }
 
             let inputBeforeClick = await inputMonitor.snapshot()
+            try Self.checkCancellation()
             inputGenerationBeforeClick = inputBeforeClick.generation
             guard
                 inputBeforeClick.generation == expectedInputGeneration
@@ -240,6 +249,7 @@ public struct ForegroundActionCoordinator: Sendable {
                 )
             }
 
+            try Self.checkCancellation()
             pointerMayHaveChanged = true
             do {
                 try pointer.move(
@@ -247,6 +257,8 @@ public struct ForegroundActionCoordinator: Sendable {
                     sourceIdentifier:
                         AutomatorSyntheticEvent.sourceIdentifier
                 )
+            } catch is CancellationError {
+                throw ForegroundActionAbort.failure(.cancelled)
             } catch {
                 throw ForegroundActionAbort.failure(
                     .pointerMoveFailed(String(describing: error))
@@ -255,6 +267,7 @@ public struct ForegroundActionCoordinator: Sendable {
 
             let inputImmediatelyBeforeClick =
                 await inputMonitor.snapshot()
+            try Self.checkCancellation()
             inputGenerationBeforeClick =
                 inputImmediatelyBeforeClick.generation
             guard
@@ -269,12 +282,19 @@ public struct ForegroundActionCoordinator: Sendable {
                 )
             }
 
+            try Self.checkCancellation()
+            guard applications.isFrontmost(targetApplication) else {
+                throw ForegroundActionAbort.failure(.targetNotFrontmost)
+            }
+
             do {
                 try clicker.click(
                     screenPoint: targetPoint,
                     sourceIdentifier:
                         AutomatorSyntheticEvent.sourceIdentifier
                 )
+            } catch is CancellationError {
+                throw ForegroundActionAbort.failure(.cancelled)
             } catch {
                 throw ForegroundActionAbort.failure(
                     .clickFailed(String(describing: error))
@@ -285,15 +305,18 @@ public struct ForegroundActionCoordinator: Sendable {
                 try await sleeper.sleep(for: postActionDelay)
             } catch is CancellationError {
                 throw ForegroundActionAbort.failure(
-                    .postActionWaitCancelled
+                    .cancelled
                 )
             } catch {
                 throw ForegroundActionAbort.failure(
                     .postActionWaitFailed(String(describing: error))
                 )
             }
+            try Self.checkCancellation()
         } catch let ForegroundActionAbort.failure(failure) {
             primaryFailure = failure
+        } catch is CancellationError {
+            primaryFailure = .cancelled
         } catch {
             primaryFailure = .postActionWaitFailed(
                 String(describing: error)
@@ -386,6 +409,14 @@ public struct ForegroundActionCoordinator: Sendable {
             return nil
         }
         return CGPoint(x: box.midX, y: box.midY)
+    }
+
+    private static func checkCancellation() throws {
+        do {
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            throw ForegroundActionAbort.failure(.cancelled)
+        }
     }
 }
 

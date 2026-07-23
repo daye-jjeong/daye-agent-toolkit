@@ -63,6 +63,7 @@ func foregroundActionActivatesClicksWaitsAndRestoresInOrder() async throws {
             "input.snapshot",
             "pointer.move:140.0,220.0:\(AutomatorSyntheticEvent.sourceIdentifier)",
             "input.snapshot",
+            "applications.isFrontmost:20",
             "click:140.0,220.0:\(AutomatorSyntheticEvent.sourceIdentifier)",
             "sleep:0.5 seconds",
             "pointer.move:12.0,34.0:\(AutomatorSyntheticEvent.sourceIdentifier)",
@@ -171,6 +172,157 @@ func inputChangedAfterPointerMoveCancelsImmediatelyBeforeClick() async {
 
     await expectCoordinatorError(
         primary: .inputGenerationChanged(expected: 11, actual: 12),
+        restorationFailures: []
+    ) {
+        _ = try await fixture.coordinator.perform(
+            targetApplication: fixture.game,
+            targetBox: CGRect(x: 50, y: 60, width: 20, height: 10),
+            expectedInputGeneration: 11
+        )
+    }
+
+    #expect(fixture.clicker.clicks.isEmpty)
+    #expect(
+        fixture.pointer.moves.map(\.point)
+            == [CGPoint(x: 60, y: 65), CGPoint(x: 12, y: 34)]
+    )
+    #expect(fixture.applications.frontmostIdentity == fixture.original)
+}
+
+@Test
+func preCancelledTaskDoesNotActivateMoveOrClick() async {
+    let fixture = makeForegroundFixture()
+
+    let outcome = await runCancellableForegroundAction(
+        fixture: fixture,
+        cancelBeforeStart: true
+    )
+
+    expectCancellation(outcome)
+    #expect(fixture.applications.activationRequests.isEmpty)
+    #expect(fixture.pointer.moves.isEmpty)
+    #expect(fixture.clicker.clicks.isEmpty)
+}
+
+@Test
+func cancellationDuringActivationPreventsPointerAndClickAndRestoresFocus() async {
+    let fixture = makeForegroundFixture()
+
+    let outcome = await runCancellableForegroundAction(
+        fixture: fixture
+    ) { trigger in
+        fixture.applications.activationHook = { application in
+            if application == fixture.game {
+                trigger.cancel()
+            }
+        }
+    }
+
+    expectCancellation(outcome)
+    #expect(fixture.pointer.moves.isEmpty)
+    #expect(fixture.clicker.clicks.isEmpty)
+    #expect(fixture.applications.frontmostIdentity == fixture.original)
+}
+
+@Test
+func cancellationDuringFailedActivationTakesPrecedenceAndStillCleansUp() async {
+    let fixture = makeForegroundFixture()
+    fixture.applications.activationBehaviors[fixture.game] =
+        .returnFalse
+
+    let outcome = await runCancellableForegroundAction(
+        fixture: fixture
+    ) { trigger in
+        fixture.applications.activationHook = { application in
+            if application == fixture.game {
+                trigger.cancel()
+            }
+        }
+    }
+
+    expectCancellation(outcome)
+    #expect(fixture.pointer.moves.isEmpty)
+    #expect(fixture.clicker.clicks.isEmpty)
+    #expect(fixture.applications.frontmostIdentity == fixture.original)
+}
+
+@Test
+func cancellationDuringFirstSnapshotPreventsPointerAndClickAndRestoresFocus() async {
+    let fixture = makeForegroundFixture()
+
+    let outcome = await runCancellableForegroundAction(
+        fixture: fixture
+    ) { trigger in
+        fixture.monitor.snapshotHook = { snapshotNumber in
+            if snapshotNumber == 1 {
+                trigger.cancel()
+            }
+        }
+    }
+
+    expectCancellation(outcome)
+    #expect(fixture.pointer.moves.isEmpty)
+    #expect(fixture.clicker.clicks.isEmpty)
+    #expect(fixture.applications.frontmostIdentity == fixture.original)
+}
+
+@Test
+func cancellationDuringFinalSnapshotPreventsClickAndRestoresEverything() async {
+    let fixture = makeForegroundFixture()
+
+    let outcome = await runCancellableForegroundAction(
+        fixture: fixture
+    ) { trigger in
+        fixture.monitor.snapshotHook = { snapshotNumber in
+            if snapshotNumber == 2 {
+                trigger.cancel()
+            }
+        }
+    }
+
+    expectCancellation(outcome)
+    #expect(fixture.clicker.clicks.isEmpty)
+    #expect(
+        fixture.pointer.moves.map(\.point)
+            == [CGPoint(x: 60, y: 65), CGPoint(x: 12, y: 34)]
+    )
+    #expect(fixture.applications.frontmostIdentity == fixture.original)
+}
+
+@Test
+func cancellationReturnedFromWaitStillCleansUpWhenSleeperDoesNotThrow() async {
+    let fixture = makeForegroundFixture()
+
+    let outcome = await runCancellableForegroundAction(
+        fixture: fixture
+    ) { trigger in
+        fixture.sleeper.sleepHook = {
+            trigger.cancel()
+        }
+    }
+
+    expectCancellation(outcome)
+    #expect(fixture.clicker.clicks.count == 1)
+    #expect(fixture.pointer.moves.last?.point == CGPoint(x: 12, y: 34))
+    #expect(fixture.applications.frontmostIdentity == fixture.original)
+}
+
+@Test
+func focusChangedAfterFinalSnapshotAbortsBeforeGlobalClick() async {
+    let fixture = makeForegroundFixture()
+    let intruder = ApplicationIdentity(
+        processIdentifier: 30,
+        bundleIdentifier: "com.example.intruder"
+    )
+    fixture.applications.running.insert(intruder)
+    fixture.monitor.snapshotHook = { snapshotNumber in
+        if snapshotNumber == 2 {
+            fixture.applications.setFrontmost(intruder)
+        }
+    }
+
+    await expectCoordinatorError(
+        primary: .targetNotFrontmost,
         restorationFailures: []
     ) {
         _ = try await fixture.coordinator.perform(
@@ -344,7 +496,7 @@ func cancellationDuringPostActionWaitStillRestoresPointerAndFocus() async {
     fixture.sleeper.error = CancellationError()
 
     await expectCoordinatorError(
-        primary: .postActionWaitCancelled,
+        primary: .cancelled,
         restorationFailures: []
     ) {
         _ = try await fixture.coordinator.perform(
@@ -414,6 +566,7 @@ private struct ForegroundFixture {
     let pointer: FakePointerController
     let clicker: FakeGlobalClicker
     let sleeper: FakeActionSleeper
+    let monitor: FakeForegroundInputMonitor
     let coordinator: ForegroundActionCoordinator
 }
 
@@ -457,6 +610,7 @@ private func makeForegroundFixture(
         pointer: pointer,
         clicker: clicker,
         sleeper: sleeper,
+        monitor: monitor,
         coordinator: ForegroundActionCoordinator(
             applications: applications,
             pointer: pointer,
@@ -465,6 +619,108 @@ private func makeForegroundFixture(
             inputMonitor: monitor
         )
     )
+}
+
+private enum CancellableActionOutcome: Sendable {
+    case succeeded
+    case coordinatorError(ForegroundActionCoordinatorError)
+    case unexpectedError(String)
+}
+
+private func runCancellableForegroundAction(
+    fixture: ForegroundFixture,
+    cancelBeforeStart: Bool = false,
+    configure: (CancellationTrigger) -> Void = { _ in }
+) async -> CancellableActionOutcome {
+    let trigger = CancellationTrigger()
+    let gate = CancellableTestStartGate()
+    configure(trigger)
+
+    let task = Task {
+        await gate.wait()
+        do {
+            _ = try await fixture.coordinator.perform(
+                targetApplication: fixture.game,
+                targetBox: CGRect(
+                    x: 50,
+                    y: 60,
+                    width: 20,
+                    height: 10
+                ),
+                expectedInputGeneration: 11
+            )
+            return CancellableActionOutcome.succeeded
+        } catch let error as ForegroundActionCoordinatorError {
+            return .coordinatorError(error)
+        } catch {
+            return .unexpectedError(String(describing: error))
+        }
+    }
+
+    trigger.install {
+        task.cancel()
+    }
+    if cancelBeforeStart {
+        trigger.cancel()
+    }
+    await gate.release()
+    return await task.value
+}
+
+private func expectCancellation(_ outcome: CancellableActionOutcome) {
+    switch outcome {
+    case let .coordinatorError(error):
+        #expect(
+            error.primaryFailure
+                == ForegroundActionFailure.cancelled
+        )
+        #expect(error.restorationFailures.isEmpty)
+    case .succeeded:
+        Issue.record("Expected cancellation, but action succeeded.")
+    case let .unexpectedError(error):
+        Issue.record("Unexpected error: \(error)")
+    }
+}
+
+private final class CancellationTrigger: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancellation: (@Sendable () -> Void)?
+
+    func install(_ cancellation: @escaping @Sendable () -> Void) {
+        lock.withLock {
+            self.cancellation = cancellation
+        }
+    }
+
+    func cancel() {
+        let action: (@Sendable () -> Void)? = lock.withLock {
+            self.cancellation
+        }
+        action?()
+    }
+}
+
+private actor CancellableTestStartGate {
+    private var isReleased = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isReleased else {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func release() {
+        isReleased = true
+        let currentWaiters = waiters
+        waiters.removeAll()
+        for waiter in currentWaiters {
+            waiter.resume()
+        }
+    }
 }
 
 private func expectCoordinatorError(
@@ -530,6 +786,7 @@ private final class FakeApplicationCoordinator:
         [ApplicationIdentity: FakeActivationBehavior] = [:]
     private var storedActivationRequests: [ApplicationIdentity] = []
     var frontmostAfterSuccessfulActivation = true
+    var activationHook: (@Sendable (ApplicationIdentity) -> Void)?
 
     init(
         frontmost: ApplicationIdentity?,
@@ -566,7 +823,7 @@ private final class FakeApplicationCoordinator:
 
     func activate(_ application: ApplicationIdentity) throws -> Bool {
         log.append("applications.activate:\(application.processIdentifier)")
-        return try lock.withLock {
+        let result = try lock.withLock {
             storedActivationRequests.append(application)
             let behavior = storedActivationBehaviors[application] ?? .succeed
             switch behavior {
@@ -584,6 +841,8 @@ private final class FakeApplicationCoordinator:
                 throw error
             }
         }
+        activationHook?(application)
+        return result
     }
 
     func isFrontmost(_ application: ApplicationIdentity) -> Bool {
@@ -594,6 +853,12 @@ private final class FakeApplicationCoordinator:
     func isRunning(_ application: ApplicationIdentity) -> Bool {
         log.append("applications.isRunning:\(application.processIdentifier)")
         return lock.withLock { storedRunning.contains(application) }
+    }
+
+    func setFrontmost(_ application: ApplicationIdentity?) {
+        lock.withLock {
+            storedFrontmost = application
+        }
     }
 }
 
@@ -696,6 +961,7 @@ private final class FakeActionSleeper:
 {
     private let log: ForegroundActionTestLog
     var error: (any Error)?
+    var sleepHook: (@Sendable () -> Void)?
 
     init(log: ForegroundActionTestLog) {
         self.log = log
@@ -703,6 +969,7 @@ private final class FakeActionSleeper:
 
     func sleep(for duration: Duration) async throws {
         log.append("sleep:\(duration)")
+        sleepHook?()
         if let error {
             throw error
         }
@@ -715,7 +982,9 @@ private final class FakeForegroundInputMonitor:
 {
     private let lock = NSLock()
     private var snapshots: [UserInputSnapshot]
+    private var snapshotCount = 0
     private let log: ForegroundActionTestLog
+    var snapshotHook: (@Sendable (Int) -> Void)?
 
     init(
         snapshots: [UserInputSnapshot],
@@ -727,12 +996,15 @@ private final class FakeForegroundInputMonitor:
 
     func snapshot() async -> UserInputSnapshot {
         log.append("input.snapshot")
-        return lock.withLock {
+        let result = lock.withLock {
+            snapshotCount += 1
             if snapshots.count == 1 {
-                return snapshots[0]
+                return (snapshots[0], snapshotCount)
             }
-            return snapshots.removeFirst()
+            return (snapshots.removeFirst(), snapshotCount)
         }
+        snapshotHook?(result.1)
+        return result.0
     }
 
     func waitUntilIdle(
