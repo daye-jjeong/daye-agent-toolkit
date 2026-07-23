@@ -32,6 +32,7 @@ public enum UserIdleMonitorError: Error, Equatable, Sendable {
     case cannotCreateRunLoopSource
     case cannotAccessRunLoop
     case cannotEnableEventTap
+    case recoveryInProgress
 }
 
 struct UserInputState {
@@ -374,9 +375,15 @@ protocol EventTapLifecycleDriving: Sendable {
 private final class EventTapLifecycleController:
     @unchecked Sendable
 {
+    struct RecoveryToken: Equatable, Sendable {
+        fileprivate let sequence: UInt64
+    }
+
     private let lock = NSLock()
     private let driver: any EventTapLifecycleDriving
     private var recoveryFailed = false
+    private var pendingRecoverySequence: UInt64?
+    private var nextRecoverySequence: UInt64 = 0
 
     init(driver: any EventTapLifecycleDriving) {
         self.driver = driver
@@ -390,6 +397,9 @@ private final class EventTapLifecycleController:
         context: InputEventTapContext
     ) throws -> Bool {
         try lock.withLock {
+            guard pendingRecoverySequence == nil else {
+                throw UserIdleMonitorError.recoveryInProgress
+            }
             if isHealthy {
                 return false
             }
@@ -412,11 +422,14 @@ private final class EventTapLifecycleController:
         }
     }
 
-    func reenable() -> Bool {
+    func beginRecovery() -> RecoveryToken? {
         lock.withLock {
+            guard pendingRecoverySequence == nil else {
+                return nil
+            }
             guard driver.isValid else {
                 recoveryFailed = true
-                return false
+                return nil
             }
 
             let recovered = driver.reenable()
@@ -425,9 +438,30 @@ private final class EventTapLifecycleController:
                 || !driver.isEnabled
             {
                 recoveryFailed = true
-                return false
+                return nil
             }
-            return true
+
+            nextRecoverySequence &+= 1
+            let token = RecoveryToken(
+                sequence: nextRecoverySequence
+            )
+            pendingRecoverySequence = token.sequence
+            return token
+        }
+    }
+
+    func commitRecovery(_ token: RecoveryToken) {
+        lock.withLock {
+            guard
+                pendingRecoverySequence == token.sequence
+            else {
+                return
+            }
+
+            pendingRecoverySequence = nil
+            if !driver.isValid || !driver.isEnabled {
+                recoveryFailed = true
+            }
         }
     }
 
@@ -435,11 +469,13 @@ private final class EventTapLifecycleController:
         lock.withLock {
             driver.stop()
             recoveryFailed = false
+            pendingRecoverySequence = nil
         }
     }
 
     private var isHealthy: Bool {
         !recoveryFailed
+            && pendingRecoverySequence == nil
             && driver.isValid
             && driver.isEnabled
     }
@@ -481,8 +517,9 @@ final class PassiveInputEventTap: InputEventTapping {
         self.context = InputEventTapContext(
             observe: observe,
             reenable: {
-                if lifecycle.reenable() {
+                if let token = lifecycle.beginRecovery() {
                     onRecovery()
+                    lifecycle.commitRecovery(token)
                 }
             }
         )

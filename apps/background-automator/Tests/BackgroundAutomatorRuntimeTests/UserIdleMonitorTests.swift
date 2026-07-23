@@ -575,6 +575,74 @@ func recoveryEpochDoesNotOverwriteNewerConcurrentInput()
     )
 }
 
+@Test
+func tapStaysUnhealthyUntilRecoveryEpochIsCommitted()
+    async throws
+{
+    let clock = ContinuousClock()
+    let original = clock.now
+    let recoveryTime = original.advanced(by: .seconds(5))
+    let state = LockedTestUserInputState(
+        generation: 50,
+        lastInputAt: original
+    )
+    let recoveryGate = RecoveryGate()
+    let driver = RecordingEventTapLifecycleDriver()
+    let tap = PassiveInputEventTap(
+        observe: { _ in },
+        onRecovery: {
+            recoveryGate.pause()
+            state.recordMonitoringStart(at: recoveryTime)
+        },
+        driver: driver
+    )
+    #expect(try tap.start())
+    let event = try #require(
+        CGEvent(
+            mouseEventSource: nil,
+            mouseType: .mouseMoved,
+            mouseCursorPosition: .zero,
+            mouseButton: .left
+        )
+    )
+    driver.setHealth(isValid: true, isEnabled: false)
+
+    let recoveryTask = Task.detached {
+        _ = tap.context.handle(
+            type: .tapDisabledByTimeout,
+            event: event
+        )
+    }
+    for _ in 0 ..< 1_000 {
+        if recoveryGate.hasPaused {
+            break
+        }
+        try await Task.sleep(for: .milliseconds(1))
+    }
+    #expect(recoveryGate.hasPaused)
+
+    #expect(!tap.isRunning)
+    #expect(
+        state.snapshot
+            == UserInputSnapshot(
+                generation: 50,
+                lastInputAt: original
+            )
+    )
+
+    recoveryGate.resume()
+    await recoveryTask.value
+
+    #expect(tap.isRunning)
+    #expect(
+        state.snapshot
+            == UserInputSnapshot(
+                generation: 51,
+                lastInputAt: recoveryTime
+            )
+    )
+}
+
 private enum TestInputEventTapError: Error {
     case permissionDenied
 }
@@ -760,6 +828,27 @@ private final class LockedTestUserInputState: @unchecked Sendable {
         lock.withLock {
             state.recordMonitoringStart(at: timestamp)
         }
+    }
+}
+
+private final class RecoveryGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let resumeSemaphore = DispatchSemaphore(value: 0)
+    private var storedHasPaused = false
+
+    var hasPaused: Bool {
+        lock.withLock { storedHasPaused }
+    }
+
+    func pause() {
+        lock.withLock {
+            storedHasPaused = true
+        }
+        resumeSemaphore.wait()
+    }
+
+    func resume() {
+        resumeSemaphore.signal()
     }
 }
 
