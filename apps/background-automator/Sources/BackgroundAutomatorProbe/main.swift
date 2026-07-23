@@ -35,6 +35,7 @@ extension ProbeError: LocalizedError {
 }
 
 enum ProbeCommand {
+    case version
     case list
     case visibility(bundleIdentifier: String, title: String)
     case capture(bundleIdentifier: String, title: String, outputPath: String)
@@ -51,6 +52,14 @@ enum ProbeCommand {
         }
 
         switch command {
+        case "version":
+            guard arguments.count == 1 else {
+                throw ProbeError.invalidArguments(
+                    "The version command does not accept arguments."
+                )
+            }
+            return .version
+
         case "list":
             guard arguments.count == 1 else {
                 throw ProbeError.invalidArguments(
@@ -198,6 +207,7 @@ enum ProbeCommand {
 
 let usage = """
 Usage:
+  BackgroundAutomatorProbe version
   BackgroundAutomatorProbe list
   BackgroundAutomatorProbe visibility --bundle-id <id> --title <text>
   BackgroundAutomatorProbe capture --bundle-id <id> --title <text> --output <path>
@@ -254,6 +264,12 @@ do {
     let captureService = WindowCaptureService()
 
     switch command {
+    case .version:
+        print(
+            "BackgroundAutomatorProbe "
+                + BackgroundAutomatorRuntime.version
+        )
+
     case .list:
         let candidates = try await captureService.listWindows()
         let safeCandidates = candidates.filter {
@@ -371,7 +387,12 @@ do {
         )
         print("after=\(afterPath)")
     }
+
+    fflush(stdout)
+    fflush(stderr)
+    exit(EXIT_SUCCESS)
 } catch {
     fputs("Error: \(error.localizedDescription)\n", stderr)
+    fflush(stderr)
     exit(EXIT_FAILURE)
 }
