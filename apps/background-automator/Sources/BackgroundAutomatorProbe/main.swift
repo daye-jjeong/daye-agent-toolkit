@@ -30,6 +30,7 @@ extension ProbeError: LocalizedError {
 
 enum ProbeCommand {
     case list
+    case visibility(bundleIdentifier: String, title: String)
     case capture(bundleIdentifier: String, title: String, outputPath: String)
 
     static func parse(_ arguments: [String]) throws -> ProbeCommand {
@@ -45,6 +46,43 @@ enum ProbeCommand {
                 )
             }
             return .list
+
+        case "visibility":
+            var values: [String: String] = [:]
+            var index = 1
+
+            while index < arguments.count {
+                let option = arguments[index]
+                guard ["--bundle-id", "--title"].contains(option) else {
+                    throw ProbeError.invalidArguments("Unknown option: \(option)")
+                }
+                guard values[option] == nil else {
+                    throw ProbeError.invalidArguments("Duplicate option: \(option)")
+                }
+                guard index + 1 < arguments.count else {
+                    throw ProbeError.invalidArguments("Missing value for \(option).")
+                }
+
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw ProbeError.invalidArguments("Empty value for \(option).")
+                }
+                values[option] = value
+                index += 2
+            }
+
+            guard
+                let bundleIdentifier = values["--bundle-id"],
+                let title = values["--title"]
+            else {
+                throw ProbeError.invalidArguments(
+                    "visibility requires --bundle-id and --title."
+                )
+            }
+            return .visibility(
+                bundleIdentifier: bundleIdentifier,
+                title: title
+            )
 
         case "capture":
             var values: [String: String] = [:]
@@ -95,6 +133,7 @@ enum ProbeCommand {
 let usage = """
 Usage:
   BackgroundAutomatorProbe list
+  BackgroundAutomatorProbe visibility --bundle-id <id> --title <text>
   BackgroundAutomatorProbe capture --bundle-id <id> --title <text> --output <path>
 """
 
@@ -166,6 +205,29 @@ do {
                     + "frame=(\(frameDescription(candidate.frame)))"
             )
         }
+
+    case let .visibility(bundleIdentifier, title):
+        let diagnostic = try await captureService.visibilityDiagnostic(
+            bundleIdentifier: bundleIdentifier,
+            titleContains: title
+        )
+        print("windowID=\(diagnostic.candidate.windowID)")
+        print("pid=\(diagnostic.candidate.processID)")
+        print(
+            "screenAndCoreGraphicsOnScreen="
+                + "\(diagnostic.candidate.isOnScreen)"
+        )
+        print(
+            "screenFrame=(\(frameDescription(diagnostic.candidate.frame)))"
+        )
+        print(
+            "accessibilityFrame=("
+                + "\(frameDescription(diagnostic.accessibilityWindow.frame)))"
+        )
+        print(
+            "accessibilityMinimized="
+                + "\(diagnostic.accessibilityWindow.isMinimized)"
+        )
 
     case let .capture(bundleIdentifier, title, outputPath):
         let result = try await captureService.captureWindow(

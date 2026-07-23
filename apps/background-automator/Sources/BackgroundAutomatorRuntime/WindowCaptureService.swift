@@ -26,6 +26,19 @@ public struct WindowCaptureResult: Sendable {
     }
 }
 
+public struct WindowVisibilityDiagnostic: Sendable {
+    public let candidate: WindowCandidate
+    public let accessibilityWindow: AccessibilityWindowState
+
+    public init(
+        candidate: WindowCandidate,
+        accessibilityWindow: AccessibilityWindowState
+    ) {
+        self.candidate = candidate
+        self.accessibilityWindow = accessibilityWindow
+    }
+}
+
 public enum WindowCaptureError: Error, Equatable, Sendable {
     case shareableContentUnavailable(reason: String)
     case windowUnavailable(windowID: UInt32)
@@ -50,6 +63,9 @@ extension WindowCaptureError: LocalizedError {
 
 protocol WindowCaptureBackend: Sendable {
     func listCandidates() async throws -> [WindowCandidate]
+    func accessibilityWindow(
+        matching candidate: WindowCandidate
+    ) async throws -> AccessibilityWindowState
     func capture(expected: WindowCandidate) async throws -> WindowCaptureResult
 }
 
@@ -84,6 +100,14 @@ public actor WindowCaptureService: WindowCapturing {
             bundleIdentifier: bundleIdentifier,
             titleContains: titleContains
         )
+        let accessibilityWindow = try await backend.accessibilityWindow(
+            matching: selected
+        )
+        guard WindowVisibilityValidator.isVisible(
+            accessibilityWindow: accessibilityWindow
+        ) else {
+            throw WindowTargetError.notFound
+        }
         try bindForRawCapture(selected)
         return selected
     }
@@ -125,7 +149,34 @@ public actor WindowCaptureService: WindowCapturing {
             bundleIdentifier: bundleIdentifier,
             titleContains: titleContains
         )
+        let accessibilityWindow = try await backend.accessibilityWindow(
+            matching: expected
+        )
+        guard WindowVisibilityValidator.isVisible(
+            accessibilityWindow: accessibilityWindow
+        ) else {
+            throw WindowTargetError.notFound
+        }
         return try await backend.capture(expected: expected)
+    }
+
+    public func visibilityDiagnostic(
+        bundleIdentifier: String,
+        titleContains: String
+    ) async throws -> WindowVisibilityDiagnostic {
+        let candidates = try await backend.listCandidates()
+        let candidate = try WindowTarget.select(
+            from: candidates,
+            bundleIdentifier: bundleIdentifier,
+            titleContains: titleContains
+        )
+        let accessibilityWindow = try await backend.accessibilityWindow(
+            matching: candidate
+        )
+        return WindowVisibilityDiagnostic(
+            candidate: candidate,
+            accessibilityWindow: accessibilityWindow
+        )
     }
 
     private func bindForRawCapture(_ selected: WindowCandidate) throws {
@@ -152,12 +203,16 @@ public actor WindowCaptureService: WindowCapturing {
 
 private actor ScreenCaptureKitBackend: WindowCaptureBackend {
     private let visibilityProvider: any WindowVisibilityProviding
+    private let accessibilityProvider: any AccessibilityWindowProviding
 
     init(
         visibilityProvider: any WindowVisibilityProviding =
-            CoreGraphicsWindowVisibilityProvider()
+            CoreGraphicsWindowVisibilityProvider(),
+        accessibilityProvider: any AccessibilityWindowProviding =
+            AXAccessibilityWindowProvider()
     ) {
         self.visibilityProvider = visibilityProvider
+        self.accessibilityProvider = accessibilityProvider
     }
 
     func listCandidates() async throws -> [WindowCandidate] {
@@ -169,6 +224,18 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
                 coreGraphicsWindow: visibility[$0.windowID]
             )
         }
+    }
+
+    func accessibilityWindow(
+        matching candidate: WindowCandidate
+    ) async throws -> AccessibilityWindowState {
+        let windows = try accessibilityProvider.windows(
+            processID: candidate.processID
+        )
+        return try WindowVisibilityValidator.accessibilityWindow(
+            matching: candidate,
+            from: windows
+        )
     }
 
     func capture(expected: WindowCandidate) async throws -> WindowCaptureResult {
@@ -189,6 +256,16 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
             coreGraphicsWindow: visibility[window.windowID]
         )
         guard WindowTarget.isCurrent(current, matching: expected) else {
+            throw WindowCaptureError.staleWindow(
+                windowID: expected.windowID
+            )
+        }
+        let accessibilityWindow = try await accessibilityWindow(
+            matching: current
+        )
+        guard WindowVisibilityValidator.isVisible(
+            accessibilityWindow: accessibilityWindow
+        ) else {
             throw WindowCaptureError.staleWindow(
                 windowID: expected.windowID
             )

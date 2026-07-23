@@ -97,6 +97,66 @@ func combinedCaptureRejectsWindowMinimizedAfterSelection() async {
 }
 
 @Test
+func combinedCaptureRejectsAccessibilityMinimizedAtSelection() async {
+    let visible = candidate(windowID: 7, isOnScreen: true)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [visible],
+        currentCandidate: visible,
+        accessibilityMinimizedResponses: [true]
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    await #expect(throws: WindowTargetError.notFound) {
+        try await service.captureWindow(
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+    #expect(await backend.imageCaptureCount == 0)
+}
+
+@Test
+func combinedCaptureRejectsAccessibilityMinimizedBeforeFreshCapture() async {
+    let visible = candidate(windowID: 7, isOnScreen: true)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [visible],
+        currentCandidate: visible,
+        accessibilityMinimizedResponses: [false, true]
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    await #expect(throws: WindowCaptureError.staleWindow(windowID: 7)) {
+        try await service.captureWindow(
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+    #expect(await backend.imageCaptureCount == 0)
+}
+
+@Test
+func combinedCaptureFailsSafeWhenAccessibilityIsUnavailable() async {
+    let visible = candidate(windowID: 7, processID: 42)
+    let expectedError = WindowVisibilityError.accessibilityNotTrusted(
+        processID: 42
+    )
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [visible],
+        currentCandidate: visible,
+        accessibilityError: expectedError
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    await #expect(throws: expectedError) {
+        try await service.captureWindow(
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+    #expect(await backend.imageCaptureCount == 0)
+}
+
+@Test
 func rawCaptureRejectsReplacementAfterFind() async throws {
     let selected = candidate(windowID: 7, processID: 42)
     let replacement = candidate(windowID: 7, processID: 99)
@@ -182,19 +242,39 @@ func secondFindCannotRebindReplacementToExistingWindowID() async throws {
 private actor FakeWindowCaptureBackend: WindowCaptureBackend {
     private var listedCandidates: [WindowCandidate]
     private var currentCandidate: WindowCandidate
+    private var accessibilityMinimizedResponses: [Bool]
+    private let accessibilityError: WindowVisibilityError?
     private(set) var receivedExpected: WindowCandidate?
     private(set) var imageCaptureCount = 0
 
     init(
         listedCandidates: [WindowCandidate],
-        currentCandidate: WindowCandidate
+        currentCandidate: WindowCandidate,
+        accessibilityMinimizedResponses: [Bool] = [false],
+        accessibilityError: WindowVisibilityError? = nil
     ) {
         self.listedCandidates = listedCandidates
         self.currentCandidate = currentCandidate
+        self.accessibilityMinimizedResponses =
+            accessibilityMinimizedResponses
+        self.accessibilityError = accessibilityError
     }
 
     func listCandidates() async throws -> [WindowCandidate] {
         listedCandidates
+    }
+
+    func accessibilityWindow(
+        matching candidate: WindowCandidate
+    ) async throws -> AccessibilityWindowState {
+        if let accessibilityError {
+            throw accessibilityError
+        }
+        return AccessibilityWindowState(
+            title: candidate.title,
+            frame: candidate.frame,
+            isMinimized: nextAccessibilityMinimizedResponse()
+        )
     }
 
     func replaceCandidates(
@@ -210,12 +290,22 @@ private actor FakeWindowCaptureBackend: WindowCaptureBackend {
         guard WindowTarget.isCurrent(currentCandidate, matching: expected) else {
             throw WindowCaptureError.staleWindow(windowID: expected.windowID)
         }
+        guard !nextAccessibilityMinimizedResponse() else {
+            throw WindowCaptureError.staleWindow(windowID: expected.windowID)
+        }
 
         imageCaptureCount += 1
         return WindowCaptureResult(
             image: makeImage(),
             candidate: currentCandidate
         )
+    }
+
+    private func nextAccessibilityMinimizedResponse() -> Bool {
+        guard accessibilityMinimizedResponses.count > 1 else {
+            return accessibilityMinimizedResponses.first ?? false
+        }
+        return accessibilityMinimizedResponses.removeFirst()
     }
 }
 
