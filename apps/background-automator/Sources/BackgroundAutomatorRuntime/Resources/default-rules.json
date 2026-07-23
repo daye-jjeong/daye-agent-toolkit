@@ -1,1 +1,35 @@
-{"version":1,"rules":[]}
+{
+  "schemaVersion": 1,
+  "rules": [
+    {
+      "id": "reward_retry",
+      "requiredTexts": [
+        "다시 하기"
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기"
+      ],
+      "action": {
+        "targetText": "다시 하기"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.2,
+          "minY": 0.65,
+          "maxX": 0.8,
+          "maxY": 1.0
+        },
+        "portrait-mobile": {
+          "minX": 0.05,
+          "minY": 0.7,
+          "maxX": 0.95,
+          "maxY": 1.0
+        }
+      },
+      "minimumOCRConfidence": 0.8,
+      "stableObservationCount": 2,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 2.0
+    }
+  ]
+}
