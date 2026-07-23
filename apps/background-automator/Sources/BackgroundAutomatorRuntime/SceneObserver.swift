@@ -107,17 +107,24 @@ private extension SceneObserver {
             return nil
         }
 
-        let confidentObservations = observations.filter {
-            $0.confidence.isFinite
-                && $0.confidence >= rule.minimumOCRConfidence
+        let blockingObservations = observations.filter {
+            (0 ... 1).contains($0.confidence)
+                && isUsable(
+                    $0.boundingBox,
+                    imageSize: imageSize
+                )
         }
         guard !containsForbiddenText(
             rule.forbiddenTexts + Self.blockedActionTexts,
-            in: confidentObservations
+            in: blockingObservations
         ) else {
             return nil
         }
 
+        let confidentObservations = observations.filter {
+            $0.confidence.isFinite
+                && $0.confidence >= rule.minimumOCRConfidence
+        }
         let observationsInRegion = confidentObservations.filter {
             isCentered(
                 $0.boundingBox,
@@ -195,6 +202,20 @@ private extension SceneObserver {
         in region: NormalizedRegion,
         imageSize: CGSize
     ) -> Bool {
+        guard isUsable(boundingBox, imageSize: imageSize) else {
+            return false
+        }
+
+        let normalizedX = boundingBox.midX / imageSize.width
+        let normalizedY = boundingBox.midY / imageSize.height
+        return (region.minX ... region.maxX).contains(normalizedX)
+            && (region.minY ... region.maxY).contains(normalizedY)
+    }
+
+    func isUsable(
+        _ boundingBox: CGRect,
+        imageSize: CGSize
+    ) -> Bool {
         guard
             imageSize.width.isFinite,
             imageSize.height.isFinite,
@@ -210,10 +231,14 @@ private extension SceneObserver {
             return false
         }
 
-        let normalizedX = boundingBox.midX / imageSize.width
-        let normalizedY = boundingBox.midY / imageSize.height
-        return (region.minX ... region.maxX).contains(normalizedX)
-            && (region.minY ... region.maxY).contains(normalizedY)
+        let maxX = boundingBox.origin.x + boundingBox.size.width
+        let maxY = boundingBox.origin.y + boundingBox.size.height
+        return maxX.isFinite
+            && maxY.isFinite
+            && maxX > 0
+            && maxY > 0
+            && boundingBox.origin.x < imageSize.width
+            && boundingBox.origin.y < imageSize.height
     }
 
     func pixelRect(

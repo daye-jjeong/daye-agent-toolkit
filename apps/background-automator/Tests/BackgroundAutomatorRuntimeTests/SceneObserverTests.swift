@@ -65,6 +65,86 @@ func observedForbiddenTextBlocksRetryCandidate() async throws {
 }
 
 @Test
+func lowConfidenceSceneSkipStillBlocksHighConfidenceAction() async throws {
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "다시 하기",
+                confidence: 0.95,
+                rect: CGRect(x: 60, y: 240, width: 80, height: 30)
+            ),
+            recognized(
+                "장면 넘기기",
+                confidence: 0.79,
+                rect: CGRect(x: 40, y: 20, width: 120, height: 30)
+            ),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [retryRule()]
+    )
+
+    #expect(result.actionCandidates.isEmpty)
+}
+
+@Test
+func lowConfidenceRuleSpecificForbiddenTextBlocksAction() async throws {
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "다시 하기",
+                confidence: 0.95,
+                rect: CGRect(x: 60, y: 240, width: 80, height: 30)
+            ),
+            recognized(
+                "취소",
+                confidence: 0.79,
+                rect: CGRect(x: 40, y: 20, width: 80, height: 30)
+            ),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [
+            makeRule(forbiddenTexts: ["취소"]),
+        ]
+    )
+
+    #expect(result.actionCandidates.isEmpty)
+}
+
+@Test
+func lowConfidenceForbiddenSubstringDoesNotBlockExactMatching() async throws {
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "다시 하기",
+                confidence: 0.95,
+                rect: CGRect(x: 60, y: 240, width: 80, height: 30)
+            ),
+            recognized(
+                "장면 넘기기 안내",
+                confidence: 0.79,
+                rect: CGRect(x: 30, y: 20, width: 140, height: 30)
+            ),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [retryRule()]
+    )
+
+    #expect(result.actionCandidates.count == 1)
+}
+
+@Test
 func sceneSkipCanNeverBecomeAnActionCandidate() async throws {
     let observer = SceneObserver(
         textRecognizer: FakeTextRecognizer([
