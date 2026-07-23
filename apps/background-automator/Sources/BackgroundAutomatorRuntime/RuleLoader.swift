@@ -11,7 +11,7 @@ public enum RuleLoaderError: Error, Equatable, Sendable {
 
 public struct RuleSafetyMinimums: Sendable {
     public static let stableObservationCount = 2
-    public static let postActionDelaySeconds = 0.1
+    public static let postActionDelaySeconds = 0.5
     public static let cooldownSeconds = 0.5
 
     private init() {}

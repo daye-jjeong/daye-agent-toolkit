@@ -136,7 +136,7 @@ func rejectsUnknownFieldsForCurrentSchemaVersion() throws {
 @Test
 func exposesApprovedGlobalSafetyMinima() {
     #expect(RuleSafetyMinimums.stableObservationCount == 2)
-    #expect(RuleSafetyMinimums.postActionDelaySeconds == 0.1)
+    #expect(RuleSafetyMinimums.postActionDelaySeconds == 0.5)
     #expect(RuleSafetyMinimums.cooldownSeconds == 0.5)
 }
 
@@ -166,12 +166,12 @@ func acceptsStableObservationCountAtSafetyMinimum() throws {
 @Test
 func rejectsPostActionDelayBelowSafetyMinimum() throws {
     let data = try makeRuleDocument(
-        postActionDelaySeconds: 0.099
+        postActionDelaySeconds: 0.499
     )
 
     #expect(throws: RuleLoaderError.malformedSemantics(
         ruleID: "test_rule",
-        reason: "postActionDelaySeconds must be at least 0.1"
+        reason: "postActionDelaySeconds must be at least 0.5"
     )) {
         try RuleLoader().load(data: data)
     }
@@ -180,7 +180,7 @@ func rejectsPostActionDelayBelowSafetyMinimum() throws {
 @Test
 func acceptsPostActionDelayAtSafetyMinimum() throws {
     let data = try makeRuleDocument(
-        postActionDelaySeconds: 0.1
+        postActionDelaySeconds: 0.5
     )
 
     #expect(try RuleLoader().load(data: data).count == 1)
@@ -266,6 +266,85 @@ func rejectsDuplicateCanonicalRuleIDs() throws {
     }
 }
 
+@Test(arguments: [-0.001, 1.001])
+func rejectsOCRConfidenceOutsideNormalizedBounds(
+    minimumOCRConfidence: Double
+) throws {
+    let data = try makeRuleDocument(
+        minimumOCRConfidence: minimumOCRConfidence
+    )
+
+    #expect(throws: RuleLoaderError.malformedSemantics(
+        ruleID: "test_rule",
+        reason: "minimumOCRConfidence must be between 0 and 1"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
+@Test(arguments: [0.0, 1.0])
+func acceptsOCRConfidenceAtNormalizedBounds(
+    minimumOCRConfidence: Double
+) throws {
+    let data = try makeRuleDocument(
+        minimumOCRConfidence: minimumOCRConfidence
+    )
+
+    #expect(try RuleLoader().load(data: data).count == 1)
+}
+
+@Test
+func rejectsBlankOCRText() throws {
+    let data = try makeRuleDocument(requiredTexts: ["  "])
+
+    #expect(throws: RuleLoaderError.malformedSemantics(
+        ruleID: "test_rule",
+        reason: "OCR texts must not be empty"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
+@Test
+func rejectsUnsupportedLayoutSearchRegion() throws {
+    let data = try makeRuleDocument(
+        regions: ["unsupported": validRegion()]
+    )
+
+    #expect(throws: RuleLoaderError.malformedSemantics(
+        ruleID: "test_rule",
+        reason: "unsupported layout cannot define a search region"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
+@Test
+func rejectsEmptySearchRegionMap() throws {
+    let data = try makeRuleDocument(regions: [:])
+
+    #expect(throws: RuleLoaderError.malformedSemantics(
+        ruleID: "test_rule",
+        reason: "at least one search region is required"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
+@Test
+func rejectsExactDuplicateRuleIDs() throws {
+    let first = makeRule(id: "test_rule")
+    let second = makeRule(id: "test_rule")
+    let data = try makeRuleDocument(rules: [first, second])
+
+    #expect(throws: RuleLoaderError.malformedSemantics(
+        ruleID: "test_rule",
+        reason: "id must be unique"
+    )) {
+        try RuleLoader().load(data: data)
+    }
+}
+
 @Test
 func rejectsUnknownActionField() throws {
     let data = try makeRuleDocument(
@@ -311,8 +390,9 @@ private func makeRule(
     requiredTexts: [String] = ["다시 하기"],
     action: [String: Any] = ["targetText": "다시 하기"],
     regions: [String: Any] = ["landscape": validRegion()],
+    minimumOCRConfidence: Double = 0.8,
     stableObservationCount: Int = 2,
-    postActionDelaySeconds: Double = 0.1,
+    postActionDelaySeconds: Double = 0.5,
     cooldownSeconds: Double = 0.5
 ) -> [String: Any] {
     [
@@ -321,7 +401,7 @@ private func makeRule(
         "forbiddenTexts": ["장면 넘기기"],
         "action": action,
         "regions": regions,
-        "minimumOCRConfidence": 0.8,
+        "minimumOCRConfidence": minimumOCRConfidence,
         "stableObservationCount": stableObservationCount,
         "postActionDelaySeconds": postActionDelaySeconds,
         "cooldownSeconds": cooldownSeconds,
@@ -333,8 +413,9 @@ private func makeRuleDocument(
     requiredTexts: [String] = ["다시 하기"],
     action: [String: Any] = ["targetText": "다시 하기"],
     regions: [String: Any] = ["landscape": validRegion()],
+    minimumOCRConfidence: Double = 0.8,
     stableObservationCount: Int = 2,
-    postActionDelaySeconds: Double = 0.1,
+    postActionDelaySeconds: Double = 0.5,
     cooldownSeconds: Double = 0.5
 ) throws -> Data {
     try makeRuleDocument(
@@ -344,6 +425,7 @@ private func makeRuleDocument(
                 requiredTexts: requiredTexts,
                 action: action,
                 regions: regions,
+                minimumOCRConfidence: minimumOCRConfidence,
                 stableObservationCount: stableObservationCount,
                 postActionDelaySeconds: postActionDelaySeconds,
                 cooldownSeconds: cooldownSeconds
