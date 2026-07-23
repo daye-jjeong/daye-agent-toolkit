@@ -35,12 +35,19 @@ public enum ClickError: Error, Equatable, Sendable {
 
 extension ClickError: LocalizedError {
     public var errorDescription: String? {
-        "Could not create the process-targeted mouse events."
+        "Could not create the mouse events."
     }
 }
 
 public protocol Clicking: Sendable {
     func click(processID: pid_t, screenPoint: CGPoint) throws
+}
+
+public protocol GlobalClicking: Sendable {
+    func click(
+        screenPoint: CGPoint,
+        sourceIdentifier: Int64
+    ) throws
 }
 
 struct ClickEvents {
@@ -56,7 +63,41 @@ protocol ProcessEventPosting: Sendable {
     func post(_ event: CGEvent, to processID: pid_t)
 }
 
+protocol GlobalClickEventCreating: Sendable {
+    func makeEvents(at screenPoint: CGPoint) -> ClickEvents?
+}
+
+protocol GlobalEventPosting: Sendable {
+    func post(_ event: CGEvent)
+}
+
 private struct CoreGraphicsClickEventFactory: ClickEventCreating {
+    func makeEvents(at screenPoint: CGPoint) -> ClickEvents? {
+        guard
+            let source = CGEventSource(stateID: .hidSystemState),
+            let down = CGEvent(
+                mouseEventSource: source,
+                mouseType: .leftMouseDown,
+                mouseCursorPosition: screenPoint,
+                mouseButton: .left
+            ),
+            let up = CGEvent(
+                mouseEventSource: source,
+                mouseType: .leftMouseUp,
+                mouseCursorPosition: screenPoint,
+                mouseButton: .left
+            )
+        else {
+            return nil
+        }
+
+        return ClickEvents(down: down, up: up)
+    }
+}
+
+private struct CoreGraphicsGlobalClickEventFactory:
+    GlobalClickEventCreating
+{
     func makeEvents(at screenPoint: CGPoint) -> ClickEvents? {
         guard
             let source = CGEventSource(stateID: .hidSystemState),
@@ -86,6 +127,12 @@ private struct CoreGraphicsProcessEventPoster: ProcessEventPosting {
     }
 }
 
+private struct CoreGraphicsGlobalEventPoster: GlobalEventPosting {
+    func post(_ event: CGEvent) {
+        event.post(tap: .cghidEventTap)
+    }
+}
+
 public struct ProcessClickService: Clicking {
     private let eventFactory: any ClickEventCreating
     private let eventPoster: any ProcessEventPosting
@@ -110,5 +157,43 @@ public struct ProcessClickService: Clicking {
 
         eventPoster.post(events.down, to: processID)
         eventPoster.post(events.up, to: processID)
+    }
+}
+
+public struct GlobalClickService: GlobalClicking {
+    private let eventFactory: any GlobalClickEventCreating
+    private let eventPoster: any GlobalEventPosting
+
+    public init() {
+        eventFactory = CoreGraphicsGlobalClickEventFactory()
+        eventPoster = CoreGraphicsGlobalEventPoster()
+    }
+
+    init(
+        eventFactory: any GlobalClickEventCreating,
+        eventPoster: any GlobalEventPosting
+    ) {
+        self.eventFactory = eventFactory
+        self.eventPoster = eventPoster
+    }
+
+    public func click(
+        screenPoint: CGPoint,
+        sourceIdentifier: Int64
+    ) throws {
+        guard let events = eventFactory.makeEvents(at: screenPoint) else {
+            throw ClickError.cannotCreateEvent
+        }
+
+        events.down.setIntegerValueField(
+            .eventSourceUserData,
+            value: sourceIdentifier
+        )
+        events.up.setIntegerValueField(
+            .eventSourceUserData,
+            value: sourceIdentifier
+        )
+        eventPoster.post(events.down)
+        eventPoster.post(events.up)
     }
 }

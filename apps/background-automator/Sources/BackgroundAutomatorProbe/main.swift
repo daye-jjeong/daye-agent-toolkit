@@ -45,6 +45,12 @@ enum ProbeCommand {
         normalizedX: Double,
         normalizedY: Double
     )
+    case foregroundClick(
+        bundleIdentifier: String,
+        title: String,
+        normalizedX: Double,
+        normalizedY: Double
+    )
 
     static func parse(_ arguments: [String]) throws -> ProbeCommand {
         guard let command = arguments.first else {
@@ -199,6 +205,65 @@ enum ProbeCommand {
                 normalizedY: normalizedY
             )
 
+        case "foreground-click":
+            var values: [String: String] = [:]
+            var index = 1
+
+            while index < arguments.count {
+                let option = arguments[index]
+                guard
+                    ["--bundle-id", "--title", "--x", "--y"].contains(option)
+                else {
+                    throw ProbeError.invalidArguments(
+                        "Unknown option: \(option)"
+                    )
+                }
+                guard values[option] == nil else {
+                    throw ProbeError.invalidArguments(
+                        "Duplicate option: \(option)"
+                    )
+                }
+                guard index + 1 < arguments.count else {
+                    throw ProbeError.invalidArguments(
+                        "Missing value for \(option)."
+                    )
+                }
+
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw ProbeError.invalidArguments(
+                        "Empty value for \(option)."
+                    )
+                }
+                values[option] = value
+                index += 2
+            }
+
+            guard
+                let bundleIdentifier = values["--bundle-id"],
+                let title = values["--title"],
+                let rawX = values["--x"],
+                let normalizedX = Double(rawX),
+                normalizedX.isFinite,
+                (0 ... 1).contains(normalizedX),
+                let rawY = values["--y"],
+                let normalizedY = Double(rawY),
+                normalizedY.isFinite,
+                (0 ... 1).contains(normalizedY)
+            else {
+                throw ProbeError.invalidArguments(
+                    "foreground-click requires --bundle-id, --title, "
+                        + "--x, and --y with x/y in 0...1."
+                )
+            }
+
+            return .foregroundClick(
+                bundleIdentifier: bundleIdentifier,
+                title: title,
+                normalizedX: normalizedX,
+                normalizedY: normalizedY
+            )
+
         default:
             throw ProbeError.invalidArguments("Unknown command: \(command)")
         }
@@ -212,6 +277,7 @@ Usage:
   BackgroundAutomatorProbe visibility --bundle-id <id> --title <text>
   BackgroundAutomatorProbe capture --bundle-id <id> --title <text> --output <path>
   BackgroundAutomatorProbe click --bundle-id <id> --title <text> --x <0...1> --y <0...1>
+  BackgroundAutomatorProbe foreground-click --bundle-id <id> --title <text> --x <0...1> --y <0...1>
 """
 
 func encodePNG(_ image: CGImage) throws -> Data {
@@ -386,6 +452,121 @@ do {
             "afterFrame=(\(frameDescription(after.candidate.frame)))"
         )
         print("after=\(afterPath)")
+
+    case let .foregroundClick(
+        bundleIdentifier,
+        title,
+        normalizedX,
+        normalizedY
+    ):
+        let beforePath =
+            "/tmp/background-automator-foreground-before.png"
+        let afterPath =
+            "/tmp/background-automator-foreground-after.png"
+        let selected = try await captureService.captureWindow(
+            bundleIdentifier: bundleIdentifier,
+            titleContains: title
+        )
+        let selectedPoint = try CoordinateConverter.screenPoint(
+            normalizedX: normalizedX,
+            normalizedY: normalizedY,
+            windowFrame: selected.candidate.frame
+        )
+
+        print("A foreground click will temporarily activate the game.")
+        print("Type CLICK and press Return to continue:")
+        fflush(stdout)
+
+        guard readLine() == "CLICK" else {
+            throw ProbeError.clickNotConfirmed
+        }
+
+        let inputMonitor = UserIdleMonitor()
+        try inputMonitor.start()
+        defer {
+            inputMonitor.stop()
+        }
+        let expectedInput = await inputMonitor.snapshot()
+
+        let before = try await captureService.captureWindow(
+            bundleIdentifier: bundleIdentifier,
+            titleContains: title
+        )
+        guard before.candidate == selected.candidate else {
+            throw ProbeError.clickTargetChanged
+        }
+        try writePNG(before.image, to: beforePath)
+
+        let coordinator = ForegroundActionCoordinator(
+            inputMonitor: inputMonitor
+        )
+        let result = try await coordinator.perform(
+            targetApplication: ApplicationIdentity(
+                processIdentifier: before.candidate.processID,
+                bundleIdentifier: before.candidate.bundleIdentifier
+            ),
+            targetBox: CGRect(
+                origin: selectedPoint,
+                size: .zero
+            ),
+            expectedInputGeneration: expectedInput.generation
+        )
+
+        let after = try await captureService.captureWindow(
+            matching: before.candidate
+        )
+        try writePNG(after.image, to: afterPath)
+
+        print(
+            "originalBundleID="
+                + result.originalApplication.bundleIdentifier
+        )
+        print(
+            "gameBundleID="
+                + result.targetApplication.bundleIdentifier
+        )
+        print(
+            String(
+                format: "pointerBefore=(x=%.3f y=%.3f)",
+                result.pointerBefore.x,
+                result.pointerBefore.y
+            )
+        )
+        print(
+            String(
+                format: "pointerTarget=(x=%.3f y=%.3f)",
+                result.targetPoint.x,
+                result.targetPoint.y
+            )
+        )
+        print(
+            String(
+                format: "pointerRestored=(x=%.3f y=%.3f)",
+                result.pointerRestored.x,
+                result.pointerRestored.y
+            )
+        )
+        print(
+            "inputGenerationExpected="
+                + "\(result.expectedInputGeneration)"
+        )
+        print(
+            "inputGenerationBeforeClick="
+                + "\(result.inputGenerationBeforeClick)"
+        )
+        print("beforeCapture=\(beforePath)")
+        print(
+            "beforeCaptureResult=windowID="
+                + "\(before.candidate.windowID) pid="
+                + "\(before.candidate.processID)"
+        )
+        print("afterCapture=\(afterPath)")
+        print(
+            "afterCaptureResult=windowID="
+                + "\(after.candidate.windowID) pid="
+                + "\(after.candidate.processID)"
+        )
+        print("restoration=\(result.restoration)")
     }
 
     fflush(stdout)
