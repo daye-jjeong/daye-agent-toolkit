@@ -14,6 +14,7 @@ public protocol WindowCapturing: Sendable {
 public enum WindowCaptureError: Error, Equatable, Sendable {
     case shareableContentUnavailable(reason: String)
     case windowUnavailable(windowID: UInt32)
+    case staleWindow(windowID: UInt32)
     case captureFailed(windowID: UInt32, reason: String)
 }
 
@@ -23,7 +24,9 @@ extension WindowCaptureError: LocalizedError {
         case let .shareableContentUnavailable(reason):
             "Could not enumerate capturable windows: \(reason)"
         case let .windowUnavailable(windowID):
-            "Window \(windowID) is no longer available. Find the target window again."
+            "Window \(windowID) has not been selected. Find the target window first."
+        case let .staleWindow(windowID):
+            "Window \(windowID) changed or is no longer capturable. Find the target window again."
         case let .captureFailed(windowID, reason):
             "Could not capture window \(windowID): \(reason)"
         }
@@ -31,16 +34,12 @@ extension WindowCaptureError: LocalizedError {
 }
 
 public actor WindowCaptureService: WindowCapturing {
-    private var windowsByID: [UInt32: SCWindow] = [:]
+    private var selectedCandidatesByID: [UInt32: WindowCandidate] = [:]
 
     public init() {}
 
     public func listWindows() async throws -> [WindowCandidate] {
         let windows = try await loadWindows()
-        windowsByID.removeAll(keepingCapacity: true)
-        for window in windows {
-            windowsByID[window.windowID] = window
-        }
         return windows.map(Self.candidate(from:))
     }
 
@@ -49,16 +48,36 @@ public actor WindowCaptureService: WindowCapturing {
         titleContains: String
     ) async throws -> WindowCandidate {
         let candidates = try await listWindows()
-        return try WindowTarget.select(
+        let selected = try WindowTarget.select(
             from: candidates,
             bundleIdentifier: bundleIdentifier,
             titleContains: titleContains
         )
+        selectedCandidatesByID[selected.windowID] = selected
+        return selected
     }
 
     public func capture(windowID: UInt32) async throws -> CGImage {
-        guard let window = windowsByID[windowID] else {
+        guard let expected = selectedCandidatesByID[windowID] else {
             throw WindowCaptureError.windowUnavailable(windowID: windowID)
+        }
+
+        let currentWindows = try await loadWindows()
+        guard
+            let latestExpected = selectedCandidatesByID[windowID],
+            WindowTarget.isCurrent(latestExpected, matching: expected)
+        else {
+            throw WindowCaptureError.staleWindow(windowID: windowID)
+        }
+        guard let window = currentWindows.first(where: { $0.windowID == windowID }) else {
+            selectedCandidatesByID.removeValue(forKey: windowID)
+            throw WindowCaptureError.staleWindow(windowID: windowID)
+        }
+
+        let current = Self.candidate(from: window)
+        guard WindowTarget.isCurrent(current, matching: expected) else {
+            selectedCandidatesByID.removeValue(forKey: windowID)
+            throw WindowCaptureError.staleWindow(windowID: windowID)
         }
 
         let configuration = SCStreamConfiguration()

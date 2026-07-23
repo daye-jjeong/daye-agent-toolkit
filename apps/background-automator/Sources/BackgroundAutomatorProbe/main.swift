@@ -8,8 +8,9 @@ import UniformTypeIdentifiers
 
 enum ProbeError: Error {
     case invalidArguments(String)
-    case pngDestinationUnavailable(path: String)
-    case pngWriteFailed(path: String)
+    case pngEncoderUnavailable
+    case pngEncodingFailed
+    case pngWriteFailed(path: String, reason: String)
 }
 
 extension ProbeError: LocalizedError {
@@ -17,10 +18,12 @@ extension ProbeError: LocalizedError {
         switch self {
         case let .invalidArguments(message):
             "\(message)\n\n\(usage)"
-        case let .pngDestinationUnavailable(path):
-            "Could not create a PNG destination at \(path)."
-        case let .pngWriteFailed(path):
-            "Could not finalize the PNG at \(path)."
+        case .pngEncoderUnavailable:
+            "Could not create an in-memory PNG encoder."
+        case .pngEncodingFailed:
+            "Could not finish encoding the captured image as PNG."
+        case let .pngWriteFailed(path, reason):
+            "Could not atomically write the PNG at \(path): \(reason)"
         }
     }
 }
@@ -95,20 +98,37 @@ Usage:
   BackgroundAutomatorProbe capture --bundle-id <id> --title <text> --output <path>
 """
 
-func writePNG(_ image: CGImage, to outputPath: String) throws {
-    let url = URL(fileURLWithPath: outputPath)
-    guard let destination = CGImageDestinationCreateWithURL(
-        url as CFURL,
+func encodePNG(_ image: CGImage) throws -> Data {
+    guard let encodedData = CFDataCreateMutable(kCFAllocatorDefault, 0) else {
+        throw ProbeError.pngEncoderUnavailable
+    }
+    guard let destination = CGImageDestinationCreateWithData(
+        encodedData,
         UTType.png.identifier as CFString,
         1,
         nil
     ) else {
-        throw ProbeError.pngDestinationUnavailable(path: outputPath)
+        throw ProbeError.pngEncoderUnavailable
     }
 
     CGImageDestinationAddImage(destination, image, nil)
     guard CGImageDestinationFinalize(destination) else {
-        throw ProbeError.pngWriteFailed(path: outputPath)
+        throw ProbeError.pngEncodingFailed
+    }
+    return encodedData as Data
+}
+
+func writePNG(_ image: CGImage, to outputPath: String) throws {
+    let data = try encodePNG(image)
+    let url = URL(fileURLWithPath: outputPath)
+
+    do {
+        try data.write(to: url, options: .atomic)
+    } catch {
+        throw ProbeError.pngWriteFailed(
+            path: outputPath,
+            reason: error.localizedDescription
+        )
     }
 }
 

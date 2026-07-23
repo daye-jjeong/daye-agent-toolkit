@@ -31,6 +31,19 @@ func matchesTitleCaseInsensitively() throws {
 }
 
 @Test
+func rejectsMismatchedTitle() {
+    let candidate = candidate(windowID: 1, title: "Settings")
+
+    #expect(throws: WindowTargetError.notFound) {
+        try WindowTarget.select(
+            from: [candidate],
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+}
+
+@Test
 func rejectsOffscreenWindows() {
     let offscreen = candidate(windowID: 1, isOnScreen: false)
 
@@ -95,6 +108,53 @@ func selectsLargestVisibleDuplicate() throws {
     )
 
     #expect(selected == large)
+}
+
+@Test
+func currentWindowValidationAllowsFrameChanges() {
+    let expected = candidate(
+        windowID: 1,
+        frame: CGRect(x: 0, y: 0, width: 800, height: 600)
+    )
+    let movedAndResized = candidate(
+        windowID: 1,
+        frame: CGRect(x: 250, y: 100, width: 1280, height: 720)
+    )
+
+    #expect(WindowTarget.isCurrent(movedAndResized, matching: expected))
+}
+
+@Test(arguments: [
+    candidate(windowID: 2),
+    candidate(windowID: 1, processID: 99),
+    candidate(windowID: 1, bundleIdentifier: "com.example.replacement"),
+    candidate(windowID: 1, title: "Replacement"),
+])
+func currentWindowValidationRejectsChangedIdentity(current: WindowCandidate) {
+    let expected = candidate(windowID: 1)
+
+    #expect(!WindowTarget.isCurrent(current, matching: expected))
+}
+
+@Test
+func currentWindowValidationRejectsOffscreenWindow() {
+    let expected = candidate(windowID: 1)
+    let offscreen = candidate(windowID: 1, isOnScreen: false)
+
+    #expect(!WindowTarget.isCurrent(offscreen, matching: expected))
+}
+
+@Test(arguments: [
+    CGRect(x: 0, y: 0, width: 0, height: 100),
+    CGRect(x: 0, y: 0, width: 100, height: 0),
+    CGRect(x: 0, y: 0, width: -1, height: 100),
+    CGRect(x: 0, y: 0, width: 100, height: -1),
+])
+func currentWindowValidationRejectsNonPositiveDimensions(frame: CGRect) {
+    let expected = candidate(windowID: 1)
+    let invalid = candidate(windowID: 1, frame: frame)
+
+    #expect(!WindowTarget.isCurrent(invalid, matching: expected))
 }
 
 private func candidate(

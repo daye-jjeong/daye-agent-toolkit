@@ -37,6 +37,19 @@ extension WindowTargetError: LocalizedError {
 }
 
 public enum WindowTarget {
+    static func isCurrent(
+        _ current: WindowCandidate,
+        matching expected: WindowCandidate
+    ) -> Bool {
+        current.windowID == expected.windowID
+            && current.processID == expected.processID
+            && current.bundleIdentifier == expected.bundleIdentifier
+            && current.title == expected.title
+            && current.isOnScreen
+            && current.frame.size.width > 0
+            && current.frame.size.height > 0
+    }
+
     public static func select(
         from candidates: [WindowCandidate],
         bundleIdentifier: String,
