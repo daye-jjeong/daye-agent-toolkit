@@ -56,12 +56,19 @@ struct UserInputState {
             return
         }
 
-        generation = generation == .max
-            ? .max
-            : generation + 1
+        generation &+= 1
         if timestamp > lastInputAt {
             lastInputAt = timestamp
         }
+    }
+
+    mutating func recordMonitoringStart(
+        at timestamp: ContinuousClock.Instant
+    ) {
+        recordInput(
+            at: timestamp,
+            sourceIdentifier: nil
+        )
     }
 
     func isIdle(
@@ -99,12 +106,13 @@ struct UserInputState {
 protocol InputEventTapping: Sendable {
     var isRunning: Bool { get }
 
-    func start() throws
+    func start() throws -> Bool
     func stop()
 }
 
 public final class UserIdleMonitor: UserIdleMonitoring {
     private let clock: ContinuousClock
+    private let now: @Sendable () -> ContinuousClock.Instant
     private let stateStore: UserInputStateStore
     private let eventTap: any InputEventTapping
 
@@ -126,6 +134,7 @@ public final class UserIdleMonitor: UserIdleMonitoring {
         )
         self.init(
             clock: clock,
+            now: { clock.now },
             stateStore: stateStore,
             eventTap: eventTap
         )
@@ -134,9 +143,13 @@ public final class UserIdleMonitor: UserIdleMonitoring {
     init(
         initialGeneration: UInt64,
         lastInputAt: ContinuousClock.Instant,
+        now: @escaping @Sendable () -> ContinuousClock.Instant = {
+            ContinuousClock().now
+        },
         eventTap: any InputEventTapping
     ) {
         self.clock = ContinuousClock()
+        self.now = now
         self.stateStore = UserInputStateStore(
             state: UserInputState(
                 generation: initialGeneration,
@@ -148,10 +161,12 @@ public final class UserIdleMonitor: UserIdleMonitoring {
 
     private init(
         clock: ContinuousClock,
+        now: @escaping @Sendable () -> ContinuousClock.Instant,
         stateStore: UserInputStateStore,
         eventTap: any InputEventTapping
     ) {
         self.clock = clock
+        self.now = now
         self.stateStore = stateStore
         self.eventTap = eventTap
     }
@@ -161,7 +176,11 @@ public final class UserIdleMonitor: UserIdleMonitoring {
     }
 
     public func start() throws {
-        try eventTap.start()
+        guard try eventTap.start() else {
+            return
+        }
+
+        stateStore.recordMonitoringStart(at: now())
     }
 
     public func stop() {
@@ -189,7 +208,7 @@ public final class UserIdleMonitor: UserIdleMonitoring {
             }
 
             let check = stateStore.idleCheck(
-                at: clock.now,
+                at: now(),
                 duration: duration
             )
             if check.isIdle {
@@ -227,6 +246,14 @@ private final class UserInputStateStore: @unchecked Sendable {
                 at: timestamp,
                 sourceIdentifier: sourceIdentifier
             )
+        }
+    }
+
+    func recordMonitoringStart(
+        at timestamp: ContinuousClock.Instant
+    ) {
+        lock.withLock {
+            state.recordMonitoringStart(at: timestamp)
         }
     }
 
@@ -328,33 +355,139 @@ final class InputEventTapContext: Sendable {
     }
 }
 
-// Core Graphics delivers callbacks across threads; the lock confines the
-// framework handle shared by lifecycle and callback paths.
-private final class EventTapPortBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var port: CFMachPort?
+protocol EventTapLifecycleDriving: Sendable {
+    var isValid: Bool { get }
+    var isEnabled: Bool { get }
 
-    func set(_ port: CFMachPort?) {
-        lock.withLock {
-            self.port = port
+    func start(context: InputEventTapContext) throws
+    func reenable() -> Bool
+    func stop()
+}
+
+// The controller serializes start, stop, and callback recovery so a failed
+// re-enable cannot be mistaken for a live monitor.
+private final class EventTapLifecycleController:
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private let driver: any EventTapLifecycleDriving
+    private var recoveryFailed = false
+
+    init(driver: any EventTapLifecycleDriving) {
+        self.driver = driver
+    }
+
+    var isRunning: Bool {
+        lock.withLock { isHealthy }
+    }
+
+    func start(
+        context: InputEventTapContext
+    ) throws -> Bool {
+        try lock.withLock {
+            if isHealthy {
+                return false
+            }
+
+            driver.stop()
+            recoveryFailed = false
+            do {
+                try driver.start(context: context)
+            } catch {
+                recoveryFailed = true
+                throw error
+            }
+
+            guard isHealthy else {
+                driver.stop()
+                recoveryFailed = true
+                throw UserIdleMonitorError.cannotEnableEventTap
+            }
+            return true
         }
     }
 
     func reenable() {
-        let currentPort = lock.withLock { port }
-        if let currentPort {
-            CGEvent.tapEnable(
-                tap: currentPort,
-                enable: true
-            )
+        lock.withLock {
+            guard driver.isValid else {
+                recoveryFailed = true
+                return
+            }
+
+            let recovered = driver.reenable()
+            if !recovered
+                || !driver.isValid
+                || !driver.isEnabled
+            {
+                recoveryFailed = true
+            }
         }
+    }
+
+    func stop() {
+        lock.withLock {
+            driver.stop()
+            recoveryFailed = false
+        }
+    }
+
+    private var isHealthy: Bool {
+        !recoveryFailed
+            && driver.isValid
+            && driver.isEnabled
     }
 }
 
-// Core Foundation handles are not Sendable, so lifecycle access is confined
-// behind `lock`; callback state is separately synchronized by `portBox`.
-private final class PassiveInputEventTap:
-    InputEventTapping,
+final class PassiveInputEventTap: InputEventTapping {
+    private let lifecycle: EventTapLifecycleController
+    let context: InputEventTapContext
+
+    convenience init(
+        observe: @escaping @Sendable (Int64) -> Void
+    ) {
+        self.init(
+            observe: observe,
+            driver: CoreGraphicsEventTapDriver()
+        )
+    }
+
+    init(
+        observe: @escaping @Sendable (Int64) -> Void,
+        driver: any EventTapLifecycleDriving
+    ) {
+        let lifecycle = EventTapLifecycleController(
+            driver: driver
+        )
+        self.lifecycle = lifecycle
+        self.context = InputEventTapContext(
+            observe: observe,
+            reenable: {
+                lifecycle.reenable()
+            }
+        )
+    }
+
+    var isRunning: Bool {
+        lifecycle.isRunning
+    }
+
+    func start() throws -> Bool {
+        try lifecycle.start(context: context)
+    }
+
+    func stop() {
+        lifecycle.stop()
+    }
+
+    deinit {
+        lifecycle.stop()
+    }
+}
+
+// Core Foundation handles are not Sendable. Every handle and its explicit
+// callback-context retain are confined behind this driver's lock.
+private final class CoreGraphicsEventTapDriver:
+    EventTapLifecycleDriving,
     @unchecked Sendable
 {
     private struct Resources {
@@ -365,39 +498,32 @@ private final class PassiveInputEventTap:
     }
 
     private let lock = NSLock()
-    private let portBox: EventTapPortBox
-    private let context: InputEventTapContext
     private var resources: Resources?
 
-    init(
-        observe: @escaping @Sendable (Int64) -> Void
-    ) {
-        let portBox = EventTapPortBox()
-        self.portBox = portBox
-        self.context = InputEventTapContext(
-            observe: observe,
-            reenable: {
-                portBox.reenable()
-            }
-        )
-    }
-
-    var isRunning: Bool {
+    var isValid: Bool {
         lock.withLock {
             guard let resources else {
                 return false
             }
             return CFMachPortIsValid(resources.port)
-                && CGEvent.tapIsEnabled(
-                    tap: resources.port
-                )
         }
     }
 
-    func start() throws {
+    var isEnabled: Bool {
+        lock.withLock {
+            guard let resources else {
+                return false
+            }
+            return CGEvent.tapIsEnabled(
+                tap: resources.port
+            )
+        }
+    }
+
+    func start(context: InputEventTapContext) throws {
         try lock.withLock {
             guard resources == nil else {
-                return
+                throw UserIdleMonitorError.cannotCreateEventTap
             }
 
             // Core Graphics does not retain userInfo. Keep one explicit
@@ -442,10 +568,8 @@ private final class PassiveInputEventTap:
                 source,
                 .commonModes
             )
-            portBox.set(port)
             CGEvent.tapEnable(tap: port, enable: true)
             guard CGEvent.tapIsEnabled(tap: port) else {
-                portBox.set(nil)
                 CFRunLoopRemoveSource(
                     runLoop,
                     source,
@@ -464,12 +588,30 @@ private final class PassiveInputEventTap:
         }
     }
 
+    func reenable() -> Bool {
+        lock.withLock {
+            guard
+                let resources,
+                CFMachPortIsValid(resources.port)
+            else {
+                return false
+            }
+            CGEvent.tapEnable(
+                tap: resources.port,
+                enable: true
+            )
+            return CFMachPortIsValid(resources.port)
+                && CGEvent.tapIsEnabled(
+                    tap: resources.port
+                )
+        }
+    }
+
     func stop() {
         lock.withLock {
             guard let resources else {
                 return
             }
-            portBox.set(nil)
             CFRunLoopRemoveSource(
                 resources.runLoop,
                 resources.source,

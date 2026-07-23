@@ -103,7 +103,7 @@ func nonMonotonicInputDoesNotMoveLastInputBackward() {
 }
 
 @Test
-func generationOverflowSaturatesWithoutTrapping() {
+func generationOverflowWrapsWithoutTrappingAndInvalidatesSnapshot() {
     let clock = ContinuousClock()
     let start = clock.now
     let inputTime = start.advanced(by: .seconds(1))
@@ -117,7 +117,7 @@ func generationOverflowSaturatesWithoutTrapping() {
         sourceIdentifier: nil
     )
 
-    #expect(state.snapshot.generation == .max)
+    #expect(state.snapshot.generation == 0)
     #expect(state.snapshot.lastInputAt == inputTime)
 }
 
@@ -152,6 +152,71 @@ func monitoringLifecycleIsExplicitAndStartFailureIsSurfaced() {
     }
     #expect(!monitor.isMonitoring)
     #expect(tap.startCount == 1)
+}
+
+@Test
+func delayedFirstStartResetsIdleBaselineAndGeneration() async throws {
+    let clock = ContinuousClock()
+    let createdAt = clock.now
+    let startedAt = createdAt.advanced(by: .seconds(10))
+    let nowSource = ControlledNow(startedAt)
+    let monitor = UserIdleMonitor(
+        initialGeneration: 4,
+        lastInputAt: createdAt,
+        now: { nowSource.value },
+        eventTap: RecordingInputEventTap()
+    )
+
+    try monitor.start()
+    let snapshot = await monitor.snapshot()
+
+    #expect(snapshot.generation == 5)
+    #expect(snapshot.lastInputAt == startedAt)
+}
+
+@Test
+func restartResetsBaselineAfterUnobservedStoppedGap() async throws {
+    let clock = ContinuousClock()
+    let firstStart = clock.now
+    let nowSource = ControlledNow(firstStart)
+    let tap = RecordingInputEventTap()
+    let monitor = UserIdleMonitor(
+        initialGeneration: 8,
+        lastInputAt: firstStart.advanced(by: .seconds(-10)),
+        now: { nowSource.value },
+        eventTap: tap
+    )
+
+    try monitor.start()
+    monitor.stop()
+    let restartedAt = firstStart.advanced(by: .seconds(20))
+    nowSource.set(restartedAt)
+    try monitor.start()
+    let snapshot = await monitor.snapshot()
+
+    #expect(snapshot.generation == 10)
+    #expect(snapshot.lastInputAt == restartedAt)
+}
+
+@Test
+func startBaselineDoesNotOverwriteNewerInputRecordedDuringStart() {
+    let clock = ContinuousClock()
+    let original = clock.now
+    let startBaseline = original.advanced(by: .seconds(10))
+    let newerInput = original.advanced(by: .seconds(11))
+    var state = UserInputState(
+        generation: 20,
+        lastInputAt: original
+    )
+    state.recordInput(
+        at: newerInput,
+        sourceIdentifier: nil
+    )
+
+    state.recordMonitoringStart(at: startBaseline)
+
+    #expect(state.snapshot.generation == 22)
+    #expect(state.snapshot.lastInputAt == newerInput)
 }
 
 @Test
@@ -219,7 +284,7 @@ func waitUntilIdleWaitsForRequestedDuration() async throws {
     )
     let returnedAt = clock.now
 
-    #expect(result.generation == 5)
+    #expect(result.generation == 6)
     #expect(
         result.lastInputAt.duration(to: returnedAt)
             >= .milliseconds(30)
@@ -339,6 +404,82 @@ func disabledEventTapIsReenabledWithoutObservingInput(
     #expect(recorder.sourceIdentifiers.isEmpty)
 }
 
+@Test
+func invalidExistingTapIsCleanedUpAndRecreatedOnStart() throws {
+    let driver = RecordingEventTapLifecycleDriver()
+    let tap = PassiveInputEventTap(
+        observe: { _ in },
+        driver: driver
+    )
+    #expect(try tap.start())
+    driver.setHealth(isValid: false, isEnabled: false)
+    #expect(!tap.isRunning)
+
+    let restarted = try tap.start()
+
+    #expect(restarted)
+    #expect(tap.isRunning)
+    #expect(driver.startCount == 2)
+    #expect(driver.stopCount == 2)
+}
+
+@Test
+func disabledExistingTapIsCleanedUpAndRecreatedOnStart() throws {
+    let driver = RecordingEventTapLifecycleDriver()
+    let tap = PassiveInputEventTap(
+        observe: { _ in },
+        driver: driver
+    )
+    #expect(try tap.start())
+    driver.setHealth(isValid: true, isEnabled: false)
+    #expect(!tap.isRunning)
+
+    let restarted = try tap.start()
+
+    #expect(restarted)
+    #expect(tap.isRunning)
+    #expect(driver.startCount == 2)
+    #expect(driver.stopCount == 2)
+}
+
+@Test
+func failedDisabledTapReenableMarksTapUnhealthyAndAllowsRecovery()
+    throws
+{
+    let driver = RecordingEventTapLifecycleDriver(
+        reenableSucceeds: false
+    )
+    let tap = PassiveInputEventTap(
+        observe: { _ in },
+        driver: driver
+    )
+    #expect(try tap.start())
+    let event = try #require(
+        CGEvent(
+            mouseEventSource: nil,
+            mouseType: .mouseMoved,
+            mouseCursorPosition: .zero,
+            mouseButton: .left
+        )
+    )
+    driver.setHealth(isValid: true, isEnabled: false)
+
+    _ = tap.context.handle(
+        type: .tapDisabledByTimeout,
+        event: event
+    )
+
+    #expect(driver.reenableCount == 1)
+    #expect(!tap.isRunning)
+
+    driver.setReenableSucceeds(true)
+    let restarted = try tap.start()
+
+    #expect(restarted)
+    #expect(tap.isRunning)
+    #expect(driver.startCount == 2)
+}
+
 private enum TestInputEventTapError: Error {
     case permissionDenied
 }
@@ -369,13 +510,17 @@ private final class RecordingInputEventTap:
         lock.withLock { storedStopCount }
     }
 
-    func start() throws {
+    func start() throws -> Bool {
         try lock.withLock {
             storedStartCount += 1
             if let startError {
                 throw startError
             }
+            if storedIsRunning {
+                return false
+            }
             storedIsRunning = true
+            return true
         }
     }
 
@@ -383,6 +528,106 @@ private final class RecordingInputEventTap:
         lock.withLock {
             storedStopCount += 1
             storedIsRunning = false
+        }
+    }
+}
+
+private final class RecordingEventTapLifecycleDriver:
+    EventTapLifecycleDriving,
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var storedIsValid = false
+    private var storedIsEnabled = false
+    private var storedReenableSucceeds: Bool
+    private var storedStartCount = 0
+    private var storedStopCount = 0
+    private var storedReenableCount = 0
+
+    init(reenableSucceeds: Bool = true) {
+        storedReenableSucceeds = reenableSucceeds
+    }
+
+    var isValid: Bool {
+        lock.withLock { storedIsValid }
+    }
+
+    var isEnabled: Bool {
+        lock.withLock { storedIsEnabled }
+    }
+
+    var startCount: Int {
+        lock.withLock { storedStartCount }
+    }
+
+    var stopCount: Int {
+        lock.withLock { storedStopCount }
+    }
+
+    var reenableCount: Int {
+        lock.withLock { storedReenableCount }
+    }
+
+    func start(context: InputEventTapContext) throws {
+        lock.withLock {
+            _ = context
+            storedStartCount += 1
+            storedIsValid = true
+            storedIsEnabled = true
+        }
+    }
+
+    func reenable() -> Bool {
+        lock.withLock {
+            storedReenableCount += 1
+            if storedReenableSucceeds && storedIsValid {
+                storedIsEnabled = true
+                return true
+            }
+            return false
+        }
+    }
+
+    func stop() {
+        lock.withLock {
+            storedStopCount += 1
+            storedIsValid = false
+            storedIsEnabled = false
+        }
+    }
+
+    func setHealth(
+        isValid: Bool,
+        isEnabled: Bool
+    ) {
+        lock.withLock {
+            storedIsValid = isValid
+            storedIsEnabled = isEnabled
+        }
+    }
+
+    func setReenableSucceeds(_ succeeds: Bool) {
+        lock.withLock {
+            storedReenableSucceeds = succeeds
+        }
+    }
+}
+
+private final class ControlledNow: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue: ContinuousClock.Instant
+
+    init(_ value: ContinuousClock.Instant) {
+        storedValue = value
+    }
+
+    var value: ContinuousClock.Instant {
+        lock.withLock { storedValue }
+    }
+
+    func set(_ value: ContinuousClock.Instant) {
+        lock.withLock {
+            storedValue = value
         }
     }
 }
