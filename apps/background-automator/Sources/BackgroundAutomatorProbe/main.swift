@@ -168,16 +168,15 @@ do {
         }
 
     case let .capture(bundleIdentifier, title, outputPath):
-        let candidate = try await captureService.findWindow(
+        let result = try await captureService.captureWindow(
             bundleIdentifier: bundleIdentifier,
             titleContains: title
         )
-        let image = try await captureService.capture(windowID: candidate.windowID)
-        try writePNG(image, to: outputPath)
+        try writePNG(result.image, to: outputPath)
 
-        print("windowID=\(candidate.windowID)")
-        print("pid=\(candidate.processID)")
-        print("frame=(\(frameDescription(candidate.frame)))")
+        print("windowID=\(result.candidate.windowID)")
+        print("pid=\(result.candidate.processID)")
+        print("frame=(\(frameDescription(result.candidate.frame)))")
         print("output=\(URL(fileURLWithPath: outputPath).path)")
     }
 } catch {
