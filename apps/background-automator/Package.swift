@@ -42,7 +42,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "BackgroundAutomatorApp",
-            dependencies: ["BackgroundAutomatorRuntime"]
+            dependencies: [
+                "BackgroundAutomatorCore",
+                "BackgroundAutomatorRuntime",
+            ]
         ),
         .testTarget(
             name: "BackgroundAutomatorCoreTests",

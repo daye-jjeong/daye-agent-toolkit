@@ -128,6 +128,9 @@ public actor AutomationCoordinator {
     private let idleThreshold: Duration
     private let clearTouchDelay: Duration
     private let enterReadyCooldown: Duration
+    private let statusReporter: (
+        @Sendable (AutomationMenuStatus) async -> Void
+    )?
 
     private var evaluator: RuleEvaluator
     private var runToken: UUID?
@@ -147,7 +150,10 @@ public actor AutomationCoordinator {
         clock: any AutomationClockReading = ContinuousAutomationClock(),
         idleThreshold: Duration = .seconds(3),
         clearTouchDelay: Duration = .seconds(2),
-        enterReadyCooldown: Duration = .seconds(120)
+        enterReadyCooldown: Duration = .seconds(120),
+        statusReporter: (
+            @Sendable (AutomationMenuStatus) async -> Void
+        )? = nil
     ) throws {
         guard idleThreshold >= .seconds(3) else {
             throw AutomationCoordinatorError.invalidIdleThreshold
@@ -166,6 +172,7 @@ public actor AutomationCoordinator {
         self.idleThreshold = idleThreshold
         self.clearTouchDelay = clearTouchDelay
         self.enterReadyCooldown = enterReadyCooldown
+        self.statusReporter = statusReporter
     }
 
     public func start() {
@@ -303,6 +310,8 @@ public actor AutomationCoordinator {
             return .noAction
         }
 
+        await statusReporter?(.buttonDetected)
+        await statusReporter?(.waitingForUserIdle)
         let idleSnapshot: UserInputSnapshot
         do {
             idleSnapshot = try await inputMonitor.waitUntilIdle(
@@ -356,6 +365,8 @@ public actor AutomationCoordinator {
             bundleIdentifier: freshFrame.window.bundleIdentifier
         )
         do {
+            try ensureCanContinue(token: cycleToken)
+            await statusReporter?(.clicking)
             try ensureCanContinue(token: cycleToken)
             _ = try await actionPerformer.perform(
                 targetApplication: targetApplication,

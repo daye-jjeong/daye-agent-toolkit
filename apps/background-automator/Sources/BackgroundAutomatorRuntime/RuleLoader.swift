@@ -246,6 +246,15 @@ enum AutomationRuleValidator {
     private static func validateAction(_ rule: AutomationRule) throws {
         let hasTargetText = rule.action.targetText != nil
         let hasSafePoint = rule.action.safePointRegion != nil
+        if !hasTargetText, !hasSafePoint, rule.id == "running" {
+            guard !rule.requiredTexts.isEmpty else {
+                throw malformed(
+                    rule,
+                    "running detector requires requiredTexts context"
+                )
+            }
+            return
+        }
         guard hasTargetText != hasSafePoint else {
             throw malformed(
                 rule,

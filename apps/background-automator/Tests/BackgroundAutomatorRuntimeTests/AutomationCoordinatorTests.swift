@@ -985,6 +985,30 @@ func concurrentCyclesNeverOverlapOrDuplicateActions() async throws {
     #expect(await fixture.actioner.requests.isEmpty)
 }
 
+@Test
+func coordinatorReportsActionablePhasesInOrder() async throws {
+    let recorder = AutomationStatusRecorder()
+    let fixture = try CoordinatorFixture(
+        frames: [
+            .make(scene: .rewardRetry, sequence: 1),
+            .make(scene: .rewardRetry, sequence: 2),
+            .make(scene: .rewardRetry, sequence: 3),
+        ],
+        statusReporter: { status in
+            await recorder.record(status)
+        }
+    )
+    await fixture.coordinator.start()
+
+    _ = try await fixture.coordinator.runCycle()
+    _ = try await fixture.coordinator.runCycle()
+
+    #expect(
+        await recorder.statuses
+            == [.buttonDetected, .waitingForUserIdle, .clicking]
+    )
+}
+
 private struct CoordinatorFixture {
     let observer: any AutomationScreenObserving
     let actioner: FakeAutomationActioner
@@ -1002,14 +1026,18 @@ private struct CoordinatorFixture {
         frames: [AutomationScreenFrame],
         actionResults: [FakeAutomationActioner.Result] = [.success],
         idle: any UserIdleMonitoring = ImmediateIdleMonitor(),
-        rules: [AutomationRule] = coordinatorRules()
+        rules: [AutomationRule] = coordinatorRules(),
+        statusReporter: (
+            @Sendable (AutomationMenuStatus) async -> Void
+        )? = nil
     ) throws {
         let observer = FakeAutomationObserver(frames: frames)
         try self.init(
             observer: observer,
             actionResults: actionResults,
             idle: idle,
-            rules: rules
+            rules: rules,
+            statusReporter: statusReporter
         )
     }
 
@@ -1017,7 +1045,10 @@ private struct CoordinatorFixture {
         observer: any AutomationScreenObserving,
         actionResults: [FakeAutomationActioner.Result] = [.success],
         idle: any UserIdleMonitoring = ImmediateIdleMonitor(),
-        rules: [AutomationRule] = coordinatorRules()
+        rules: [AutomationRule] = coordinatorRules(),
+        statusReporter: (
+            @Sendable (AutomationMenuStatus) async -> Void
+        )? = nil
     ) throws {
         self.observer = observer
         actioner = FakeAutomationActioner(results: actionResults)
@@ -1027,8 +1058,17 @@ private struct CoordinatorFixture {
             observer: observer,
             inputMonitor: idle,
             actionPerformer: actioner,
-            clock: clock
+            clock: clock,
+            statusReporter: statusReporter
         )
+    }
+}
+
+private actor AutomationStatusRecorder {
+    private(set) var statuses: [AutomationMenuStatus] = []
+
+    func record(_ status: AutomationMenuStatus) {
+        statuses.append(status)
     }
 }
 

@@ -1,0 +1,95 @@
+import BackgroundAutomatorCore
+import Testing
+
+@testable import BackgroundAutomatorRuntime
+
+@Test
+func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
+    let rules = try RuleLoader().loadDefaultRules()
+
+    #expect(
+        Set(rules.map(\.id)) == [
+            "clear_touch",
+            "reward_retry",
+            "continue_dialog",
+            "mission_selection",
+            "enter_ready",
+            "running",
+        ]
+    )
+    #expect(!rules.contains { $0.id == "scene_skip" })
+}
+
+@Test
+func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
+    let rules = try RuleLoader().loadDefaultRules()
+
+    for rule in rules {
+        #expect(rule.regions[.landscape] != nil)
+        #expect(rule.regions[.portraitMobile] != nil)
+        #expect(
+            rule.forbiddenTexts.contains {
+                normalizedWorkflowText($0) == "장면넘기기"
+            }
+        )
+        #expect(rule.stableObservationCount >= 2)
+        #expect(rule.minimumOCRConfidence >= 0.8)
+        #expect(rule.postActionDelaySeconds >= 0.5)
+        #expect(rule.cooldownSeconds >= 0.5)
+    }
+}
+
+@Test
+func clearTouchRequiresExactContextAndUsesOnlySafePoint() throws {
+    let rule = try workflowRule("clear_touch")
+
+    #expect(Set(rule.requiredTexts) == ["던전 클리어", "화면을 터치해 주세요"])
+    #expect(rule.action.targetText == nil)
+    #expect(rule.action.safePointRegion != nil)
+    #expect(rule.cooldownSeconds >= 2)
+}
+
+@Test(arguments: [
+    ("reward_retry", "다시 하기", 0.5),
+    ("continue_dialog", "계속하기", 0.5),
+    ("mission_selection", "도전", 0.5),
+    ("enter_ready", "입장하기", 120.0),
+])
+func textActionsUseExactOCRTargetBoundingBoxConfiguration(
+    id: String,
+    targetText: String,
+    minimumCooldown: Double
+) throws {
+    let rule = try workflowRule(id)
+
+    #expect(rule.requiredTexts.contains(targetText))
+    #expect(rule.action.targetText == targetText)
+    #expect(rule.action.safePointRegion == nil)
+    #expect(rule.cooldownSeconds >= minimumCooldown)
+}
+
+@Test
+func runningRuleIsExplicitlyNonActionableUntilLiveCalibration() throws {
+    let rule = try workflowRule("running")
+
+    #expect(!rule.requiredTexts.isEmpty)
+    #expect(rule.action.targetText == nil)
+    #expect(rule.action.safePointRegion == nil)
+    #expect(
+        SceneObserver.actionCandidate(
+            for: rule,
+            observations: [],
+            layout: .portraitMobile,
+            imageSize: .init(width: 626, height: 949)
+        ) == nil
+    )
+}
+
+private func workflowRule(_ id: String) throws -> AutomationRule {
+    let rules = try RuleLoader().loadDefaultRules()
+    return try #require(rules.first { $0.id == id })
+}
+
+private func normalizedWorkflowText(_ text: String) -> String {
+    text.filter { !$0.isWhitespace }
+}
