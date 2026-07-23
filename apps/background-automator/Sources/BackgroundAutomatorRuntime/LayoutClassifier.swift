@@ -2,10 +2,18 @@ import BackgroundAutomatorCore
 import CoreGraphics
 
 public enum LayoutClassifier {
+    public enum ConfigurationError: Error, Equatable, Sendable {
+        case invalidMinimumWidth
+        case invalidMinimumHeight
+        case invalidPortraitAspectRatio
+        case invalidLandscapeAspectRatio
+        case overlappingAspectRatios
+    }
+
     public struct Configuration: Equatable, Sendable {
         public static let `default` = Configuration(
-            minimumWidth: 480,
-            minimumHeight: 480,
+            validatedMinimumWidth: 480,
+            validatedMinimumHeight: 480,
             portraitAspectRatio: 0.5 ... 0.85,
             landscapeAspectRatio: 1.25 ... 2.0
         )
@@ -20,11 +28,50 @@ public enum LayoutClassifier {
             minimumHeight: Double,
             portraitAspectRatio: ClosedRange<Double>,
             landscapeAspectRatio: ClosedRange<Double>
+        ) throws {
+            guard minimumWidth.isFinite, minimumWidth > 0 else {
+                throw ConfigurationError.invalidMinimumWidth
+            }
+            guard minimumHeight.isFinite, minimumHeight > 0 else {
+                throw ConfigurationError.invalidMinimumHeight
+            }
+            guard Self.isValid(aspectRatio: portraitAspectRatio) else {
+                throw ConfigurationError.invalidPortraitAspectRatio
+            }
+            guard Self.isValid(aspectRatio: landscapeAspectRatio) else {
+                throw ConfigurationError.invalidLandscapeAspectRatio
+            }
+            guard !portraitAspectRatio.overlaps(landscapeAspectRatio) else {
+                throw ConfigurationError.overlappingAspectRatios
+            }
+
+            self.init(
+                validatedMinimumWidth: minimumWidth,
+                validatedMinimumHeight: minimumHeight,
+                portraitAspectRatio: portraitAspectRatio,
+                landscapeAspectRatio: landscapeAspectRatio
+            )
+        }
+
+        private init(
+            validatedMinimumWidth minimumWidth: Double,
+            validatedMinimumHeight minimumHeight: Double,
+            portraitAspectRatio: ClosedRange<Double>,
+            landscapeAspectRatio: ClosedRange<Double>
         ) {
             self.minimumWidth = minimumWidth
             self.minimumHeight = minimumHeight
             self.portraitAspectRatio = portraitAspectRatio
             self.landscapeAspectRatio = landscapeAspectRatio
+        }
+
+        private static func isValid(
+            aspectRatio: ClosedRange<Double>
+        ) -> Bool {
+            aspectRatio.lowerBound.isFinite
+                && aspectRatio.upperBound.isFinite
+                && aspectRatio.lowerBound > 0
+                && aspectRatio.upperBound > 0
         }
     }
 

@@ -22,8 +22,8 @@ func classifiesObservedLandscapeSize() {
 }
 
 @Test
-func minimumDimensionsAreInclusive() {
-    let configuration = boundaryConfiguration()
+func minimumDimensionsAreInclusive() throws {
+    let configuration = try boundaryConfiguration()
 
     #expect(
         LayoutClassifier.classify(
@@ -40,8 +40,8 @@ func minimumDimensionsAreInclusive() {
 }
 
 @Test
-func dimensionsBelowEitherMinimumAreUnsupported() {
-    let configuration = boundaryConfiguration()
+func dimensionsBelowEitherMinimumAreUnsupported() throws {
+    let configuration = try boundaryConfiguration()
 
     #expect(
         LayoutClassifier.classify(
@@ -58,8 +58,8 @@ func dimensionsBelowEitherMinimumAreUnsupported() {
 }
 
 @Test
-func aspectRatioBoundariesAreInclusive() {
-    let configuration = boundaryConfiguration()
+func aspectRatioBoundariesAreInclusive() throws {
+    let configuration = try boundaryConfiguration()
 
     #expect(
         LayoutClassifier.classify(
@@ -88,8 +88,8 @@ func aspectRatioBoundariesAreInclusive() {
 }
 
 @Test
-func ratiosImmediatelyOutsideConfiguredBoundariesAreUnsupported() {
-    let configuration = boundaryConfiguration()
+func ratiosImmediatelyOutsideConfiguredBoundariesAreUnsupported() throws {
+    let configuration = try boundaryConfiguration()
 
     #expect(
         LayoutClassifier.classify(
@@ -130,8 +130,8 @@ func ratiosImmediatelyOutsideConfiguredBoundariesAreUnsupported() {
 }
 
 @Test
-func ambiguousAndExtremeRatiosAreUnsupported() {
-    let configuration = boundaryConfiguration()
+func ambiguousAndExtremeRatiosAreUnsupported() throws {
+    let configuration = try boundaryConfiguration()
 
     #expect(
         LayoutClassifier.classify(
@@ -171,8 +171,112 @@ func invalidDimensionsAreUnsupported(imageSize: CGSize) {
     )
 }
 
-private func boundaryConfiguration() -> LayoutClassifier.Configuration {
-    LayoutClassifier.Configuration(
+@Test
+func configurationRejectsInvalidMinimumWidth() {
+    for value in [0, -1, Double.nan, Double.infinity] {
+        #expect(
+            throws: LayoutClassifier.ConfigurationError.invalidMinimumWidth
+        ) {
+            try LayoutClassifier.Configuration(
+                minimumWidth: value,
+                minimumHeight: 100,
+                portraitAspectRatio: 0.5 ... 0.75,
+                landscapeAspectRatio: 1.25 ... 2.0
+            )
+        }
+    }
+}
+
+@Test
+func configurationRejectsInvalidMinimumHeight() {
+    for value in [0, -1, Double.nan, Double.infinity] {
+        #expect(
+            throws: LayoutClassifier.ConfigurationError.invalidMinimumHeight
+        ) {
+            try LayoutClassifier.Configuration(
+                minimumWidth: 100,
+                minimumHeight: value,
+                portraitAspectRatio: 0.5 ... 0.75,
+                landscapeAspectRatio: 1.25 ... 2.0
+            )
+        }
+    }
+}
+
+@Test
+func configurationRejectsInvalidPortraitAspectRatioBounds() {
+    for range in [
+        0 ... 0.75,
+        -1 ... 0.75,
+        0.5 ... Double.infinity,
+    ] {
+        #expect(
+            throws: LayoutClassifier.ConfigurationError
+                .invalidPortraitAspectRatio
+        ) {
+            try LayoutClassifier.Configuration(
+                minimumWidth: 100,
+                minimumHeight: 100,
+                portraitAspectRatio: range,
+                landscapeAspectRatio: 1.25 ... 2.0
+            )
+        }
+    }
+}
+
+@Test
+func configurationRejectsInvalidLandscapeAspectRatioBounds() {
+    for range in [
+        0 ... 2.0,
+        -1 ... 2.0,
+        1.25 ... Double.infinity,
+    ] {
+        #expect(
+            throws: LayoutClassifier.ConfigurationError
+                .invalidLandscapeAspectRatio
+        ) {
+            try LayoutClassifier.Configuration(
+                minimumWidth: 100,
+                minimumHeight: 100,
+                portraitAspectRatio: 0.5 ... 0.75,
+                landscapeAspectRatio: range
+            )
+        }
+    }
+}
+
+@Test
+func configurationRejectsOverlappingAspectRatios() {
+    #expect(
+        throws: LayoutClassifier.ConfigurationError.overlappingAspectRatios
+    ) {
+        try LayoutClassifier.Configuration(
+            minimumWidth: 100,
+            minimumHeight: 100,
+            portraitAspectRatio: 0.5 ... 1.5,
+            landscapeAspectRatio: 1.25 ... 2.0
+        )
+    }
+}
+
+@Test
+func configurationRejectsAspectRatiosTouchingAtInclusiveEndpoint() {
+    #expect(
+        throws: LayoutClassifier.ConfigurationError.overlappingAspectRatios
+    ) {
+        try LayoutClassifier.Configuration(
+            minimumWidth: 100,
+            minimumHeight: 100,
+            portraitAspectRatio: 0.5 ... 1.25,
+            landscapeAspectRatio: 1.25 ... 2.0
+        )
+    }
+}
+
+private func boundaryConfiguration() throws
+    -> LayoutClassifier.Configuration
+{
+    try LayoutClassifier.Configuration(
         minimumWidth: 100,
         minimumHeight: 100,
         portraitAspectRatio: 0.5 ... 0.75,
