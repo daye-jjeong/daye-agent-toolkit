@@ -151,9 +151,24 @@ public actor WindowCaptureService: WindowCapturing {
 }
 
 private actor ScreenCaptureKitBackend: WindowCaptureBackend {
+    private let visibilityProvider: any WindowVisibilityProviding
+
+    init(
+        visibilityProvider: any WindowVisibilityProviding =
+            CoreGraphicsWindowVisibilityProvider()
+    ) {
+        self.visibilityProvider = visibilityProvider
+    }
+
     func listCandidates() async throws -> [WindowCandidate] {
         let windows = try await loadWindows()
-        return windows.map(Self.candidate(from:))
+        let visibility = visibilityProvider.snapshot()
+        return windows.map {
+            Self.candidate(
+                from: $0,
+                coreGraphicsWindow: visibility[$0.windowID]
+            )
+        }
     }
 
     func capture(expected: WindowCandidate) async throws -> WindowCaptureResult {
@@ -168,7 +183,11 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
             )
         }
 
-        let current = Self.candidate(from: window)
+        let visibility = visibilityProvider.snapshot()
+        let current = Self.candidate(
+            from: window,
+            coreGraphicsWindow: visibility[window.windowID]
+        )
         guard WindowTarget.isCurrent(current, matching: expected) else {
             throw WindowCaptureError.staleWindow(
                 windowID: expected.windowID
@@ -216,14 +235,22 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
         }
     }
 
-    private static func candidate(from window: SCWindow) -> WindowCandidate {
-        WindowCandidate(
+    private static func candidate(
+        from window: SCWindow,
+        coreGraphicsWindow: CoreGraphicsWindowState?
+    ) -> WindowCandidate {
+        let processID = window.owningApplication?.processID ?? 0
+        return WindowCandidate(
             windowID: window.windowID,
-            processID: window.owningApplication?.processID ?? 0,
+            processID: processID,
             bundleIdentifier: window.owningApplication?.bundleIdentifier ?? "",
             title: window.title ?? "",
             frame: window.frame,
-            isOnScreen: window.isOnScreen
+            isOnScreen: WindowVisibilityValidator.isVisible(
+                screenCaptureKitIsOnScreen: window.isOnScreen,
+                processID: processID,
+                coreGraphicsWindow: coreGraphicsWindow
+            )
         )
     }
 }

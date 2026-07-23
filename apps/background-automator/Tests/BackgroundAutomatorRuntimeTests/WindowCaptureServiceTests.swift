@@ -60,6 +60,43 @@ func combinedCaptureReturnsFreshWindowMetadata() async throws {
 }
 
 @Test
+func combinedCaptureRejectsWindowMinimizedAtSelection() async {
+    let minimized = candidate(windowID: 7, isOnScreen: false)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [minimized],
+        currentCandidate: minimized
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    await #expect(throws: WindowTargetError.notFound) {
+        try await service.captureWindow(
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+    #expect(await backend.imageCaptureCount == 0)
+}
+
+@Test
+func combinedCaptureRejectsWindowMinimizedAfterSelection() async {
+    let selected = candidate(windowID: 7, isOnScreen: true)
+    let minimized = candidate(windowID: 7, isOnScreen: false)
+    let backend = FakeWindowCaptureBackend(
+        listedCandidates: [selected],
+        currentCandidate: minimized
+    )
+    let service = WindowCaptureService(backend: backend)
+
+    await #expect(throws: WindowCaptureError.staleWindow(windowID: 7)) {
+        try await service.captureWindow(
+            bundleIdentifier: "com.example.target",
+            titleContains: "Game"
+        )
+    }
+    #expect(await backend.imageCaptureCount == 0)
+}
+
+@Test
 func rawCaptureRejectsReplacementAfterFind() async throws {
     let selected = candidate(windowID: 7, processID: 42)
     let replacement = candidate(windowID: 7, processID: 99)
