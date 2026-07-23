@@ -17,6 +17,12 @@ public struct RuleSafetyMinimums: Sendable {
     private init() {}
 }
 
+struct DefaultRuleResourceContext: Sendable {
+    let isPackagedApplication: Bool
+    let applicationResourceRoot: URL?
+    let developmentFallbackURL: URL?
+}
+
 public struct RuleLoader: Sendable {
     public static let supportedSchemaVersion = 1
     static let runtimeResourceBundleName =
@@ -25,29 +31,59 @@ public struct RuleLoader: Sendable {
     public init() {}
 
     public func loadDefaultRules() throws -> [AutomationRule] {
-        if
-            let resourceRoot = Bundle.main.resourceURL,
-            packagedRulesURL(resourceRoot: resourceRoot) != nil
-        {
-            return try loadDefaultRules(resourceRoot: resourceRoot)
+        let mainBundle = Bundle.main
+        if Self.isPackagedApplication(mainBundle) {
+            return try loadDefaultRules(
+                context: DefaultRuleResourceContext(
+                    isPackagedApplication: true,
+                    applicationResourceRoot: mainBundle.resourceURL,
+                    developmentFallbackURL: nil
+                )
+            )
         }
 
-        guard let url = Bundle.module.url(
-            forResource: "default-rules",
-            withExtension: "json"
-        ) else {
-            throw RuleLoaderError.resourceNotFound
-        }
-
-        return try load(data: Data(contentsOf: url))
+        return try loadDefaultRules(
+            context: DefaultRuleResourceContext(
+                isPackagedApplication: false,
+                applicationResourceRoot: mainBundle.resourceURL,
+                developmentFallbackURL: Bundle.module.url(
+                    forResource: "default-rules",
+                    withExtension: "json"
+                )
+            )
+        )
     }
 
     func loadDefaultRules(resourceRoot: URL) throws -> [AutomationRule] {
-        guard let url = packagedRulesURL(resourceRoot: resourceRoot) else {
+        try loadDefaultRules(
+            context: DefaultRuleResourceContext(
+                isPackagedApplication: true,
+                applicationResourceRoot: resourceRoot,
+                developmentFallbackURL: nil
+            )
+        )
+    }
+
+    func loadDefaultRules(
+        context: DefaultRuleResourceContext
+    ) throws -> [AutomationRule] {
+        if
+            let resourceRoot = context.applicationResourceRoot,
+            let packagedURL = packagedRulesURL(
+                resourceRoot: resourceRoot
+            )
+        {
+            return try load(data: Data(contentsOf: packagedURL))
+        }
+
+        guard
+            !context.isPackagedApplication,
+            let fallbackURL = context.developmentFallbackURL
+        else {
             throw RuleLoaderError.resourceNotFound
         }
 
-        return try load(data: Data(contentsOf: url))
+        return try load(data: Data(contentsOf: fallbackURL))
     }
 
     public func load(data: Data) throws -> [AutomationRule] {
@@ -74,6 +110,18 @@ public struct RuleLoader: Sendable {
 }
 
 private extension RuleLoader {
+    static func isPackagedApplication(_ bundle: Bundle) -> Bool {
+        if bundle.bundleURL.pathExtension
+            .caseInsensitiveCompare("app") == .orderedSame
+        {
+            return true
+        }
+
+        return bundle.object(
+            forInfoDictionaryKey: "CFBundlePackageType"
+        ) as? String == "APPL"
+    }
+
     func packagedRulesURL(resourceRoot: URL) -> URL? {
         let url = resourceRoot
             .appendingPathComponent(

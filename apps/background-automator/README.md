@@ -14,6 +14,8 @@ open "dist/Background Automator.app"
 
 산출물은 `dist/Background Automator.app`입니다. 앱의 로컬 번들 ID는 게임과 무관한 `com.dayejeong.background-automator`입니다. `/Applications`에는 자동으로 설치하지 않습니다.
 
+빌드 스크립트는 완성된 앱 전체를 로컬 ad-hoc 방식으로 서명하고 리소스 봉인을 검증합니다. 이는 Apple Developer ID 서명이나 Apple 공증(notarization)이 아니므로 다른 Mac에 배포하기 위한 서명이 아니며, macOS가 최초 실행 시 별도 확인을 요구할 수 있습니다.
+
 ## 처음 설정
 
 1. 메뉴 막대의 커서 아이콘을 엽니다.

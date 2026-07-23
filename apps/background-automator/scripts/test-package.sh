@@ -25,6 +25,16 @@ test "$(/usr/bin/plutil -extract CFBundlePackageType raw -o - "${plist_path}")" 
 test "$(/usr/bin/plutil -extract LSUIElement raw -o - "${plist_path}")" = "true"
 test "$(/usr/bin/plutil -extract LSMinimumSystemVersion raw -o - "${plist_path}")" = "14.0"
 
+/usr/bin/codesign --verify --deep --strict --verbose=2 "${app_path}"
+signature_details="$(
+    /usr/bin/codesign -dv --verbose=4 "${app_path}" 2>&1
+)"
+grep -q '^Identifier=com\.dayejeong\.background-automator$' \
+    <<< "${signature_details}"
+grep -q '^Signature=adhoc$' <<< "${signature_details}"
+grep -q '^Info.plist entries=' <<< "${signature_details}"
+grep -q '^Sealed Resources version=' <<< "${signature_details}"
+
 test -d "${resource_bundle_path}"
 test -f "${rules_path}"
 /usr/bin/cmp -s \

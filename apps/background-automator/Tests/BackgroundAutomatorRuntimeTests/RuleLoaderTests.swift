@@ -53,6 +53,103 @@ func loadsPackagedDefaultsFromApplicationResources() throws {
 }
 
 @Test
+func packagedApplicationDoesNotUseDevelopmentFallbackWhenResourceIsMissing()
+    throws
+{
+    let fileManager = FileManager.default
+    let temporaryRoot = fileManager.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try fileManager.createDirectory(
+        at: temporaryRoot,
+        withIntermediateDirectories: true
+    )
+    defer {
+        try? fileManager.removeItem(at: temporaryRoot)
+    }
+    let fallbackURL = temporaryRoot.appendingPathComponent(
+        "development-default-rules.json"
+    )
+    try emptyRuleDocument().write(to: fallbackURL)
+
+    let context = DefaultRuleResourceContext(
+        isPackagedApplication: true,
+        applicationResourceRoot: temporaryRoot,
+        developmentFallbackURL: fallbackURL
+    )
+
+    #expect(throws: RuleLoaderError.resourceNotFound) {
+        try RuleLoader().loadDefaultRules(context: context)
+    }
+}
+
+@Test
+func packagedApplicationDoesNotUseDevelopmentFallbackWhenResourceIsCorrupt()
+    throws
+{
+    let fileManager = FileManager.default
+    let temporaryRoot = fileManager.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let runtimeBundle = temporaryRoot.appendingPathComponent(
+        "BackgroundAutomator_BackgroundAutomatorRuntime.bundle",
+        isDirectory: true
+    )
+    try fileManager.createDirectory(
+        at: runtimeBundle,
+        withIntermediateDirectories: true
+    )
+    defer {
+        try? fileManager.removeItem(at: temporaryRoot)
+    }
+    try Data("not-json".utf8).write(
+        to: runtimeBundle.appendingPathComponent(
+            "default-rules.json"
+        )
+    )
+    let fallbackURL = temporaryRoot.appendingPathComponent(
+        "development-default-rules.json"
+    )
+    try emptyRuleDocument().write(to: fallbackURL)
+
+    let context = DefaultRuleResourceContext(
+        isPackagedApplication: true,
+        applicationResourceRoot: temporaryRoot,
+        developmentFallbackURL: fallbackURL
+    )
+
+    #expect(throws: RuleLoaderError.malformedDocument("invalid JSON")) {
+        try RuleLoader().loadDefaultRules(context: context)
+    }
+}
+
+@Test
+func nonApplicationDevelopmentContextCanUseFallbackResource() throws {
+    let fileManager = FileManager.default
+    let temporaryRoot = fileManager.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try fileManager.createDirectory(
+        at: temporaryRoot,
+        withIntermediateDirectories: true
+    )
+    defer {
+        try? fileManager.removeItem(at: temporaryRoot)
+    }
+    let fallbackURL = temporaryRoot.appendingPathComponent(
+        "development-default-rules.json"
+    )
+    try emptyRuleDocument().write(to: fallbackURL)
+
+    let context = DefaultRuleResourceContext(
+        isPackagedApplication: false,
+        applicationResourceRoot: nil,
+        developmentFallbackURL: fallbackURL
+    )
+
+    let rules = try RuleLoader().loadDefaultRules(context: context)
+
+    #expect(rules.isEmpty)
+}
+
+@Test
 func rejectsUnsupportedSchemaVersion() throws {
     let data = try #require(
         """
@@ -608,6 +705,16 @@ private func makeRuleDocument(
         withJSONObject: [
             "schemaVersion": 1,
             "rules": rules,
+        ],
+        options: [.sortedKeys]
+    )
+}
+
+private func emptyRuleDocument() throws -> Data {
+    try JSONSerialization.data(
+        withJSONObject: [
+            "schemaVersion": 1,
+            "rules": [],
         ],
         options: [.sortedKeys]
     )

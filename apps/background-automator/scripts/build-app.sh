@@ -44,4 +44,32 @@ test -f "${source_resource_bundle}/default-rules.json"
     "${source_resource_bundle}" \
     "${resources_path}/${resource_bundle_name}"
 
+bundle_identifier="$(
+    /usr/bin/plutil -extract CFBundleIdentifier raw -o - \
+        "${contents_path}/Info.plist"
+)"
+if [[ "${bundle_identifier}" != "com.dayejeong.background-automator" ]]; then
+    echo "Unexpected bundle identifier: ${bundle_identifier}" >&2
+    exit 1
+fi
+
+/usr/bin/codesign \
+    --force \
+    --sign - \
+    --identifier "${bundle_identifier}" \
+    --timestamp=none \
+    "${macos_path}/${executable_name}"
+/usr/bin/codesign \
+    --force \
+    --sign - \
+    --identifier "${bundle_identifier}" \
+    --timestamp=none \
+    "${app_path}"
+/usr/bin/codesign \
+    --verify \
+    --deep \
+    --strict \
+    --verbose=2 \
+    "${app_path}"
+
 echo "Built app: ${app_path}"
