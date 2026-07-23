@@ -421,6 +421,32 @@ func observationsBelowRuleConfidenceAreIgnored() async throws {
     #expect(result.actionCandidates.isEmpty)
 }
 
+@Test(arguments: [
+    1.000_001,
+    -0.001,
+    Double.nan,
+    Double.infinity,
+])
+func invalidActionConfidenceIsRejected(confidence: Double) async throws {
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "다시 하기",
+                confidence: confidence,
+                rect: CGRect(x: 60, y: 240, width: 80, height: 30)
+            ),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [retryRule()]
+    )
+
+    #expect(result.actionCandidates.isEmpty)
+}
+
 @Test
 func malformedRecognizedBoundingBoxIsRejected() async throws {
     let observer = SceneObserver(

@@ -108,7 +108,7 @@ private extension SceneObserver {
         }
 
         let blockingObservations = observations.filter {
-            (0 ... 1).contains($0.confidence)
+            isValidConfidence($0.confidence)
                 && isUsable(
                     $0.boundingBox,
                     imageSize: imageSize
@@ -122,7 +122,7 @@ private extension SceneObserver {
         }
 
         let confidentObservations = observations.filter {
-            $0.confidence.isFinite
+            isValidConfidence($0.confidence)
                 && $0.confidence >= rule.minimumOCRConfidence
         }
         let observationsInRegion = confidentObservations.filter {
@@ -188,6 +188,10 @@ private extension SceneObserver {
         return observations.contains {
             forbidden.contains(semanticText($0.text))
         }
+    }
+
+    func isValidConfidence(_ confidence: Double) -> Bool {
+        confidence.isFinite && (0 ... 1).contains(confidence)
     }
 
     func semanticText(_ text: String) -> String {
