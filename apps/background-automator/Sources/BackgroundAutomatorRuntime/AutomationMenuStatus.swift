@@ -3,6 +3,7 @@ import Foundation
 
 public enum AutomationMenuStatus: Equatable, Sendable {
     case stopped
+    case checkingPreflight
     case needsAttention(String)
     case observing
     case combatWait
@@ -17,6 +18,8 @@ public enum AutomationMenuStatus: Equatable, Sendable {
         switch self {
         case .stopped:
             "중지됨"
+        case .checkingPreflight:
+            "준비 상태 확인 중"
         case let .needsAttention(guidance):
             "확인 필요: \(guidance)"
         case .observing:
@@ -57,6 +60,29 @@ public enum AutomationMenuStatus: Equatable, Sendable {
         case .pausedRestorationFailure:
             .pausedRestorationFailure
         }
+    }
+}
+
+public struct AutomationLifecycleGate: Sendable {
+    public struct Token: Equatable, Sendable {
+        fileprivate let generation: UInt64
+    }
+
+    private var generation: UInt64 = 0
+
+    public init() {}
+
+    public mutating func begin() -> Token {
+        generation &+= 1
+        return Token(generation: generation)
+    }
+
+    public mutating func invalidate() {
+        generation &+= 1
+    }
+
+    public func isCurrent(_ token: Token) -> Bool {
+        token.generation == generation
     }
 }
 

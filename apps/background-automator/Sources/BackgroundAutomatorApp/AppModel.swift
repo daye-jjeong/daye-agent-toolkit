@@ -17,6 +17,8 @@ final class AppModel: ObservableObject {
     private let preflightService: PreflightService
     private let clock = ContinuousClock()
 
+    private var lifecycleGate = AutomationLifecycleGate()
+    private var startPending = false
     private var operationTask: Task<Void, Never>?
     private var loopTask: Task<Void, Never>?
     private var coordinator: AutomationCoordinator?
@@ -47,11 +49,12 @@ final class AppModel: ObservableObject {
     }
 
     var isTransitioning: Bool {
-        operationTask != nil || status == .stopping
+        status == .stopping
+            || (operationTask != nil && !startPending)
     }
 
     var primaryActionTitle: String {
-        isRunning ? "중지" : "시작"
+        isRunning || startPending ? "중지" : "시작"
     }
 
     var canRequestPermission: Bool {
@@ -59,20 +62,26 @@ final class AppModel: ObservableObject {
     }
 
     func toggleAutomation() {
+        guard status != .stopping else {
+            return
+        }
+
+        if startPending {
+            lifecycleGate.invalidate()
+            startPending = false
+            operationTask?.cancel()
+            operationTask = nil
+            status = .stopped
+            return
+        }
         guard operationTask == nil else {
             return
         }
 
-        operationTask = Task { [weak self] in
-            guard let self else {
-                return
-            }
-            if self.loopTask == nil {
-                await self.start()
-            } else {
-                await self.stop()
-            }
-            self.operationTask = nil
+        if loopTask == nil {
+            beginStart()
+        } else {
+            beginStop()
         }
     }
 
@@ -130,7 +139,7 @@ final class AppModel: ObservableObject {
     }
 
     func quit() {
-        guard loopTask == nil else {
+        guard loopTask == nil, !startPending else {
             status = .needsAttention(
                 "먼저 자동화를 안전하게 중지해 주세요."
             )
@@ -146,7 +155,38 @@ private extension AppModel {
     static let titleContainsKey =
         "BackgroundAutomator.targetTitleContains"
 
-    func start() async {
+    func beginStart() {
+        let token = lifecycleGate.begin()
+        startPending = true
+        status = .checkingPreflight
+        operationTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            await self.start(token: token)
+            guard self.lifecycleGate.isCurrent(token) else {
+                return
+            }
+            self.startPending = false
+            self.operationTask = nil
+        }
+    }
+
+    func beginStop() {
+        _ = lifecycleGate.begin()
+        status = .stopping
+        operationTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            await self.stop()
+            self.operationTask = nil
+        }
+    }
+
+    func start(
+        token: AutomationLifecycleGate.Token
+    ) async {
         saveConfiguration()
         let configuration = TargetConfiguration(
             bundleIdentifier: bundleIdentifier,
@@ -155,6 +195,12 @@ private extension AppModel {
         let preflight = await preflightService.check(
             configuration: configuration
         )
+        guard
+            lifecycleGate.isCurrent(token),
+            !Task.isCancelled
+        else {
+            return
+        }
         guard case .ready = preflight else {
             if case let .needsAttention(issue) = preflight {
                 lastPreflightIssue = issue
@@ -185,20 +231,41 @@ private extension AppModel {
                 actionPerformer: actionPerformer,
                 statusReporter: { [weak self] status in
                     await MainActor.run {
-                        self?.status = status
+                        guard
+                            let self,
+                            self.lifecycleGate.isCurrent(token)
+                        else {
+                            return
+                        }
+                        self.status = status
                     }
                 }
             )
+
+            await coordinator.start()
+            guard
+                lifecycleGate.isCurrent(token),
+                !Task.isCancelled
+            else {
+                await coordinator.stop()
+                idleMonitor.stop()
+                return
+            }
 
             self.idleMonitor = idleMonitor
             self.coordinator = coordinator
             lastPreflightIssue = nil
             status = .observing
-            await coordinator.start()
             loopTask = Task { [weak self, coordinator] in
-                await self?.runLoop(coordinator: coordinator)
+                await self?.runLoop(
+                    coordinator: coordinator,
+                    token: token
+                )
             }
         } catch {
+            guard lifecycleGate.isCurrent(token) else {
+                return
+            }
             idleMonitor?.stop()
             idleMonitor = nil
             coordinator = nil
@@ -224,11 +291,17 @@ private extension AppModel {
         status = .stopped
     }
 
-    func runLoop(coordinator: AutomationCoordinator) async {
+    func runLoop(
+        coordinator: AutomationCoordinator,
+        token: AutomationLifecycleGate.Token
+    ) async {
         while !Task.isCancelled {
             do {
                 let result = try await coordinator.runCycle()
                 try Task.checkCancellation()
+                guard lifecycleGate.isCurrent(token) else {
+                    return
+                }
                 updateAfterCycle(
                     result: result,
                     state: await coordinator.state
@@ -241,6 +314,9 @@ private extension AppModel {
             } catch is CancellationError {
                 return
             } catch {
+                guard lifecycleGate.isCurrent(token) else {
+                    return
+                }
                 status = .needsAttention(
                     "화면 확인에 실패했습니다: \(error.localizedDescription)"
                 )

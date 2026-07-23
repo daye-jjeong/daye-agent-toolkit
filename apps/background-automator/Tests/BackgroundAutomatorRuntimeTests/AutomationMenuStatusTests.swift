@@ -6,6 +6,7 @@ import Testing
 
 @Test(arguments: [
     (AutomationMenuStatus.stopped, "중지됨"),
+    (.checkingPreflight, "준비 상태 확인 중"),
     (.needsAttention("권한 필요"), "확인 필요: 권한 필요"),
     (.observing, "화면 확인 중"),
     (.combatWait, "전투 완료 대기 중"),
@@ -53,4 +54,26 @@ func pollingScheduleUsesFastAndLongIntervalsWithoutBusySpin() {
     #expect(AutomationPollingSchedule.delay(for: .cooldown) == .seconds(120))
     #expect(AutomationPollingSchedule.delay(for: .combatWait) == .seconds(120))
     #expect(AutomationPollingSchedule.delay(for: .stopped) >= .milliseconds(500))
+}
+
+@Test
+func lifecycleGateRejectsCompletionFromInvalidatedStart() {
+    var gate = AutomationLifecycleGate()
+    let staleStart = gate.begin()
+
+    gate.invalidate()
+    let restarted = gate.begin()
+
+    #expect(!gate.isCurrent(staleStart))
+    #expect(gate.isCurrent(restarted))
+}
+
+@Test
+func lifecycleGateInvalidatesPendingStartWhenStopped() {
+    var gate = AutomationLifecycleGate()
+    let pendingStart = gate.begin()
+
+    gate.invalidate()
+
+    #expect(!gate.isCurrent(pendingStart))
 }
