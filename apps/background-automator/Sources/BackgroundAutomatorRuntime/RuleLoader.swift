@@ -9,6 +9,14 @@ public enum RuleLoaderError: Error, Equatable, Sendable {
     case malformedSemantics(ruleID: String, reason: String)
 }
 
+public struct RuleSafetyMinimums: Sendable {
+    public static let stableObservationCount = 2
+    public static let postActionDelaySeconds = 0.1
+    public static let cooldownSeconds = 0.5
+
+    private init() {}
+}
+
 public struct RuleLoader: Sendable {
     public static let supportedSchemaVersion = 1
 
@@ -152,8 +160,14 @@ private extension RuleLoader {
             guard !trimmedID.isEmpty else {
                 throw malformed(rule, "id must not be empty")
             }
-            guard identifiers.insert(rule.id).inserted else {
+            guard identifiers.insert(trimmedID).inserted else {
                 throw malformed(rule, "id must be unique")
+            }
+            guard trimmedID == rule.id else {
+                throw malformed(
+                    rule,
+                    "id must not contain leading or trailing whitespace"
+                )
             }
 
             try validateTexts(rule)
@@ -167,24 +181,27 @@ private extension RuleLoader {
                     "minimumOCRConfidence must be between 0 and 1"
                 )
             }
-            guard rule.stableObservationCount >= 1 else {
+            guard rule.stableObservationCount >=
+                    RuleSafetyMinimums.stableObservationCount else {
                 throw malformed(
                     rule,
-                    "stableObservationCount must be at least 1"
+                    "stableObservationCount must be at least \(RuleSafetyMinimums.stableObservationCount)"
                 )
             }
             guard rule.postActionDelaySeconds.isFinite,
-                  rule.postActionDelaySeconds >= 0 else {
+                  rule.postActionDelaySeconds >=
+                    RuleSafetyMinimums.postActionDelaySeconds else {
                 throw malformed(
                     rule,
-                    "postActionDelaySeconds must be nonnegative"
+                    "postActionDelaySeconds must be at least \(RuleSafetyMinimums.postActionDelaySeconds)"
                 )
             }
             guard rule.cooldownSeconds.isFinite,
-                  rule.cooldownSeconds >= 0 else {
+                  rule.cooldownSeconds >=
+                    RuleSafetyMinimums.cooldownSeconds else {
                 throw malformed(
                     rule,
-                    "cooldownSeconds must be nonnegative"
+                    "cooldownSeconds must be at least \(RuleSafetyMinimums.cooldownSeconds)"
                 )
             }
         }
@@ -222,6 +239,13 @@ private extension RuleLoader {
             throw malformed(
                 rule,
                 "safePointRegion must be normalized and non-empty"
+            )
+        }
+        if rule.action.safePointRegion != nil,
+           rule.requiredTexts.isEmpty {
+            throw malformed(
+                rule,
+                "safePointRegion action requires requiredTexts context"
             )
         }
     }
