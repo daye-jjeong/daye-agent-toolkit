@@ -106,6 +106,38 @@ func changedRuleOrSceneFingerprintResetsStableStreak() throws {
 }
 
 @Test
+func changingBackgroundTextDoesNotResetStreakForSameButton() throws {
+    // 실측(2026-07-24 던전 선택 화면): '순수 전투 시간'이 매초 증가해
+    // 화면 전체 텍스트가 매 프레임 달라진다. 같은 버튼(같은 ruleID·위치)
+    // 이면 배경 텍스트 변동과 무관하게 안정 관측으로 인정해 클릭해야 한다.
+    var tracker = try StableObservationTracker(
+        targetRectangleTolerancePixels: 2
+    )
+    let firstFrame = trackerCandidate(
+        captureSequence: 1,
+        fingerprint: SceneFingerprint(
+            semanticTexts: ["다시 하기", "순수 전투 시간 0:13"],
+            targetText: "다시 하기"
+        )
+    )
+    let secondFrame = trackerCandidate(
+        captureSequence: 2,
+        fingerprint: SceneFingerprint(
+            semanticTexts: ["다시 하기", "순수 전투 시간 0:14"],
+            targetText: "다시 하기"
+        )
+    )
+
+    #expect(
+        tracker.record(firstFrame, requiredObservationCount: 2) == nil
+    )
+    #expect(
+        tracker.record(secondFrame, requiredObservationCount: 2)
+            == secondFrame
+    )
+}
+
+@Test
 func nilObservationResetsStableStreak() throws {
     var tracker = try StableObservationTracker(
         targetRectangleTolerancePixels: 2
@@ -174,16 +206,14 @@ func stableCandidateEmitsOnceUntilSceneChangeOrExplicitReset() throws {
     let first = trackerCandidate(captureSequence: 1)
     let second = trackerCandidate(captureSequence: 2)
     let third = trackerCandidate(captureSequence: 3)
+    // 화면 전환은 다른 버튼(다른 ruleID)으로 나타난다.
     let changed = trackerCandidate(
         captureSequence: 4,
-        fingerprint: SceneFingerprint(
-            semanticTexts: ["계속 하기"],
-            targetText: "계속 하기"
-        )
+        ruleID: "continue_dialog"
     )
     let changedAgain = trackerCandidate(
         captureSequence: 5,
-        fingerprint: changed.sceneFingerprint
+        ruleID: "continue_dialog"
     )
 
     #expect(tracker.record(first, requiredObservationCount: 2) == nil)
@@ -195,11 +225,11 @@ func stableCandidateEmitsOnceUntilSceneChangeOrExplicitReset() throws {
     tracker.resetForRetry()
     let retryFirst = trackerCandidate(
         captureSequence: 6,
-        fingerprint: changed.sceneFingerprint
+        ruleID: "continue_dialog"
     )
     let retrySecond = trackerCandidate(
         captureSequence: 7,
-        fingerprint: changed.sceneFingerprint
+        ruleID: "continue_dialog"
     )
     #expect(tracker.record(retryFirst, requiredObservationCount: 2) == nil)
     #expect(tracker.record(retrySecond, requiredObservationCount: 2) == retrySecond)

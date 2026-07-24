@@ -222,10 +222,13 @@ public struct StableObservationTracker: Sendable {
         _ first: ActionCandidate,
         _ second: ActionCandidate
     ) -> Bool {
+        // sceneFingerprint(화면 전체 텍스트)는 비교하지 않는다. 결과 화면의
+        // '순수 전투 시간' 등 매초 변하는 배경 텍스트 때문에 같은 버튼도
+        // 절대 안정되지 않기 때문. 버튼 정체성(ruleID·창·레이아웃·위치)만
+        // 검사한다. 화면 전환은 ruleID·위치 변화로 이미 감지된다.
         first.ruleID == second.ruleID
             && first.windowIdentity == second.windowIdentity
             && first.layout == second.layout
-            && first.sceneFingerprint == second.sceneFingerprint
             && rectanglesAreWithinTolerance(
                 first.targetPixelRect,
                 second.targetPixelRect
