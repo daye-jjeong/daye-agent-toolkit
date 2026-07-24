@@ -82,7 +82,7 @@ func coordinatorRejectsWeakenedSafetyTimings() throws {
             inputMonitor: ImmediateIdleMonitor(),
             actionPerformer: actioner,
             clock: clock,
-            enterReadyCooldown: .seconds(119)
+            enterReadyCooldown: .seconds(4)
         )
     }
 }
@@ -683,7 +683,9 @@ func unvalidatedContinueTextCannotUnlockFailedRetryScene() async throws {
 }
 
 @Test
-func successfulEnterReadyActionStartsTwoMinuteNoPollingCooldown() async throws {
+func successfulEnterReadyStartsShortSuppressionThenResumesObserving() async throws {
+    // A방식: 입장 후 5초만 억제(중복 입장 방지)하고 관찰을 재개해
+    // 던전 길이와 무관하게 결과 화면을 실시간에 가깝게 감지한다.
     let fixture = try CoordinatorFixture(frames: [
         .make(scene: .enterReady, sequence: 1),
         .make(scene: .enterReady, sequence: 2),
@@ -700,14 +702,16 @@ func successfulEnterReadyActionStartsTwoMinuteNoPollingCooldown() async throws {
     )
     #expect(
         await fixture.coordinator.state
-            == .cooldown(scene: .running, until: .seconds(130))
+            == .cooldown(scene: .running, until: .seconds(15))
     )
 
-    await fixture.clock.set(.seconds(129))
+    // 억제 5초 동안엔 관찰하지 않는다(중복 입장 방지).
+    await fixture.clock.set(.seconds(14))
     #expect(try await fixture.coordinator.runCycle() == .cooldown)
     #expect(await fixture.observerCallCount() == 3)
 
-    await fixture.clock.set(.seconds(130))
+    // 5초가 지나면 곧바로 관찰을 재개한다.
+    await fixture.clock.set(.seconds(15))
     #expect(try await fixture.coordinator.runCycle() == .noAction)
     #expect(await fixture.coordinator.state == .unknown)
 }

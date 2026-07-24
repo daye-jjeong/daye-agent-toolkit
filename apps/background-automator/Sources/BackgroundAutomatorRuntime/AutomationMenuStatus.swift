@@ -150,13 +150,37 @@ public enum AutomationTargetFieldPolicy {
     }
 }
 
+/// 화면 확인 등 일시적 실패에 대한 자동 재시도 정책.
+///
+/// 게임 재시작·창 전환 순간의 짧은 접근 실패는 몇 번 재시도하면 회복되지만,
+/// 계속 실패하면(권한 회수 등) 멈추고 사용자에게 알려야 한다.
+public struct AutomationRetryPolicy: Sendable {
+    public let maxConsecutiveFailures: Int
+
+    public init(maxConsecutiveFailures: Int = 5) {
+        self.maxConsecutiveFailures = max(1, maxConsecutiveFailures)
+    }
+
+    public func shouldRetry(consecutiveFailures: Int) -> Bool {
+        consecutiveFailures < maxConsecutiveFailures
+    }
+
+    /// 재시도 전 대기: 1s → 2s → 3s … 최대 10s로 늘어나는 선형 백오프.
+    public func backoff(consecutiveFailures: Int) -> Duration {
+        let seconds = min(10, max(1, consecutiveFailures))
+        return .seconds(seconds)
+    }
+}
+
 public enum AutomationPollingSchedule {
     public static func delay(
         for status: AutomationMenuStatus
     ) -> Duration {
         switch status {
         case .combatWait, .cooldown:
-            .seconds(120)
+            // A방식: 입장 후 결과 화면을 실시간에 가깝게 감지하도록
+            // 짧은 폴링을 유지한다(관찰 CPU는 실측 0.3% 수준).
+            .seconds(2)
         default:
             .milliseconds(500)
         }

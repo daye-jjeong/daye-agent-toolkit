@@ -85,9 +85,32 @@ func menuStatusProjectsCoordinatorStates() {
 func pollingScheduleUsesFastAndLongIntervalsWithoutBusySpin() {
     #expect(AutomationPollingSchedule.delay(for: .observing) == .milliseconds(500))
     #expect(AutomationPollingSchedule.delay(for: .buttonDetected) == .milliseconds(500))
-    #expect(AutomationPollingSchedule.delay(for: .cooldown) == .seconds(120))
-    #expect(AutomationPollingSchedule.delay(for: .combatWait) == .seconds(120))
+    // A방식: 결과를 실시간에 가깝게 감지하도록 대기 상태 폴링을 2초로.
+    #expect(AutomationPollingSchedule.delay(for: .cooldown) == .seconds(2))
+    #expect(AutomationPollingSchedule.delay(for: .combatWait) == .seconds(2))
     #expect(AutomationPollingSchedule.delay(for: .stopped) >= .milliseconds(500))
+}
+
+@Test
+func retryPolicyRetriesTransientFailuresUpToLimitThenGivesUp() {
+    let policy = AutomationRetryPolicy(maxConsecutiveFailures: 5)
+
+    #expect(policy.shouldRetry(consecutiveFailures: 1))
+    #expect(policy.shouldRetry(consecutiveFailures: 4))
+    #expect(!policy.shouldRetry(consecutiveFailures: 5))
+    #expect(!policy.shouldRetry(consecutiveFailures: 6))
+}
+
+@Test
+func retryPolicyBackoffIsBoundedAndGrows() {
+    let policy = AutomationRetryPolicy(maxConsecutiveFailures: 5)
+
+    let first = policy.backoff(consecutiveFailures: 1)
+    let second = policy.backoff(consecutiveFailures: 3)
+
+    #expect(first >= .seconds(1))
+    #expect(second >= first)
+    #expect(second <= .seconds(10)) // 상한
 }
 
 @Test

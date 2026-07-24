@@ -56,7 +56,8 @@ func clearTouchRequiresExactContextAndUsesOnlySafePoint() throws {
     ("reward_retry", "다시 하기", 0.5),
     ("continue_dialog", "계속하기", 0.5),
     ("mission_selection", "도전", 0.5),
-    ("enter_ready", "입장하기", 120.0),
+    // A방식: 입장 후 억제를 5초로 단축(실시간 결과 감지).
+    ("enter_ready", "입장하기", 5.0),
 ])
 func textActionsUseExactOCRTargetBoundingBoxConfiguration(
     id: String,

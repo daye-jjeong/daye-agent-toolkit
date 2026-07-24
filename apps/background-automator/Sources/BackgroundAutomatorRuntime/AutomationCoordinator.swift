@@ -163,7 +163,7 @@ public actor AutomationCoordinator {
         clock: any AutomationClockReading = ContinuousAutomationClock(),
         idleThreshold: Duration = .seconds(3),
         clearTouchDelay: Duration = .seconds(2),
-        enterReadyCooldown: Duration = .seconds(120),
+        enterReadyCooldown: Duration = .seconds(5),
         statusReporter: (
             @Sendable (AutomationMenuStatus) async -> Void
         )? = nil
@@ -174,7 +174,8 @@ public actor AutomationCoordinator {
         guard clearTouchDelay >= .seconds(2) else {
             throw AutomationCoordinatorError.invalidClearTouchDelay
         }
-        guard enterReadyCooldown >= .seconds(120) else {
+        // A방식: 입장 후 5초 억제로 중복 입장만 막고 관찰을 재개한다.
+        guard enterReadyCooldown >= .seconds(5) else {
             throw AutomationCoordinatorError.invalidEnterReadyCooldown
         }
         evaluator = try RuleEvaluator(rules: rules)

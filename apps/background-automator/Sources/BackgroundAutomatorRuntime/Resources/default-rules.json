@@ -212,7 +212,7 @@
       "minimumOCRConfidence": 0.85,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
-      "cooldownSeconds": 120.0
+      "cooldownSeconds": 5.0
     },
     {
       "id": "running",

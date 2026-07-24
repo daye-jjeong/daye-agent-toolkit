@@ -26,6 +26,7 @@ final class AppModel: ObservableObject {
     private let preflightService: PreflightService
     private let diagnosticsWriter: DiagnosticsFileWriter?
     private let activityWriter: ActivityLogWriter?
+    private let retryPolicy = AutomationRetryPolicy()
     private let clock = ContinuousClock()
     private var lastPreflightDiagnostics: PreflightDiagnostics?
     private var lastObservationDiagnostics: ObservationDiagnostics?
@@ -368,6 +369,7 @@ private extension AppModel {
         coordinator: AutomationCoordinator,
         token: AutomationLifecycleGate.Token
     ) async {
+        var consecutiveFailures = 0
         while !Task.isCancelled {
             do {
                 let result = try await coordinator.runCycle()
@@ -375,6 +377,7 @@ private extension AppModel {
                 guard lifecycleGate.isCurrent(token) else {
                     return
                 }
+                consecutiveFailures = 0
                 let coordinatorState = await coordinator.state
                 lastObservationDiagnostics =
                     await coordinator.lastObservation
@@ -396,10 +399,26 @@ private extension AppModel {
                 guard lifecycleGate.isCurrent(token) else {
                     return
                 }
-                status = .needsAttention(
-                    "화면 확인에 실패했습니다: \(error.localizedDescription)"
-                )
-                return
+                consecutiveFailures += 1
+                // 게임 재시작·창 전환 순간의 일시적 실패는 자동 재시도한다.
+                guard retryPolicy.shouldRetry(
+                    consecutiveFailures: consecutiveFailures
+                ) else {
+                    status = .needsAttention(
+                        "화면 확인에 반복 실패했습니다: "
+                            + error.localizedDescription
+                    )
+                    return
+                }
+                do {
+                    try await clock.sleep(
+                        for: retryPolicy.backoff(
+                            consecutiveFailures: consecutiveFailures
+                        )
+                    )
+                } catch {
+                    return
+                }
             }
         }
     }
