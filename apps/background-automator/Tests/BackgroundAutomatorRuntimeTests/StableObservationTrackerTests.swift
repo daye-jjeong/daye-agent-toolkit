@@ -236,6 +236,40 @@ func stableCandidateEmitsOnceUntilSceneChangeOrExplicitReset() throws {
 }
 
 @Test
+func productionToleranceAbsorbsRewardScreenSlide() throws {
+    // 실측(2026-07-24): 보상화면 '다시 하기'는 전리품 연출로 프레임 간
+    // 최대 35px(y축) 이동한다. 프로덕션 관용도가 이 이동을 흡수해야
+    // 애니메이션 중에도 안정 판정이 나 클릭 지연(3~14초)이 사라진다.
+    // 다음 버튼과 202px 떨어져 있어 100px 미만이면 오탐 없이 안전하다.
+    #expect(AutomationCoordinator.targetRectangleTolerancePixels >= 36)
+    #expect(AutomationCoordinator.targetRectangleTolerancePixels <= 100)
+
+    let first = trackerCandidate(
+        captureSequence: 1,
+        targetPixelRect: CGRect(x: 703, y: 865, width: 104, height: 29)
+    )
+    let slid = trackerCandidate(
+        captureSequence: 2,
+        targetPixelRect: CGRect(x: 703, y: 900, width: 104, height: 29)
+    )
+
+    // 프로덕션 관용도(50px)로는 35px 이동한 같은 버튼이 안정으로 인정된다.
+    var lenient = try StableObservationTracker(
+        targetRectangleTolerancePixels:
+            AutomationCoordinator.targetRectangleTolerancePixels
+    )
+    #expect(lenient.record(first, requiredObservationCount: 2) == nil)
+    #expect(lenient.record(slid, requiredObservationCount: 2) == slid)
+
+    // 회귀 방어: 기존 2px였다면 35px 이동은 안정 판정을 못 받아 churn한다.
+    var strict = try StableObservationTracker(
+        targetRectangleTolerancePixels: 2
+    )
+    #expect(strict.record(first, requiredObservationCount: 2) == nil)
+    #expect(strict.record(slid, requiredObservationCount: 2) == nil)
+}
+
+@Test
 func reusedPIDAndWindowIDWithDifferentProcessLifetimeResetsStreak() throws {
     var tracker = try StableObservationTracker(
         targetRectangleTolerancePixels: 2

@@ -178,7 +178,11 @@ public actor AutomationCoordinator {
         guard enterReadyCooldown >= .seconds(2) else {
             throw AutomationCoordinatorError.invalidEnterReadyCooldown
         }
-        evaluator = try RuleEvaluator(rules: rules)
+        evaluator = try RuleEvaluator(
+            rules: rules,
+            targetRectangleTolerancePixels:
+                Self.targetRectangleTolerancePixels
+        )
         self.observer = observer
         self.inputMonitor = inputMonitor
         self.actionPerformer = actionPerformer
@@ -420,6 +424,17 @@ public actor AutomationCoordinator {
 }
 
 extension AutomationCoordinator {
+    /// 버튼이 프레임 간 이동해도 '같은 버튼'으로 인정하는 최대 px
+    /// (x·y·폭·높이 각각 독립 적용). 안정 관찰·재확인의 위치 비교 기준.
+    ///
+    /// 실측(2026-07-24): 보상화면 '다시 하기'는 전리품 연출로 y축 ~36px
+    /// 출렁이고 프레임 간 최대 35px 점프한다. 기존 2px면 매 프레임 다른
+    /// 위치로 판정돼 애니메이션 내내 안정·재확인이 실패, 클릭이 3~14초
+    /// 지연됐다. 다음 버튼까지 202px 떨어져 있어 50px는 오탐 없이 출렁임만
+    /// 흡수한다. 클릭은 항상 최신 박스를 쓰므로 관용도를 넓혀도 위치
+    /// 정확도는 유지된다(안정 '판정'만 완화, 클릭 '좌표'는 최신).
+    static let targetRectangleTolerancePixels: Double = 50
+
     /// 던전 이름이 화면에 실제로 표시되는 장면인지.
     /// clear_touch(던전 클리어 연출)·running·continue_dialog엔 던전 이름이
     /// 없으므로 이 화면에서 뽑은 텍스트는 던전 이름으로 신뢰하지 않는다.
