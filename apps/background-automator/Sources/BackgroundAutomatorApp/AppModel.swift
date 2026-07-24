@@ -15,11 +15,17 @@ final class AppModel: ObservableObject {
     }
     @Published private(set) var lastActionDescription = "없음"
     @Published private(set) var lastActionAt: Date?
+    @Published private(set) var activitySummary = ActivitySummary(
+        totalClicks: 0,
+        dungeonRuns: 0,
+        byDungeon: [:]
+    )
 
     private let defaults: UserDefaults
     private let captureService: WindowCaptureService
     private let preflightService: PreflightService
     private let diagnosticsWriter: DiagnosticsFileWriter?
+    private let activityWriter: ActivityLogWriter?
     private let clock = ContinuousClock()
     private var lastPreflightDiagnostics: PreflightDiagnostics?
     private var lastObservationDiagnostics: ObservationDiagnostics?
@@ -49,14 +55,33 @@ final class AppModel: ObservableObject {
                 captureService: captureService
             )
         )
-        diagnosticsWriter = Self.diagnosticsDirectory().map {
+        let directory = Self.diagnosticsDirectory()
+        diagnosticsWriter = directory.map {
             DiagnosticsFileWriter(directory: $0)
+        }
+        let activityWriter = directory.map {
+            ActivityLogWriter(directory: $0)
+        }
+        self.activityWriter = activityWriter
+        if let summary = try? activityWriter?.summary() {
+            activitySummary = summary
         }
         writeDiagnostics()
     }
 
     var isRunning: Bool {
         loopTask != nil
+    }
+
+    var topDungeonSummary: String? {
+        guard
+            let top = activitySummary.byDungeon.max(by: {
+                $0.value < $1.value
+            })
+        else {
+            return nil
+        }
+        return "\(top.key) \(top.value)회"
     }
 
     var isTransitioning: Bool {
@@ -353,6 +378,9 @@ private extension AppModel {
                 let coordinatorState = await coordinator.state
                 lastObservationDiagnostics =
                     await coordinator.lastObservation
+                if case .action(.clicked) = result {
+                    recordClick(await coordinator.lastClick)
+                }
                 updateAfterCycle(
                     result: result,
                     state: coordinatorState
@@ -400,6 +428,23 @@ private extension AppModel {
             }
         }
         status = .projecting(state)
+    }
+
+    func recordClick(_ click: AutomationCoordinator.ClickRecord?) {
+        guard let activityWriter, let click else {
+            return
+        }
+        try? activityWriter.append(
+            ActivityEvent(
+                at: Date(),
+                outcome: "clicked",
+                scene: click.ruleID,
+                dungeonName: click.dungeonName
+            )
+        )
+        if let summary = try? activityWriter.summary() {
+            activitySummary = summary
+        }
     }
 
     func saveConfiguration(_ configuration: TargetConfiguration) {

@@ -119,8 +119,20 @@ public enum AutomationCoordinatorError: Error, Equatable, Sendable {
 }
 
 public actor AutomationCoordinator {
+    public struct ClickRecord: Equatable, Sendable {
+        public let ruleID: String
+        public let dungeonName: String?
+
+        public init(ruleID: String, dungeonName: String?) {
+            self.ruleID = ruleID
+            self.dungeonName = dungeonName
+        }
+    }
+
     public private(set) var state: AutomationState = .stopped
     public private(set) var lastObservation: ObservationDiagnostics?
+    public private(set) var lastClick: ClickRecord?
+    private var lastSeenDungeonName: String?
 
     private let observer: any AutomationScreenObserving
     private let inputMonitor: any UserIdleMonitoring
@@ -261,6 +273,7 @@ public actor AutomationCoordinator {
         try ensureCanContinue(token: cycleToken)
         let frame = try await observer.observe()
         lastObservation = ObservationDiagnostics(frame: frame)
+        updateLastSeenDungeonName(from: frame)
         try ensureCanContinue(token: cycleToken)
         let now = await clock.now()
         try ensureCanContinue(token: cycleToken)
@@ -378,6 +391,10 @@ public actor AutomationCoordinator {
             )
             try ensureCanContinue(token: cycleToken)
             self.pendingCandidate = nil
+            lastClick = ClickRecord(
+                ruleID: Self.expectedRuleID(for: scene) ?? "",
+                dungeonName: lastSeenDungeonName
+            )
             if scene == .enterReady {
                 let cooldownStart = await clock.now()
                 try ensureCanContinue(token: cycleToken)
@@ -402,6 +419,20 @@ public actor AutomationCoordinator {
 }
 
 private extension AutomationCoordinator {
+    func updateLastSeenDungeonName(
+        from frame: AutomationScreenFrame
+    ) {
+        guard let size = frame.observation.imageSize else {
+            return
+        }
+        if let name = DungeonNameExtractor.extract(
+            from: frame.observation.recognizedTexts,
+            imageSize: size
+        ) {
+            lastSeenDungeonName = name
+        }
+    }
+
     func adopt(
         frame: AutomationScreenFrame,
         validatedCandidate: ActionCandidate?,

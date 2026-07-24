@@ -69,6 +69,17 @@ struct MenuContentView: View {
                 }
             }
 
+            LabeledContent("완료한 던전") {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(model.activitySummary.dungeonRuns)회")
+                    if let topDungeon = model.topDungeonSummary {
+                        Text(topDungeon)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Button("진단 폴더 열기") {
                 model.openDiagnosticsFolder()
             }

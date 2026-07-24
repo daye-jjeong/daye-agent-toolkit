@@ -1007,6 +1007,25 @@ func coordinatorExposesLastObservationDiagnosticsAfterCycle() async throws {
 }
 
 @Test
+func coordinatorRecordsLastClickSceneForActivityLog() async throws {
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: .rewardRetry, sequence: 3),
+    ])
+    await fixture.coordinator.start()
+    #expect(await fixture.coordinator.lastClick == nil)
+
+    _ = try await fixture.coordinator.runCycle()
+    _ = try await fixture.coordinator.runCycle()
+
+    let click = try #require(await fixture.coordinator.lastClick)
+    #expect(click.ruleID == "reward_retry")
+    // fixture 화면엔 던전 이름 텍스트가 없으므로 nil.
+    #expect(click.dungeonName == nil)
+}
+
+@Test
 func coordinatorReportsActionablePhasesInOrder() async throws {
     let recorder = AutomationStatusRecorder()
     let fixture = try CoordinatorFixture(
