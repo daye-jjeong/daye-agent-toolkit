@@ -157,12 +157,43 @@
       "cooldownSeconds": 2.0
     },
     {
+      "id": "deselect_challenge",
+      "requiredTexts": [
+        "선택을 해제하면 임무 없이 입장할 수 있습니다."
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기"
+      ],
+      "action": {
+        "targetText": "선택됨"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.15,
+          "minY": 0.25,
+          "maxX": 0.85,
+          "maxY": 0.95
+        },
+        "portrait-mobile": {
+          "minX": 0.05,
+          "minY": 0.25,
+          "maxX": 0.95,
+          "maxY": 0.95
+        }
+      },
+      "minimumOCRConfidence": 0.45,
+      "stableObservationCount": 2,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 2.0
+    },
+    {
       "id": "enter_ready",
       "requiredTexts": [
         "입장하기"
       ],
       "forbiddenTexts": [
-        "장면 넘기기"
+        "장면 넘기기",
+        "선택을 해제하면 임무 없이 입장할 수 있습니다."
       ],
       "action": {
         "targetText": "입장하기"
@@ -181,36 +212,7 @@
           "maxY": 1.0
         }
       },
-      "appearance": {
-        "contextText": "도전",
-        "contextRegions": {
-          "landscape": {
-            "minX": 0.05,
-            "minY": 0.15,
-            "maxX": 0.95,
-            "maxY": 0.95
-          },
-          "portrait-mobile": {
-            "minX": 0.05,
-            "minY": 0.15,
-            "maxX": 0.95,
-            "maxY": 0.95
-          }
-        },
-        "contextRange": {
-          "minimumSaturation": 0.0,
-          "maximumSaturation": 0.22,
-          "minimumLuminance": 0.15,
-          "maximumLuminance": 0.9
-        },
-        "targetRange": {
-          "minimumSaturation": 0.12,
-          "maximumSaturation": 1.0,
-          "minimumLuminance": 0.25,
-          "maximumLuminance": 0.95
-        }
-      },
-      "minimumOCRConfidence": 0.85,
+      "minimumOCRConfidence": 0.45,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 5.0

@@ -419,6 +419,20 @@ public actor AutomationCoordinator {
     }
 }
 
+extension AutomationCoordinator {
+    /// 던전 이름이 화면에 실제로 표시되는 장면인지.
+    /// clear_touch(던전 클리어 연출)·running·continue_dialog엔 던전 이름이
+    /// 없으므로 이 화면에서 뽑은 텍스트는 던전 이름으로 신뢰하지 않는다.
+    static func sceneHasDungeonName(_ scene: AutomationScene) -> Bool {
+        switch scene {
+        case .rewardRetry, .missionSelection, .enterReady:
+            true
+        case .clearTouch, .continueDialog, .running:
+            false
+        }
+    }
+}
+
 private extension AutomationCoordinator {
     func updateLastSeenDungeonName(
         from frame: AutomationScreenFrame,
@@ -561,20 +575,6 @@ private extension AutomationCoordinator {
     func ensureCurrentRun(token: UUID) throws {
         guard runToken == token else {
             throw CancellationError()
-        }
-    }
-
-    /// 던전 이름이 화면에 실제로 표시되는 장면인지.
-    /// clear_touch(던전 클리어 연출)·running·continue_dialog엔 던전 이름이
-    /// 없으므로 이 화면에서 뽑은 텍스트는 던전 이름으로 신뢰하지 않는다.
-    public static func sceneHasDungeonName(
-        _ scene: AutomationScene
-    ) -> Bool {
-        switch scene {
-        case .rewardRetry, .missionSelection, .enterReady:
-            true
-        case .clearTouch, .continueDialog, .running:
-            false
         }
     }
 
