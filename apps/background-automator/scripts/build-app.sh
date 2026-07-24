@@ -53,15 +53,26 @@ if [[ "${bundle_identifier}" != "com.dayejeong.background-automator" ]]; then
     exit 1
 fi
 
+# 자체 서명 코드사인 인증서로 서명하면 코드가 바뀌어도 지정 요구사항
+# (designated requirement)이 인증서 기준으로 동일해 macOS 권한(TCC)이
+# 유지된다. 인증서가 없으면 ad-hoc(-)으로 폴백하되, 이 경우 재빌드마다
+# 화면 기록·손쉬운 사용·입력 모니터링 권한을 다시 허용해야 한다.
+sign_identity="Background Automator Local Signing"
+if ! /usr/bin/security find-certificate -c "${sign_identity}" \
+    >/dev/null 2>&1; then
+    echo "Self-signed identity not found; falling back to ad-hoc signing." >&2
+    sign_identity="-"
+fi
+
 /usr/bin/codesign \
     --force \
-    --sign - \
+    --sign "${sign_identity}" \
     --identifier "${bundle_identifier}" \
     --timestamp=none \
     "${macos_path}/${executable_name}"
 /usr/bin/codesign \
     --force \
-    --sign - \
+    --sign "${sign_identity}" \
     --identifier "${bundle_identifier}" \
     --timestamp=none \
     "${app_path}"
