@@ -17,10 +17,47 @@ public struct RuleSafetyMinimums: Sendable {
     private init() {}
 }
 
+public enum BackgroundAutomatorPaths {
+    public static let supportDirectoryName = "BackgroundAutomator"
+    public static let overrideRulesFileName = "rules.json"
+
+    public static func supportDirectory(
+        fileManager: FileManager = .default
+    ) -> URL? {
+        fileManager.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first?.appendingPathComponent(
+            supportDirectoryName,
+            isDirectory: true
+        )
+    }
+
+    public static func overrideRulesURL(
+        fileManager: FileManager = .default
+    ) -> URL? {
+        supportDirectory(fileManager: fileManager)?
+            .appendingPathComponent(overrideRulesFileName)
+    }
+}
+
 struct DefaultRuleResourceContext: Sendable {
     let isPackagedApplication: Bool
     let applicationResourceRoot: URL?
     let developmentFallbackURL: URL?
+    let overrideURL: URL?
+
+    init(
+        isPackagedApplication: Bool,
+        applicationResourceRoot: URL?,
+        developmentFallbackURL: URL?,
+        overrideURL: URL? = nil
+    ) {
+        self.isPackagedApplication = isPackagedApplication
+        self.applicationResourceRoot = applicationResourceRoot
+        self.developmentFallbackURL = developmentFallbackURL
+        self.overrideURL = overrideURL
+    }
 }
 
 public struct RuleLoader: Sendable {
@@ -32,12 +69,14 @@ public struct RuleLoader: Sendable {
 
     public func loadDefaultRules() throws -> [AutomationRule] {
         let mainBundle = Bundle.main
+        let overrideURL = BackgroundAutomatorPaths.overrideRulesURL()
         if Self.isPackagedApplication(mainBundle) {
             return try loadDefaultRules(
                 context: DefaultRuleResourceContext(
                     isPackagedApplication: true,
                     applicationResourceRoot: mainBundle.resourceURL,
-                    developmentFallbackURL: nil
+                    developmentFallbackURL: nil,
+                    overrideURL: overrideURL
                 )
             )
         }
@@ -49,7 +88,8 @@ public struct RuleLoader: Sendable {
                 developmentFallbackURL: Bundle.module.url(
                     forResource: "default-rules",
                     withExtension: "json"
-                )
+                ),
+                overrideURL: overrideURL
             )
         )
     }
@@ -67,6 +107,15 @@ public struct RuleLoader: Sendable {
     func loadDefaultRules(
         context: DefaultRuleResourceContext
     ) throws -> [AutomationRule] {
+        // 로컬 오버라이드 우선: 존재하면 그대로 로드하고, 손상됐으면
+        // 조용히 기본값으로 내려가지 않고 오류를 던진다(오탐 방지).
+        if
+            let overrideURL = context.overrideURL,
+            FileManager.default.fileExists(atPath: overrideURL.path)
+        {
+            return try load(data: Data(contentsOf: overrideURL))
+        }
+
         if
             let resourceRoot = context.applicationResourceRoot,
             let packagedURL = packagedRulesURL(

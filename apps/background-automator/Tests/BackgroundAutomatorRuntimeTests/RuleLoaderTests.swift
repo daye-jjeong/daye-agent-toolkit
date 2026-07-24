@@ -15,6 +15,21 @@ func decodesPortraitRetryRuleFromBundledDefaults() throws {
 }
 
 @Test
+func clearTouchDefaultUsesStableTouchPromptSignature() throws {
+    // 실측(2026-07-24 마비노기 모바일 던전 결과 화면): 게임은
+    // '던전 클리어!'를 신뢰도 0.50 장식 폰트로 렌더링해 정확 매칭·신뢰도
+    // 필터를 모두 통과 못 한다. 신뢰도 1.00으로 안정적인
+    // '화면을 터치해 주세요' 단독을 결과 화면 시그니처로 쓴다.
+    let rules = try RuleLoader().loadDefaultRules()
+    let clearTouch = try #require(rules.first { $0.id == "clear_touch" })
+
+    #expect(clearTouch.requiredTexts == ["화면을 터치해 주세요"])
+    #expect(!clearTouch.requiredTexts.contains("던전 클리어"))
+    #expect(clearTouch.action.safePointRegion != nil)
+    #expect(clearTouch.action.targetText == nil)
+}
+
+@Test
 func loadsPackagedDefaultsFromApplicationResources() throws {
     let fileManager = FileManager.default
     let resourceRoot = fileManager.temporaryDirectory
@@ -610,6 +625,121 @@ func rejectsUnknownAppearanceField() throws {
     )) {
         try RuleLoader().load(data: data)
     }
+}
+
+@Test
+func overrideRulesFileTakesPrecedenceOverPackagedDefaults() throws {
+    let fileManager = FileManager.default
+    let temporaryRoot = fileManager.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let runtimeBundle = temporaryRoot.appendingPathComponent(
+        "BackgroundAutomator_BackgroundAutomatorRuntime.bundle",
+        isDirectory: true
+    )
+    try fileManager.createDirectory(
+        at: runtimeBundle,
+        withIntermediateDirectories: true
+    )
+    defer {
+        try? fileManager.removeItem(at: temporaryRoot)
+    }
+    try emptyRuleDocument().write(
+        to: runtimeBundle.appendingPathComponent("default-rules.json")
+    )
+    let overrideURL = temporaryRoot.appendingPathComponent("rules.json")
+    try makeRuleDocument(id: "override_rule").write(to: overrideURL)
+
+    let rules = try RuleLoader().loadDefaultRules(
+        context: DefaultRuleResourceContext(
+            isPackagedApplication: true,
+            applicationResourceRoot: temporaryRoot,
+            developmentFallbackURL: nil,
+            overrideURL: overrideURL
+        )
+    )
+
+    #expect(rules.map(\.id) == ["override_rule"])
+}
+
+@Test
+func missingOverrideFileFallsBackToPackagedDefaults() throws {
+    let fileManager = FileManager.default
+    let temporaryRoot = fileManager.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let runtimeBundle = temporaryRoot.appendingPathComponent(
+        "BackgroundAutomator_BackgroundAutomatorRuntime.bundle",
+        isDirectory: true
+    )
+    try fileManager.createDirectory(
+        at: runtimeBundle,
+        withIntermediateDirectories: true
+    )
+    defer {
+        try? fileManager.removeItem(at: temporaryRoot)
+    }
+    try makeRuleDocument(id: "packaged_rule").write(
+        to: runtimeBundle.appendingPathComponent("default-rules.json")
+    )
+
+    let rules = try RuleLoader().loadDefaultRules(
+        context: DefaultRuleResourceContext(
+            isPackagedApplication: true,
+            applicationResourceRoot: temporaryRoot,
+            developmentFallbackURL: nil,
+            overrideURL: temporaryRoot.appendingPathComponent(
+                "missing-rules.json"
+            )
+        )
+    )
+
+    #expect(rules.map(\.id) == ["packaged_rule"])
+}
+
+@Test
+func malformedOverrideFailsInsteadOfSilentlyFallingBack() throws {
+    let fileManager = FileManager.default
+    let temporaryRoot = fileManager.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let runtimeBundle = temporaryRoot.appendingPathComponent(
+        "BackgroundAutomator_BackgroundAutomatorRuntime.bundle",
+        isDirectory: true
+    )
+    try fileManager.createDirectory(
+        at: runtimeBundle,
+        withIntermediateDirectories: true
+    )
+    defer {
+        try? fileManager.removeItem(at: temporaryRoot)
+    }
+    try makeRuleDocument(id: "packaged_rule").write(
+        to: runtimeBundle.appendingPathComponent("default-rules.json")
+    )
+    let overrideURL = temporaryRoot.appendingPathComponent("rules.json")
+    try Data("not-json".utf8).write(to: overrideURL)
+
+    #expect(throws: RuleLoaderError.malformedDocument("invalid JSON")) {
+        try RuleLoader().loadDefaultRules(
+            context: DefaultRuleResourceContext(
+                isPackagedApplication: true,
+                applicationResourceRoot: temporaryRoot,
+                developmentFallbackURL: nil,
+                overrideURL: overrideURL
+            )
+        )
+    }
+}
+
+@Test
+func supportDirectoryEndsWithBackgroundAutomator() throws {
+    let directory = try #require(
+        BackgroundAutomatorPaths.supportDirectory()
+    )
+
+    #expect(directory.lastPathComponent == "BackgroundAutomator")
+    #expect(
+        directory.deletingLastPathComponent().lastPathComponent
+            == "Application Support"
+    )
 }
 
 private func validRegion() -> [String: Any] {

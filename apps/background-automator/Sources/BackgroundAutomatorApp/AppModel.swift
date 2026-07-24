@@ -172,12 +172,8 @@ private extension AppModel {
     static func diagnosticsDirectory(
         fileManager: FileManager = .default
     ) -> URL? {
-        fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first?.appendingPathComponent(
-            "BackgroundAutomator",
-            isDirectory: true
+        BackgroundAutomatorPaths.supportDirectory(
+            fileManager: fileManager
         )
     }
 
