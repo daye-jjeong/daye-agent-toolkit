@@ -180,7 +180,7 @@ public enum AutomationPollingSchedule {
         case .combatWait, .cooldown:
             // A방식: 입장 후 결과 화면을 실시간에 가깝게 감지하도록
             // 짧은 폴링을 유지한다(관찰 CPU는 실측 0.3% 수준).
-            .seconds(2)
+            .seconds(1)
         default:
             .milliseconds(500)
         }

@@ -85,9 +85,9 @@ func menuStatusProjectsCoordinatorStates() {
 func pollingScheduleUsesFastAndLongIntervalsWithoutBusySpin() {
     #expect(AutomationPollingSchedule.delay(for: .observing) == .milliseconds(500))
     #expect(AutomationPollingSchedule.delay(for: .buttonDetected) == .milliseconds(500))
-    // A방식: 결과를 실시간에 가깝게 감지하도록 대기 상태 폴링을 2초로.
-    #expect(AutomationPollingSchedule.delay(for: .cooldown) == .seconds(2))
-    #expect(AutomationPollingSchedule.delay(for: .combatWait) == .seconds(2))
+    // A방식: 결과를 실시간에 가깝게 감지하도록 대기 상태 폴링을 1초로.
+    #expect(AutomationPollingSchedule.delay(for: .cooldown) == .seconds(1))
+    #expect(AutomationPollingSchedule.delay(for: .combatWait) == .seconds(1))
     #expect(AutomationPollingSchedule.delay(for: .stopped) >= .milliseconds(500))
 }
 

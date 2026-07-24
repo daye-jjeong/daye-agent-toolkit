@@ -69,15 +69,15 @@ func clearTouchRequiresExactContextAndUsesOnlySafePoint() throws {
     #expect(!rule.requiredTexts.contains("던전 클리어"))
     #expect(rule.action.targetText == nil)
     #expect(rule.action.safePointRegion != nil)
-    #expect(rule.cooldownSeconds >= 2)
+    #expect(rule.cooldownSeconds >= 1)
 }
 
 @Test(arguments: [
     ("reward_retry", "다시 하기", 0.5),
     ("continue_dialog", "계속하기", 0.5),
     ("mission_selection", "도전", 0.5),
-    // A방식: 입장 후 억제를 5초로 단축(실시간 결과 감지).
-    ("enter_ready", "입장하기", 5.0),
+    // A방식: 입장 후 억제를 2초로 단축(실시간 결과 감지).
+    ("enter_ready", "입장하기", 2.0),
 ])
 func textActionsUseExactOCRTargetBoundingBoxConfiguration(
     id: String,
@@ -156,6 +156,25 @@ func runningRuleIsExplicitlyNonActionableUntilLiveCalibration() throws {
             layout: .portraitMobile,
             imageSize: .init(width: 626, height: 949)
         ) == nil
+    )
+}
+
+@Test
+func everyActionableRuleMapsToAutomationScene() throws {
+    // 회귀(2026-07-24): deselect_challenge를 JSON에만 추가하고
+    // AutomationScene enum·expectedRuleID 매핑을 빠뜨려, 후보는
+    // 생성되나 adopt 단계에서 막혀 클릭이 안 됐다. 규칙 id ↔ scene
+    // 매핑을 전수 검증해 매핑 누락을 컴파일이 아닌 테스트로 잡는다.
+    let rules = try RuleLoader().loadDefaultRules()
+    for rule in rules where rule.id != "running" {
+        #expect(
+            AutomationCoordinator.scene(forRuleID: rule.id) != nil,
+            "규칙 \(rule.id)에 대응하는 AutomationScene 매핑이 없음"
+        )
+    }
+    #expect(
+        AutomationCoordinator.scene(forRuleID: "deselect_challenge")
+            == .deselectChallenge
     )
 }
 

@@ -161,21 +161,21 @@ public actor AutomationCoordinator {
         inputMonitor: any UserIdleMonitoring,
         actionPerformer: any AutomationActionPerforming,
         clock: any AutomationClockReading = ContinuousAutomationClock(),
-        idleThreshold: Duration = .seconds(3),
-        clearTouchDelay: Duration = .seconds(2),
-        enterReadyCooldown: Duration = .seconds(5),
+        idleThreshold: Duration = .seconds(1),
+        clearTouchDelay: Duration = .seconds(1),
+        enterReadyCooldown: Duration = .seconds(2),
         statusReporter: (
             @Sendable (AutomationMenuStatus) async -> Void
         )? = nil
     ) throws {
-        guard idleThreshold >= .seconds(3) else {
+        guard idleThreshold >= .seconds(1) else {
             throw AutomationCoordinatorError.invalidIdleThreshold
         }
-        guard clearTouchDelay >= .seconds(2) else {
+        guard clearTouchDelay >= .seconds(1) else {
             throw AutomationCoordinatorError.invalidClearTouchDelay
         }
-        // A방식: 입장 후 5초 억제로 중복 입장만 막고 관찰을 재개한다.
-        guard enterReadyCooldown >= .seconds(5) else {
+        // A방식: 입장 후 2초 억제로 중복 입장만 막고 관찰을 재개한다.
+        guard enterReadyCooldown >= .seconds(2) else {
             throw AutomationCoordinatorError.invalidEnterReadyCooldown
         }
         evaluator = try RuleEvaluator(rules: rules)
@@ -427,8 +427,35 @@ extension AutomationCoordinator {
         switch scene {
         case .rewardRetry, .missionSelection, .enterReady:
             true
-        case .clearTouch, .continueDialog, .running:
+        case .clearTouch, .continueDialog, .running, .deselectChallenge:
             false
+        }
+    }
+
+    static func expectedRuleID(
+        for scene: AutomationScene
+    ) -> String? {
+        switch scene {
+        case .clearTouch:
+            "clear_touch"
+        case .rewardRetry:
+            "reward_retry"
+        case .continueDialog:
+            "continue_dialog"
+        case .missionSelection:
+            "mission_selection"
+        case .deselectChallenge:
+            "deselect_challenge"
+        case .enterReady:
+            "enter_ready"
+        case .running:
+            nil
+        }
+    }
+
+    static func scene(forRuleID ruleID: String) -> AutomationScene? {
+        AutomationScene.allCases.first {
+            expectedRuleID(for: $0) == ruleID
         }
     }
 }
@@ -575,31 +602,6 @@ private extension AutomationCoordinator {
     func ensureCurrentRun(token: UUID) throws {
         guard runToken == token else {
             throw CancellationError()
-        }
-    }
-
-    static func expectedRuleID(
-        for scene: AutomationScene
-    ) -> String? {
-        switch scene {
-        case .clearTouch:
-            "clear_touch"
-        case .rewardRetry:
-            "reward_retry"
-        case .continueDialog:
-            "continue_dialog"
-        case .missionSelection:
-            "mission_selection"
-        case .enterReady:
-            "enter_ready"
-        case .running:
-            nil
-        }
-    }
-
-    static func scene(forRuleID ruleID: String) -> AutomationScene? {
-        AutomationScene.allCases.first {
-            expectedRuleID(for: $0) == ruleID
         }
     }
 

@@ -5,6 +5,7 @@ public enum AutomationScene: String, CaseIterable, Equatable, Sendable {
     case rewardRetry
     case continueDialog
     case missionSelection
+    case deselectChallenge
     case enterReady
     case running
 }

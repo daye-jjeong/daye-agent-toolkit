@@ -58,7 +58,7 @@ func coordinatorRejectsWeakenedSafetyTimings() throws {
             inputMonitor: ImmediateIdleMonitor(),
             actionPerformer: actioner,
             clock: clock,
-            idleThreshold: .seconds(2)
+            idleThreshold: .milliseconds(500)
         )
     }
     #expect(
@@ -70,7 +70,7 @@ func coordinatorRejectsWeakenedSafetyTimings() throws {
             inputMonitor: ImmediateIdleMonitor(),
             actionPerformer: actioner,
             clock: clock,
-            clearTouchDelay: .seconds(1)
+            clearTouchDelay: .milliseconds(500)
         )
     }
     #expect(
@@ -82,7 +82,7 @@ func coordinatorRejectsWeakenedSafetyTimings() throws {
             inputMonitor: ImmediateIdleMonitor(),
             actionPerformer: actioner,
             clock: clock,
-            enterReadyCooldown: .seconds(4)
+            enterReadyCooldown: .seconds(1)
         )
     }
 }
@@ -236,7 +236,7 @@ func validatedCandidateAdoptsItsActionScene() async throws {
 }
 
 @Test
-func clearTouchWaitsAtLeastTwoSecondsFromFirstRecognition() async throws {
+func clearTouchWaitsAtLeastOneSecondFromFirstRecognition() async throws {
     let fixture = try CoordinatorFixture(frames: [
         .make(scene: .clearTouch, sequence: 1),
         .make(scene: .clearTouch, sequence: 2),
@@ -247,11 +247,11 @@ func clearTouchWaitsAtLeastTwoSecondsFromFirstRecognition() async throws {
 
     await fixture.clock.set(.zero)
     _ = try await fixture.coordinator.runCycle()
-    await fixture.clock.set(.seconds(1))
+    await fixture.clock.set(.milliseconds(500))
     _ = try await fixture.coordinator.runCycle()
     #expect(await fixture.actioner.requests.isEmpty)
 
-    await fixture.clock.set(.seconds(2))
+    await fixture.clock.set(.seconds(1))
     #expect(
         try await fixture.coordinator.runCycle()
             == .action(.clicked)
@@ -275,7 +275,7 @@ func restartRequiresANewClearTouchDelayWindow() async throws {
     await fixture.clock.set(.seconds(100))
     await fixture.coordinator.start()
     _ = try await fixture.coordinator.runCycle()
-    await fixture.clock.set(.seconds(101))
+    await fixture.clock.set(.milliseconds(100_500))
 
     #expect(try await fixture.coordinator.runCycle() == .noAction)
     #expect(await fixture.actioner.requests.isEmpty)
@@ -684,7 +684,7 @@ func unvalidatedContinueTextCannotUnlockFailedRetryScene() async throws {
 
 @Test
 func successfulEnterReadyStartsShortSuppressionThenResumesObserving() async throws {
-    // A방식: 입장 후 5초만 억제(중복 입장 방지)하고 관찰을 재개해
+    // A방식: 입장 후 2초만 억제(중복 입장 방지)하고 관찰을 재개해
     // 던전 길이와 무관하게 결과 화면을 실시간에 가깝게 감지한다.
     let fixture = try CoordinatorFixture(frames: [
         .make(scene: .enterReady, sequence: 1),
@@ -702,16 +702,16 @@ func successfulEnterReadyStartsShortSuppressionThenResumesObserving() async thro
     )
     #expect(
         await fixture.coordinator.state
-            == .cooldown(scene: .running, until: .seconds(15))
+            == .cooldown(scene: .running, until: .seconds(12))
     )
 
-    // 억제 5초 동안엔 관찰하지 않는다(중복 입장 방지).
-    await fixture.clock.set(.seconds(14))
+    // 억제 2초 동안엔 관찰하지 않는다(중복 입장 방지).
+    await fixture.clock.set(.seconds(11))
     #expect(try await fixture.coordinator.runCycle() == .cooldown)
     #expect(await fixture.observerCallCount() == 3)
 
-    // 5초가 지나면 곧바로 관찰을 재개한다.
-    await fixture.clock.set(.seconds(15))
+    // 2초가 지나면 곧바로 관찰을 재개한다.
+    await fixture.clock.set(.seconds(12))
     #expect(try await fixture.coordinator.runCycle() == .noAction)
     #expect(await fixture.coordinator.state == .unknown)
 }
@@ -1476,7 +1476,7 @@ private struct ImmediateIdleMonitor: UserIdleMonitoring {
     }
 
     func waitUntilIdle(for duration: Duration) async throws -> UserInputSnapshot {
-        #expect(duration == .seconds(3))
+        #expect(duration == .seconds(1))
         return coordinatorInputSnapshot()
     }
 }
@@ -1657,6 +1657,8 @@ private func expectedRuleID(for scene: AutomationScene) -> String? {
         "continue_dialog"
     case .missionSelection:
         "mission_selection"
+    case .deselectChallenge:
+        "deselect_challenge"
     case .enterReady:
         "enter_ready"
     case .running:
@@ -1674,6 +1676,8 @@ private func defaultTexts(for scene: AutomationScene) -> [String] {
         ["계속하기"]
     case .missionSelection:
         ["도전"]
+    case .deselectChallenge:
+        ["선택을 해제하면 임무 없이 입장할 수 있습니다.", "선택됨"]
     case .enterReady:
         ["입장하기"]
     case .running:

@@ -34,7 +34,7 @@
       "minimumOCRConfidence": 0.85,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
-      "cooldownSeconds": 2.0
+      "cooldownSeconds": 1.0
     },
     {
       "id": "reward_retry",
@@ -64,7 +64,7 @@
       "minimumOCRConfidence": 0.85,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
-      "cooldownSeconds": 2.0
+      "cooldownSeconds": 1.0
     },
     {
       "id": "continue_dialog",
@@ -95,7 +95,7 @@
       "minimumOCRConfidence": 0.45,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
-      "cooldownSeconds": 2.0
+      "cooldownSeconds": 1.0
     },
     {
       "id": "mission_selection",
@@ -154,7 +154,7 @@
       "minimumOCRConfidence": 0.85,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
-      "cooldownSeconds": 2.0
+      "cooldownSeconds": 1.0
     },
     {
       "id": "deselect_challenge",
@@ -184,7 +184,7 @@
       "minimumOCRConfidence": 0.45,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
-      "cooldownSeconds": 2.0
+      "cooldownSeconds": 1.0
     },
     {
       "id": "enter_ready",
@@ -215,7 +215,7 @@
       "minimumOCRConfidence": 0.45,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
-      "cooldownSeconds": 5.0
+      "cooldownSeconds": 2.0
     },
     {
       "id": "running",
