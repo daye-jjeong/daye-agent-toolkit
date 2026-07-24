@@ -33,7 +33,19 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
             }
         )
         #expect(rule.stableObservationCount >= 2)
-        #expect(rule.minimumOCRConfidence >= 0.8)
+        if rule.id == "continue_dialog" {
+            // 실측: '계속하기' 버튼이 신뢰도 0.50 장식 폰트라 기준을
+            // 낮춘다. 시그니처 '던전 탐험을 계속하시겠습니까?'(1.0)를
+            // 이중 확인으로 함께 요구해 오탐을 막는다.
+            #expect(rule.minimumOCRConfidence >= 0.4)
+            #expect(
+                rule.requiredTexts.contains(
+                    "던전 탐험을 계속하시겠습니까?"
+                )
+            )
+        } else {
+            #expect(rule.minimumOCRConfidence >= 0.8)
+        }
         #expect(rule.postActionDelaySeconds >= 0.5)
         #expect(rule.cooldownSeconds >= 0.5)
     }

@@ -69,7 +69,8 @@
     {
       "id": "continue_dialog",
       "requiredTexts": [
-        "계속하기"
+        "계속하기",
+        "던전 탐험을 계속하시겠습니까?"
       ],
       "forbiddenTexts": [
         "장면 넘기기"
@@ -91,7 +92,7 @@
           "maxY": 1.0
         }
       },
-      "minimumOCRConfidence": 0.85,
+      "minimumOCRConfidence": 0.45,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 2.0
