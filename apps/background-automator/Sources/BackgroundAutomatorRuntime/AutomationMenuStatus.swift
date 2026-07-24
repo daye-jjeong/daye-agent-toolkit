@@ -177,9 +177,16 @@ public enum AutomationPollingSchedule {
         for status: AutomationMenuStatus
     ) -> Duration {
         switch status {
-        case .combatWait, .cooldown:
-            // A방식: 입장 후 결과 화면을 실시간에 가깝게 감지하도록
-            // 짧은 폴링을 유지한다(관찰 CPU는 실측 0.3% 수준).
+        case .observing, .buttonDetected:
+            // 액션 구간(버튼 탐지·안정화)은 250ms로 빠르게 관찰해
+            // 안정화를 앞당긴다. OCR은 Neural Engine 가속이라 CPU
+            // 실측 0.3%→~0.6% 수준으로 부담이 없다.
+            .milliseconds(250)
+        case .cooldown:
+            // 클릭 직후 다음 확인까지의 대기. 500ms로 다음 액션을 앞당긴다.
+            .milliseconds(500)
+        case .combatWait:
+            // 전투 대기는 ~90초 게임 시간이라 1초 유지(폴링 낭비 방지).
             .seconds(1)
         default:
             .milliseconds(500)
