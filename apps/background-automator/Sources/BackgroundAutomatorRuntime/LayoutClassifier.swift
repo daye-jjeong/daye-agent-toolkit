@@ -11,11 +11,14 @@ public enum LayoutClassifier {
     }
 
     public struct Configuration: Equatable, Sendable {
+        // landscape 하한 1.05: 마비노기 모바일(iPad 래퍼)은 near-square
+        // 창(실측 1098×949, 비율 1.157)에서도 landscape UI를 렌더링한다.
+        // 0.85...1.05 구간은 세로/가로 판별이 모호해 unsupported로 유지.
         public static let `default` = Configuration(
             validatedMinimumWidth: 480,
             validatedMinimumHeight: 480,
             portraitAspectRatio: 0.5 ... 0.85,
-            landscapeAspectRatio: 1.25 ... 2.0
+            landscapeAspectRatio: 1.05 ... 2.0
         )
 
         public let minimumWidth: Double

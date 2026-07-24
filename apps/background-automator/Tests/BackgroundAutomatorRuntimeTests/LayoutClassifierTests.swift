@@ -22,6 +22,48 @@ func classifiesObservedLandscapeSize() {
 }
 
 @Test
+func classifiesNearSquareLandscapeWindowObservedInLiveGame() {
+    // 실측: 마비노기 모바일(iPad 래퍼) 창 1098×949(비율 1.157)가
+    // landscape UI를 렌더링함 — 2026-07-23 라이브 캡처 근거.
+    #expect(
+        LayoutClassifier.classify(
+            imageSize: CGSize(width: 1_098, height: 949)
+        ) == .landscape
+    )
+}
+
+@Test
+func defaultLandscapeLowerBoundIsInclusive() {
+    #expect(
+        LayoutClassifier.classify(
+            imageSize: CGSize(width: 1_050, height: 1_000)
+        ) == .landscape
+    )
+    #expect(
+        LayoutClassifier.classify(
+            imageSize: CGSize(
+                width: CGFloat(1.05.nextDown * 1_000),
+                height: 1_000
+            )
+        ) == .unsupported
+    )
+}
+
+@Test
+func defaultSquareAndPortraitGapRatiosRemainUnsupported() {
+    #expect(
+        LayoutClassifier.classify(
+            imageSize: CGSize(width: 1_000, height: 1_000)
+        ) == .unsupported
+    )
+    #expect(
+        LayoutClassifier.classify(
+            imageSize: CGSize(width: 900, height: 1_000)
+        ) == .unsupported
+    )
+}
+
+@Test
 func minimumDimensionsAreInclusive() throws {
     let configuration = try boundaryConfiguration()
 
