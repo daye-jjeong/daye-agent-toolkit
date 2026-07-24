@@ -32,7 +32,7 @@ public enum PreflightIssue: Equatable, Sendable {
     case targetNotRunning
     case targetWindowUnavailable
     case ambiguousTargetWindows(count: Int)
-    case unsupportedLayout
+    case unsupportedLayout(measured: CGSize)
 
     public var koreanGuidance: String {
         switch self {
@@ -50,9 +50,15 @@ public enum PreflightIssue: Equatable, Sendable {
             "정확한 제목의 창 하나만 열고 최소화를 해제해 주세요."
         case let .ambiguousTargetWindows(count):
             "같은 제목의 창이 \(count)개입니다. 고유한 정확한 창 제목을 입력해 주세요."
-        case .unsupportedLayout:
-            "대상 창을 지원되는 가로 또는 모바일 세로 크기로 조정해 주세요."
+        case let .unsupportedLayout(measured):
+            "대상 창 크기 \(Self.dimensionText(measured.width))×"
+                + "\(Self.dimensionText(measured.height))은 지원 범위가 아닙니다. "
+                + "창을 가로로 넓히거나 모바일 세로 비율로 조정해 주세요."
         }
+    }
+
+    private static func dimensionText(_ value: CGFloat) -> String {
+        value.isFinite ? String(Int(value.rounded())) : "?"
     }
 }
 
@@ -180,7 +186,9 @@ public struct PreflightService: Sendable {
             imageSize: window.frame.size
         )
         guard layout != .unsupported else {
-            return .needsAttention(.unsupportedLayout)
+            return .needsAttention(
+                .unsupportedLayout(measured: window.frame.size)
+            )
         }
         return .ready(
             PreflightReadyContext(window: window, layout: layout)

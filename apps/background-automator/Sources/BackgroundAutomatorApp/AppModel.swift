@@ -8,14 +8,21 @@ import Foundation
 final class AppModel: ObservableObject {
     @Published var bundleIdentifier: String
     @Published var titleContains: String
-    @Published private(set) var status: AutomationMenuStatus = .stopped
+    @Published private(set) var status: AutomationMenuStatus = .stopped {
+        didSet {
+            writeDiagnostics()
+        }
+    }
     @Published private(set) var lastActionDescription = "없음"
     @Published private(set) var lastActionAt: Date?
 
     private let defaults: UserDefaults
     private let captureService: WindowCaptureService
     private let preflightService: PreflightService
+    private let diagnosticsWriter: DiagnosticsFileWriter?
     private let clock = ContinuousClock()
+    private var lastPreflightDiagnostics: PreflightDiagnostics?
+    private var lastObservationDiagnostics: ObservationDiagnostics?
 
     private var lifecycleGate = AutomationLifecycleGate()
     private var startPending = false
@@ -42,6 +49,10 @@ final class AppModel: ObservableObject {
                 captureService: captureService
             )
         )
+        diagnosticsWriter = Self.diagnosticsDirectory().map {
+            DiagnosticsFileWriter(directory: $0)
+        }
+        writeDiagnostics()
     }
 
     var isRunning: Bool {
@@ -115,10 +126,9 @@ final class AppModel: ObservableObject {
     func openDiagnosticsFolder() {
         let fileManager = FileManager.default
         guard
-            let applicationSupport = fileManager.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first
+            let folder = Self.diagnosticsDirectory(
+                fileManager: fileManager
+            )
         else {
             status = .needsAttention(
                 "진단 폴더 위치를 찾을 수 없습니다."
@@ -126,11 +136,6 @@ final class AppModel: ObservableObject {
             return
         }
 
-        let folder = applicationSupport
-            .appendingPathComponent(
-                "BackgroundAutomator",
-                isDirectory: true
-            )
         do {
             try fileManager.createDirectory(
                 at: folder,
@@ -160,6 +165,39 @@ private extension AppModel {
         "BackgroundAutomator.targetBundleIdentifier"
     static let titleContainsKey =
         "BackgroundAutomator.targetTitleContains"
+    static let appVersion =
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"]
+            as? String ?? "dev"
+
+    static func diagnosticsDirectory(
+        fileManager: FileManager = .default
+    ) -> URL? {
+        fileManager.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first?.appendingPathComponent(
+            "BackgroundAutomator",
+            isDirectory: true
+        )
+    }
+
+    func writeDiagnostics() {
+        guard let diagnosticsWriter else {
+            return
+        }
+        diagnosticsWriter.write(
+            content: DiagnosticsSnapshot.Content(
+                schemaVersion: 1,
+                appVersion: Self.appVersion,
+                processID: ProcessInfo.processInfo.processIdentifier,
+                statusDescription: status.koreanDescription,
+                preflight: lastPreflightDiagnostics,
+                lastActionDescription: lastActionDescription,
+                lastActionAt: lastActionAt,
+                observation: lastObservationDiagnostics
+            )
+        )
+    }
 
     func beginStart() {
         let session = lifecycleGate.beginStart(
@@ -205,6 +243,9 @@ private extension AppModel {
         saveConfiguration(configuration)
         let preflight = await preflightService.check(
             configuration: configuration
+        )
+        lastPreflightDiagnostics = PreflightDiagnostics(
+            result: preflight
         )
         guard
             lifecycleGate.isCurrent(token),
@@ -313,9 +354,12 @@ private extension AppModel {
                 guard lifecycleGate.isCurrent(token) else {
                     return
                 }
+                let coordinatorState = await coordinator.state
+                lastObservationDiagnostics =
+                    await coordinator.lastObservation
                 updateAfterCycle(
                     result: result,
-                    state: await coordinator.state
+                    state: coordinatorState
                 )
                 try await clock.sleep(
                     for: AutomationPollingSchedule.delay(

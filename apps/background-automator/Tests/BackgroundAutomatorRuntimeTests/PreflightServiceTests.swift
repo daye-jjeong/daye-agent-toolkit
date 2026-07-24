@@ -168,7 +168,23 @@ func preflightRejectsUnsupportedWindowLayout() async {
 
     let result = await service.check(configuration: configuredTarget)
 
-    #expect(result == .needsAttention(.unsupportedLayout))
+    #expect(
+        result == .needsAttention(
+            .unsupportedLayout(
+                measured: CGSize(width: 300, height: 300)
+            )
+        )
+    )
+}
+
+@Test
+func unsupportedLayoutGuidanceIncludesMeasuredWindowSize() {
+    let guidance = PreflightIssue.unsupportedLayout(
+        measured: CGSize(width: 1_098, height: 949)
+    ).koreanGuidance
+
+    #expect(guidance.contains("1098"))
+    #expect(guidance.contains("949"))
 }
 
 @Test
@@ -196,7 +212,7 @@ func preflightReturnsReadyContextForSupportedVisibleWindow() async throws {
     .targetNotRunning,
     .targetWindowUnavailable,
     .ambiguousTargetWindows(count: 2),
-    .unsupportedLayout,
+    .unsupportedLayout(measured: CGSize(width: 1_098, height: 949)),
 ])
 func everyPreflightIssueHasConciseKoreanGuidance(
     issue: PreflightIssue

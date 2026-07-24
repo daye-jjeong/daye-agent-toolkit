@@ -120,6 +120,7 @@ public enum AutomationCoordinatorError: Error, Equatable, Sendable {
 
 public actor AutomationCoordinator {
     public private(set) var state: AutomationState = .stopped
+    public private(set) var lastObservation: ObservationDiagnostics?
 
     private let observer: any AutomationScreenObserving
     private let inputMonitor: any UserIdleMonitoring
@@ -259,6 +260,7 @@ public actor AutomationCoordinator {
 
         try ensureCanContinue(token: cycleToken)
         let frame = try await observer.observe()
+        lastObservation = ObservationDiagnostics(frame: frame)
         try ensureCanContinue(token: cycleToken)
         let now = await clock.now()
         try ensureCanContinue(token: cycleToken)
@@ -324,6 +326,7 @@ public actor AutomationCoordinator {
         try ensureCanContinue(token: cycleToken)
 
         let freshFrame = try await observer.observe()
+        lastObservation = ObservationDiagnostics(frame: freshFrame)
         try ensureCanContinue(token: cycleToken)
         let freshNow = await clock.now()
         try ensureCanContinue(token: cycleToken)

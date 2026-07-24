@@ -986,6 +986,27 @@ func concurrentCyclesNeverOverlapOrDuplicateActions() async throws {
 }
 
 @Test
+func coordinatorExposesLastObservationDiagnosticsAfterCycle() async throws {
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+    ])
+    await fixture.coordinator.start()
+    #expect(await fixture.coordinator.lastObservation == nil)
+
+    _ = try await fixture.coordinator.runCycle()
+
+    let diagnostics = try #require(
+        await fixture.coordinator.lastObservation
+    )
+    #expect(diagnostics.layout == "portrait-mobile")
+    #expect(diagnostics.imageWidth == 600)
+    #expect(diagnostics.recognizedTexts.map(\.text) == ["다시 하기"])
+    #expect(
+        diagnostics.actionCandidates.map(\.ruleID) == ["reward_retry"]
+    )
+}
+
+@Test
 func coordinatorReportsActionablePhasesInOrder() async throws {
     let recorder = AutomationStatusRecorder()
     let fixture = try CoordinatorFixture(
