@@ -24,6 +24,40 @@ func menuStatusHasKoreanPresentation(
     #expect(status.koreanDescription == expected)
 }
 
+@Test(arguments: [
+    (AutomationMenuStatus.stopped, "pause.circle"),
+    (.checkingPreflight, "hourglass"),
+    (.needsAttention("권한 필요"), "exclamationmark.triangle.fill"),
+    (.observing, "eye"),
+    (.combatWait, "hourglass"),
+    (.buttonDetected, "cursorarrow.rays"),
+    (.waitingForUserIdle, "hand.raised"),
+    (.clicking, "cursorarrow.click.2"),
+    (.cooldown, "clock"),
+    (.pausedRestorationFailure, "exclamationmark.triangle.fill"),
+    (.stopping, "stop.circle"),
+])
+func menuStatusMapsToDistinctMenuBarSymbol(
+    status: AutomationMenuStatus,
+    expected: String
+) {
+    #expect(status.symbolName == expected)
+}
+
+@Test
+func idleWaitAndObservingUseDifferentSymbolsSoUserCanTellAtAGlance() {
+    // 사용자가 아이콘만 보고 '내가 손 떼길 기다리는 중'과
+    // '그냥 관찰 중'을 구분할 수 있어야 한다.
+    #expect(
+        AutomationMenuStatus.waitingForUserIdle.symbolName
+            != AutomationMenuStatus.observing.symbolName
+    )
+    #expect(
+        AutomationMenuStatus.clicking.symbolName
+            != AutomationMenuStatus.observing.symbolName
+    )
+}
+
 @Test
 func menuStatusProjectsCoordinatorStates() {
     #expect(

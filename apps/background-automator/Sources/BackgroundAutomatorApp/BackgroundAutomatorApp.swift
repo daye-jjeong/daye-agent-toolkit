@@ -20,11 +20,14 @@ struct BackgroundAutomatorApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra(
-            "Background Automator",
-            systemImage: "cursorarrow.click.2"
-        ) {
+        MenuBarExtra {
             MenuContentView(model: model)
+        } label: {
+            Image(systemName: model.status.symbolName)
+                .accessibilityLabel(
+                    "Background Automator: "
+                        + model.status.koreanDescription
+                )
         }
         .menuBarExtraStyle(.window)
     }

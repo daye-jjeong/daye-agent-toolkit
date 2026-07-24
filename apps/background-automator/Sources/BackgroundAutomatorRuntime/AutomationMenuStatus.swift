@@ -41,6 +41,30 @@ public enum AutomationMenuStatus: Equatable, Sendable {
         }
     }
 
+    /// 메뉴막대에서 상태를 한눈에 알리는 SF Symbol 이름.
+    public var symbolName: String {
+        switch self {
+        case .stopped:
+            "pause.circle"
+        case .checkingPreflight, .combatWait:
+            "hourglass"
+        case .needsAttention, .pausedRestorationFailure:
+            "exclamationmark.triangle.fill"
+        case .observing:
+            "eye"
+        case .buttonDetected:
+            "cursorarrow.rays"
+        case .waitingForUserIdle:
+            "hand.raised"
+        case .clicking:
+            "cursorarrow.click.2"
+        case .cooldown:
+            "clock"
+        case .stopping:
+            "stop.circle"
+        }
+    }
+
     public static func projecting(
         _ state: AutomationState
     ) -> AutomationMenuStatus {
