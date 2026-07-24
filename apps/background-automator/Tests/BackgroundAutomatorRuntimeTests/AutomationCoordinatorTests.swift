@@ -1011,6 +1011,19 @@ func coordinatorExposesLastObservationDiagnosticsAfterCycle() async throws {
 }
 
 @Test
+func dungeonNameTrackedOnlyFromScreensThatActuallyShowIt() {
+    // 실측: 던전 이름('룬다 1층 2구역')은 선택·도전·입장 화면 상단에만
+    // 안정적으로 뜬다. clear_touch(던전 클리어 연출)엔 던전 이름이 없어
+    // 몬스터명('자이언트 헤드리스')이 오추출되므로 그 화면에선 갱신하지 않는다.
+    #expect(AutomationCoordinator.sceneHasDungeonName(.rewardRetry))
+    #expect(AutomationCoordinator.sceneHasDungeonName(.missionSelection))
+    #expect(AutomationCoordinator.sceneHasDungeonName(.enterReady))
+    #expect(!AutomationCoordinator.sceneHasDungeonName(.clearTouch))
+    #expect(!AutomationCoordinator.sceneHasDungeonName(.continueDialog))
+    #expect(!AutomationCoordinator.sceneHasDungeonName(.running))
+}
+
+@Test
 func coordinatorRecordsLastClickSceneForActivityLog() async throws {
     let fixture = try CoordinatorFixture(frames: [
         .make(scene: .rewardRetry, sequence: 1),

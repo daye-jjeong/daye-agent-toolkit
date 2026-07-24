@@ -274,7 +274,6 @@ public actor AutomationCoordinator {
         try ensureCanContinue(token: cycleToken)
         let frame = try await observer.observe()
         lastObservation = ObservationDiagnostics(frame: frame)
-        updateLastSeenDungeonName(from: frame)
         try ensureCanContinue(token: cycleToken)
         let now = await clock.now()
         try ensureCanContinue(token: cycleToken)
@@ -291,6 +290,7 @@ public actor AutomationCoordinator {
         ) else {
             return .noAction
         }
+        updateLastSeenDungeonName(from: frame, scene: scene)
         guard Self.expectedRuleID(for: scene) != nil else {
             return .noAction
         }
@@ -421,9 +421,13 @@ public actor AutomationCoordinator {
 
 private extension AutomationCoordinator {
     func updateLastSeenDungeonName(
-        from frame: AutomationScreenFrame
+        from frame: AutomationScreenFrame,
+        scene: AutomationScene
     ) {
-        guard let size = frame.observation.imageSize else {
+        guard
+            Self.sceneHasDungeonName(scene),
+            let size = frame.observation.imageSize
+        else {
             return
         }
         if let name = DungeonNameExtractor.extract(
@@ -557,6 +561,20 @@ private extension AutomationCoordinator {
     func ensureCurrentRun(token: UUID) throws {
         guard runToken == token else {
             throw CancellationError()
+        }
+    }
+
+    /// 던전 이름이 화면에 실제로 표시되는 장면인지.
+    /// clear_touch(던전 클리어 연출)·running·continue_dialog엔 던전 이름이
+    /// 없으므로 이 화면에서 뽑은 텍스트는 던전 이름으로 신뢰하지 않는다.
+    public static func sceneHasDungeonName(
+        _ scene: AutomationScene
+    ) -> Bool {
+        switch scene {
+        case .rewardRetry, .missionSelection, .enterReady:
+            true
+        case .clearTouch, .continueDialog, .running:
+            false
         }
     }
 
