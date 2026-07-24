@@ -43,7 +43,10 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
 func clearTouchRequiresExactContextAndUsesOnlySafePoint() throws {
     let rule = try workflowRule("clear_touch")
 
-    #expect(Set(rule.requiredTexts) == ["던전 클리어", "화면을 터치해 주세요"])
+    // 실측(2026-07-24): '던전 클리어!'는 신뢰도 0.50 장식 폰트라
+    // 신뢰 불가. 신뢰도 1.00의 '화면을 터치해 주세요' 단독을 시그니처로.
+    #expect(Set(rule.requiredTexts) == ["화면을 터치해 주세요"])
+    #expect(!rule.requiredTexts.contains("던전 클리어"))
     #expect(rule.action.targetText == nil)
     #expect(rule.action.safePointRegion != nil)
     #expect(rule.cooldownSeconds >= 2)

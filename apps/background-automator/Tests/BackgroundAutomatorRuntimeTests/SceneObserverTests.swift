@@ -448,6 +448,70 @@ func layoutRegionDisambiguatesDuplicateTargets() async throws {
 }
 
 @Test
+func clearTouchFiresOnLiveResultScreenDespiteLowConfidenceTitle() async throws {
+    // 실측(2026-07-24, 마비노기 모바일 결과 화면). 300×200 fixture에
+    // 정규화 위치를 맞춰 재현: '던전 클리어!'는 신뢰도 0.50이라 탈락하고
+    // '화면을 터치해 주세요'(1.00)만으로 클리어 화면을 판별해야 한다.
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "던전 클리어!",
+                confidence: 0.50,
+                rect: CGRect(x: 140, y: 50, width: 24, height: 14)
+            ),
+            recognized(
+                "160점 이상 S등급",
+                confidence: 1.0,
+                rect: CGRect(x: 50, y: 66, width: 76, height: 14)
+            ),
+            recognized(
+                "화면을 터치해 주세요",
+                confidence: 1.0,
+                rect: CGRect(x: 120, y: 178, width: 60, height: 12)
+            ),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "landscape-clear-touch"),
+        layout: .landscape,
+        rules: [liveClearTouchRule()]
+    )
+
+    let candidate = try #require(result.actionCandidates.first)
+    #expect(result.actionCandidates.count == 1)
+    #expect(candidate.ruleID == "clear_touch")
+    #expect(candidate.targetText == nil)
+}
+
+@Test
+func clearTouchStaysSilentOnFieldScreenWithoutTouchPrompt() async throws {
+    // 실측 필드 화면: 터치 유도 문구가 없으면 후보를 만들지 않는다.
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "마비노기 모바일",
+                confidence: 1.0,
+                rect: CGRect(x: 20, y: 4, width: 40, height: 10)
+            ),
+            recognized(
+                "파티 플레이",
+                confidence: 1.0,
+                rect: CGRect(x: 20, y: 40, width: 40, height: 12)
+            ),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "landscape-clear-touch"),
+        layout: .landscape,
+        rules: [liveClearTouchRule()]
+    )
+
+    #expect(result.actionCandidates.isEmpty)
+}
+
+@Test
 func safePointRuleReturnsCurrentImageClickTarget() async throws {
     let observer = SceneObserver(
         textRecognizer: FakeTextRecognizer([
@@ -896,6 +960,41 @@ private func missionSelectionAppearanceRule() -> AutomationRule {
             )
         ),
         minimumOCRConfidence: 0.8,
+        stableObservationCount: 2,
+        postActionDelaySeconds: 0.5,
+        cooldownSeconds: 2
+    )
+}
+
+private func liveClearTouchRule() -> AutomationRule {
+    AutomationRule(
+        id: "clear_touch",
+        requiredTexts: ["화면을 터치해 주세요"],
+        forbiddenTexts: ["장면 넘기기"],
+        action: AutomationAction(
+            targetText: nil,
+            safePointRegion: NormalizedRegion(
+                minX: 0.45,
+                minY: 0.75,
+                maxX: 0.55,
+                maxY: 0.85
+            )
+        ),
+        regions: LayoutRegionMap([
+            .portraitMobile: NormalizedRegion(
+                minX: 0.05,
+                minY: 0.05,
+                maxX: 0.95,
+                maxY: 0.95
+            ),
+            .landscape: NormalizedRegion(
+                minX: 0.05,
+                minY: 0.05,
+                maxX: 0.95,
+                maxY: 0.95
+            ),
+        ]),
+        minimumOCRConfidence: 0.85,
         stableObservationCount: 2,
         postActionDelaySeconds: 0.5,
         cooldownSeconds: 2

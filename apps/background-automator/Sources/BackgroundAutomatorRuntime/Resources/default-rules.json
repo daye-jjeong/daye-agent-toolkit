@@ -4,7 +4,6 @@
     {
       "id": "clear_touch",
       "requiredTexts": [
-        "던전 클리어",
         "화면을 터치해 주세요"
       ],
       "forbiddenTexts": [
