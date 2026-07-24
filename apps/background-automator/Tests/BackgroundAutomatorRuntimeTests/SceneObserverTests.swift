@@ -194,6 +194,57 @@ func sceneSkipObservationBlocksRulesThatOmitTheForbiddenText() async throws {
 }
 
 @Test
+func sceneSkipRuleClicksSafePointDespiteSceneSkipButton() async throws {
+    // 컷신 화면: '장면 넘기기'만 뜬다. 전역 차단 대상이지만 scene_skip은
+    // 이 화면의 지정 핸들러라 후보를 만든다(빈 공간 탭 = targetText nil).
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "장면 넘기기",
+                confidence: 0.5,
+                rect: CGRect(x: 40, y: 20, width: 120, height: 30)
+            ),
+        ])
+    )
+    let rule = AutomationRule(
+        id: "scene_skip",
+        requiredTexts: ["장면 넘기기"],
+        forbiddenTexts: [],
+        action: AutomationAction(
+            targetText: nil,
+            safePointRegion: NormalizedRegion(
+                minX: 0.68,
+                minY: 0.2,
+                maxX: 0.78,
+                maxY: 0.28
+            )
+        ),
+        regions: LayoutRegionMap([
+            .portraitMobile: NormalizedRegion(
+                minX: 0,
+                minY: 0,
+                maxX: 1,
+                maxY: 0.5
+            ),
+        ]),
+        minimumOCRConfidence: 0.4,
+        stableObservationCount: 2,
+        postActionDelaySeconds: 0.5,
+        cooldownSeconds: 1
+    )
+
+    let result = try await observer.observe(
+        image: try fixtureImage(named: "portrait-reward"),
+        layout: .portraitMobile,
+        rules: [rule]
+    )
+
+    let candidate = try #require(result.actionCandidates.first)
+    #expect(candidate.ruleID == "scene_skip")
+    #expect(candidate.targetText == nil)
+}
+
+@Test
 func duplicateTargetsInsideSearchRegionAreRejectedAsAmbiguous() async throws {
     let observer = SceneObserver(
         textRecognizer: FakeTextRecognizer([

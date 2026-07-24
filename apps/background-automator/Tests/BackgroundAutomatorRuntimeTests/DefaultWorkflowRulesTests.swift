@@ -9,6 +9,7 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
 
     #expect(
         Set(rules.map(\.id)) == [
+            "scene_skip",
             "clear_touch",
             "reward_retry",
             "continue_dialog",
@@ -18,7 +19,6 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
             "running",
         ]
     )
-    #expect(!rules.contains { $0.id == "scene_skip" })
 }
 
 @Test
@@ -31,16 +31,21 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
     // forbidden으로 오탐을 막는다(enter_ready).
     let lowConfidenceRules: Set<String> = [
         "continue_dialog", "deselect_challenge", "enter_ready",
+        "scene_skip",
     ]
 
     for rule in rules {
         #expect(rule.regions[.landscape] != nil)
         #expect(rule.regions[.portraitMobile] != nil)
-        #expect(
-            rule.forbiddenTexts.contains {
-                normalizedWorkflowText($0) == "장면넘기기"
-            }
-        )
+        // scene_skip은 장면 넘기기를 시그니처로 요구하는 유일한 예외라
+        // forbidden에 두지 않는다. 그 외 규칙은 컷신 중 반드시 얼어야 한다.
+        if rule.id != AutomationScene.sceneSkipRuleID {
+            #expect(
+                rule.forbiddenTexts.contains {
+                    normalizedWorkflowText($0) == "장면넘기기"
+                }
+            )
+        }
         #expect(rule.stableObservationCount >= 2)
         if lowConfidenceRules.contains(rule.id) {
             #expect(rule.minimumOCRConfidence >= 0.4)
@@ -129,6 +134,32 @@ func deselectChallengeUsesInfoSignatureAndClicksSelectedBadge() throws {
     #expect(rule.minimumOCRConfidence >= 0.4)
     #expect(rule.minimumOCRConfidence <= 0.5)
     #expect(rule.appearance == nil)
+}
+
+@Test
+func sceneSkipClicksEmptySafePointAndOmitsForbiddenGuard() throws {
+    let rule = try workflowRule("scene_skip")
+
+    // 실측(2026-07-24): 컷신 화면은 '장면 넘기기'(cf 0.5)만 뜨는 거의 빈
+    // 화면. 이 시그니처로 컷신을 감지하고, 장면 넘기기 버튼은 안 누른 채
+    // 비어있는 안전지대(우상단, 모든 메뉴화면에서 빔)를 눌러 컷신을 넘긴다.
+    #expect(rule.requiredTexts == ["장면 넘기기"])
+    #expect(rule.action.targetText == nil)
+    let safe = try #require(rule.action.safePointRegion)
+    // 장면 넘기기 버튼(우상단 x~0.92, y~0.08)과 겹치지 않는 빈 지대.
+    #expect(safe.minY >= 0.12)
+    #expect(safe.maxX <= 0.85)
+    // scene_skip만 장면 넘기기를 forbidden으로 두지 않는다(자기 시그니처).
+    #expect(
+        !rule.forbiddenTexts.contains {
+            normalizedWorkflowText($0) == "장면넘기기"
+        }
+    )
+    #expect(rule.minimumOCRConfidence >= 0.4)
+    #expect(rule.minimumOCRConfidence <= 0.5)
+    #expect(
+        AutomationCoordinator.scene(forRuleID: "scene_skip") == .sceneSkip
+    )
 }
 
 @Test

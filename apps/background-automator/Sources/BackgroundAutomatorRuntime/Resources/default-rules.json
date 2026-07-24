@@ -2,6 +2,39 @@
   "schemaVersion": 1,
   "rules": [
     {
+      "id": "scene_skip",
+      "requiredTexts": [
+        "장면 넘기기"
+      ],
+      "forbiddenTexts": [],
+      "action": {
+        "safePointRegion": {
+          "minX": 0.68,
+          "minY": 0.2,
+          "maxX": 0.78,
+          "maxY": 0.28
+        }
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.4,
+          "minY": 0.0,
+          "maxX": 1.0,
+          "maxY": 0.4
+        },
+        "portrait-mobile": {
+          "minX": 0.0,
+          "minY": 0.0,
+          "maxX": 1.0,
+          "maxY": 0.4
+        }
+      },
+      "minimumOCRConfidence": 0.4,
+      "stableObservationCount": 2,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 1.0
+    },
+    {
       "id": "clear_touch",
       "requiredTexts": [
         "화면을 터치해 주세요"

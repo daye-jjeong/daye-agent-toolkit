@@ -145,9 +145,18 @@ private extension RuleEvaluator {
     func containsBlockedSceneSkip(
         _ observation: SceneObservation
     ) -> Bool {
-        observation.recognizedTexts.contains {
+        guard observation.recognizedTexts.contains(where: {
             SceneFingerprint.normalize($0.text) == "장면넘기기"
+        }) else {
+            return false
         }
+        // scene_skip 규칙이 이 컷신 화면의 지정 핸들러면 차단하지 않는다 —
+        // 후보가 오직 scene_skip일 때만(빈 공간 탭) 예외.
+        let handledBySceneSkip = !observation.actionCandidates.isEmpty
+            && observation.actionCandidates.allSatisfy {
+                $0.ruleID == AutomationScene.sceneSkipRuleID
+            }
+        return !handledBySceneSkip
     }
 
     static func validatedCandidates(

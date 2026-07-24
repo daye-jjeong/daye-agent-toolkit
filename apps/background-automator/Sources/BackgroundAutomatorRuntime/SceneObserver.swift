@@ -206,8 +206,13 @@ extension SceneObserver {
                     imageSize: imageSize
                 )
         }
+        // scene_skip은 장면 넘기기 컷신의 지정 핸들러라 전역 차단 목록에서
+        // 제외한다(빈 공간 탭으로 컷신을 넘긴다). 그 외 규칙은 종전대로 차단.
+        let effectiveForbidden = rule.id == AutomationScene.sceneSkipRuleID
+            ? rule.forbiddenTexts
+            : rule.forbiddenTexts + Self.blockedActionTexts
         guard !Self.containsForbiddenText(
-            rule.forbiddenTexts + blockedActionTexts,
+            effectiveForbidden,
             in: blockingObservations
         ) else {
             return nil

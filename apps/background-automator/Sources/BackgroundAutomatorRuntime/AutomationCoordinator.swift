@@ -427,7 +427,8 @@ extension AutomationCoordinator {
         switch scene {
         case .rewardRetry, .missionSelection, .enterReady:
             true
-        case .clearTouch, .continueDialog, .running, .deselectChallenge:
+        case .clearTouch, .continueDialog, .running, .deselectChallenge,
+             .sceneSkip:
             false
         }
     }
@@ -438,6 +439,8 @@ extension AutomationCoordinator {
         switch scene {
         case .clearTouch:
             "clear_touch"
+        case .sceneSkip:
+            AutomationScene.sceneSkipRuleID
         case .rewardRetry:
             "reward_retry"
         case .continueDialog:
@@ -457,6 +460,21 @@ extension AutomationCoordinator {
         AutomationScene.allCases.first {
             expectedRuleID(for: $0) == ruleID
         }
+    }
+
+    /// 장면 넘기기(컷신)가 화면에 떠도 자동화를 얼릴지 판단한다.
+    /// scene_skip 후보가 이 화면의 지정 핸들러면(빈 공간 탭으로 컷신을
+    /// 넘김) 얼리지 않고 진행한다. 그 외 규칙엔 종전대로 forbidden freeze.
+    static func shouldFreezeForForbiddenContent(
+        _ observation: SceneObservation
+    ) -> Bool {
+        guard containsForbiddenText(observation) else {
+            return false
+        }
+        let handledBySceneSkip = observation.actionCandidates.contains {
+            scene(forRuleID: $0.ruleID) == .sceneSkip
+        }
+        return !handledBySceneSkip
     }
 }
 
@@ -488,7 +506,7 @@ private extension AutomationCoordinator {
             recordUnsafeState(.unsupportedLayout)
             return nil
         }
-        if Self.containsForbiddenText(frame.observation) {
+        if Self.shouldFreezeForForbiddenContent(frame.observation) {
             recordUnsafeState(.forbiddenContent)
             return nil
         }

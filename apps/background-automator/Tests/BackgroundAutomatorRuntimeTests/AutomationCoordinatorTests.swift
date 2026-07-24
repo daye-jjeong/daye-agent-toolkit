@@ -44,6 +44,60 @@ func capturedWindowObserverComposesCaptureLayoutAndOCR() async throws {
 }
 
 @Test
+func forbiddenFreezeExemptsSceneSkipCandidate() {
+    let sceneSkipText = RecognizedTextObservation(
+        text: "장면 넘기기",
+        confidence: 0.5,
+        boundingBox: CGRect(x: 1330, y: 60, width: 80, height: 20)
+    )
+    let sceneSkipCandidate = SceneActionCandidate(
+        ruleID: "scene_skip",
+        targetText: nil,
+        boundingBox: CGRect(x: 1000, y: 200, width: 40, height: 20),
+        confidence: 0.5
+    )
+    let enterCandidate = SceneActionCandidate(
+        ruleID: "enter_ready",
+        targetText: "입장하기",
+        boundingBox: CGRect(x: 700, y: 800, width: 40, height: 20),
+        confidence: 0.5
+    )
+
+    // 컷신: 장면 넘기기 + scene_skip 후보 → 얼리지 않고 빈 공간 탭으로 진행.
+    let cutscene = SceneObservation(
+        recognizedTexts: [sceneSkipText],
+        actionCandidates: [sceneSkipCandidate]
+    )
+    #expect(
+        !AutomationCoordinator.shouldFreezeForForbiddenContent(cutscene)
+    )
+
+    // 장면 넘기기가 떴는데 scene_skip이 아닌 후보 → 종전대로 얼린다(오클릭 방지).
+    let danger = SceneObservation(
+        recognizedTexts: [sceneSkipText],
+        actionCandidates: [enterCandidate]
+    )
+    #expect(
+        AutomationCoordinator.shouldFreezeForForbiddenContent(danger)
+    )
+
+    // 장면 넘기기 없음 → 얼리지 않는다.
+    let clean = SceneObservation(
+        recognizedTexts: [
+            RecognizedTextObservation(
+                text: "입장하기",
+                confidence: 0.5,
+                boundingBox: CGRect(x: 700, y: 800, width: 40, height: 20)
+            ),
+        ],
+        actionCandidates: [enterCandidate]
+    )
+    #expect(
+        !AutomationCoordinator.shouldFreezeForForbiddenContent(clean)
+    )
+}
+
+@Test
 func coordinatorRejectsWeakenedSafetyTimings() throws {
     let observer = FakeAutomationObserver(frames: [])
     let actioner = FakeAutomationActioner(results: [])
@@ -1651,6 +1705,8 @@ private func expectedRuleID(for scene: AutomationScene) -> String? {
     switch scene {
     case .clearTouch:
         "clear_touch"
+    case .sceneSkip:
+        "scene_skip"
     case .rewardRetry:
         "reward_retry"
     case .continueDialog:
@@ -1670,6 +1726,8 @@ private func defaultTexts(for scene: AutomationScene) -> [String] {
     switch scene {
     case .clearTouch:
         ["던전 클리어", "화면을 터치해주세요"]
+    case .sceneSkip:
+        ["장면 넘기기"]
     case .rewardRetry:
         ["다시 하기"]
     case .continueDialog:
