@@ -45,6 +45,13 @@ struct MenuContentView: View {
             .keyboardShortcut(.defaultAction)
             .disabled(model.isTransitioning)
 
+            if model.status == .pausedRestorationFailure {
+                Button("복원 실패에서 재개") {
+                    model.resumeAfterRestorationFailure()
+                }
+                .disabled(model.isTransitioning)
+            }
+
             if model.canRequestPermission {
                 Button("시스템 권한 요청") {
                     model.requestMissingPermission()

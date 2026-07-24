@@ -71,6 +71,19 @@ public enum ForegroundRestorationFailure: Equatable, Sendable {
     case originalApplicationUnavailable(ApplicationIdentity)
     case originalApplicationActivationFailed(String)
     case originalApplicationNotFrontmost
+
+    public var koreanDescription: String {
+        switch self {
+        case let .pointerRestoreFailed(reason):
+            "포인터 복원 실패(\(reason))"
+        case let .originalApplicationUnavailable(app):
+            "원래 앱 종료됨(\(app.bundleIdentifier))"
+        case let .originalApplicationActivationFailed(reason):
+            "원래 앱 활성화 실패(\(reason))"
+        case .originalApplicationNotFrontmost:
+            "원래 앱이 최전면으로 복귀 실패"
+        }
+    }
 }
 
 public struct ForegroundActionCoordinatorError:

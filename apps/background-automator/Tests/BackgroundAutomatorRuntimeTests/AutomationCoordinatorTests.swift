@@ -548,6 +548,36 @@ func restorationFailurePausesUntilExplicitResume() async throws {
 }
 
 @Test
+func restorationFailureRecordsFailureDetailForDiagnostics() async throws {
+    let error = ForegroundActionCoordinatorError(
+        primaryFailure: nil,
+        restorationFailures: [.originalApplicationNotFrontmost]
+    )
+    let fixture = try CoordinatorFixture(
+        frames: [
+            .make(scene: .rewardRetry, sequence: 1),
+            .make(scene: .rewardRetry, sequence: 2),
+            .make(scene: .rewardRetry, sequence: 3),
+            .make(scene: .rewardRetry, sequence: 4),
+            .make(scene: .rewardRetry, sequence: 5),
+            .make(scene: .rewardRetry, sequence: 6),
+        ],
+        actionResults: [.failure(error)]
+    )
+    await fixture.coordinator.start()
+
+    _ = try await fixture.coordinator.runCycle()
+    #expect(
+        try await fixture.coordinator.runCycle()
+            == .action(.restorationFailed)
+    )
+    #expect(
+        await fixture.coordinator.lastRestorationFailures
+            == [.originalApplicationNotFrontmost]
+    )
+}
+
+@Test
 func restorationLatchSurvivesStopAndPausesNextStart() async throws {
     let error = ForegroundActionCoordinatorError(
         primaryFailure: nil,

@@ -6,6 +6,35 @@ import Testing
 @testable import BackgroundAutomatorRuntime
 
 @Test
+func restorationFailureKoreanDescriptionsAreHumanReadable() {
+    #expect(
+        ForegroundRestorationFailure
+            .pointerRestoreFailed("denied")
+            .koreanDescription == "포인터 복원 실패(denied)"
+    )
+    #expect(
+        ForegroundRestorationFailure
+            .originalApplicationUnavailable(
+                ApplicationIdentity(
+                    processIdentifier: 42,
+                    bundleIdentifier: "com.game"
+                )
+            )
+            .koreanDescription == "원래 앱 종료됨(com.game)"
+    )
+    #expect(
+        ForegroundRestorationFailure
+            .originalApplicationActivationFailed("timeout")
+            .koreanDescription == "원래 앱 활성화 실패(timeout)"
+    )
+    #expect(
+        ForegroundRestorationFailure
+            .originalApplicationNotFrontmost
+            .koreanDescription == "원래 앱이 최전면으로 복귀 실패"
+    )
+}
+
+@Test
 func foregroundActionActivatesClicksWaitsAndRestoresInOrder() async throws {
     let original = ApplicationIdentity(
         processIdentifier: 10,

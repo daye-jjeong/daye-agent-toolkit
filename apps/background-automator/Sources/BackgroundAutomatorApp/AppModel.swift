@@ -3,6 +3,7 @@ import BackgroundAutomatorCore
 import BackgroundAutomatorRuntime
 import Combine
 import Foundation
+import os
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -28,6 +29,10 @@ final class AppModel: ObservableObject {
     private let activityWriter: ActivityLogWriter?
     private let retryPolicy = AutomationRetryPolicy()
     private let clock = ContinuousClock()
+    private static let logger = Logger(
+        subsystem: "BackgroundAutomator",
+        category: "automation"
+    )
     private var lastPreflightDiagnostics: PreflightDiagnostics?
     private var lastObservationDiagnostics: ObservationDiagnostics?
 
@@ -183,6 +188,19 @@ final class AppModel: ObservableObject {
             return
         }
         NSApplication.shared.terminate(nil)
+    }
+
+    func resumeAfterRestorationFailure() {
+        guard
+            status == .pausedRestorationFailure,
+            let coordinator
+        else {
+            return
+        }
+        status = .observing
+        Task {
+            await coordinator.resumeAfterRestorationFailure()
+        }
     }
 }
 
@@ -384,6 +402,11 @@ private extension AppModel {
                 if case .action(.clicked) = result {
                     recordClick(await coordinator.lastClick)
                 }
+                if case .action(.restorationFailed) = result {
+                    recordRestorationFailure(
+                        await coordinator.lastRestorationFailures
+                    )
+                }
                 updateAfterCycle(
                     result: result,
                     state: coordinatorState
@@ -464,6 +487,32 @@ private extension AppModel {
         if let summary = try? activityWriter.summary() {
             activitySummary = summary
         }
+    }
+
+    func recordRestorationFailure(
+        _ failures: [ForegroundRestorationFailure]
+    ) {
+        let detail = failures.isEmpty
+            ? "원인 불명"
+            : failures
+                .map(\.koreanDescription)
+                .joined(separator: ", ")
+        lastActionDescription = "복원 실패: \(detail)"
+        lastActionAt = Date()
+        Self.logger.error(
+            "복원 실패로 일시정지: \(detail, privacy: .public)"
+        )
+        guard let activityWriter else {
+            return
+        }
+        try? activityWriter.append(
+            ActivityEvent(
+                at: Date(),
+                outcome: "restorationFailed",
+                scene: detail,
+                dungeonName: nil
+            )
+        )
     }
 
     func saveConfiguration(_ configuration: TargetConfiguration) {

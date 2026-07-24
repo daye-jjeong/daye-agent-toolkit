@@ -132,6 +132,7 @@ public actor AutomationCoordinator {
     public private(set) var state: AutomationState = .stopped
     public private(set) var lastObservation: ObservationDiagnostics?
     public private(set) var lastClick: ClickRecord?
+    public private(set) var lastRestorationFailures: [ForegroundRestorationFailure] = []
     private var lastSeenDungeonName: String?
 
     private let observer: any AutomationScreenObserving
@@ -414,6 +415,7 @@ public actor AutomationCoordinator {
             throw CancellationError()
         } catch let error as ForegroundActionCoordinatorError {
             if !error.restorationFailures.isEmpty {
+                lastRestorationFailures = error.restorationFailures
                 latchRestorationFailure()
                 return .action(.restorationFailed)
             }
