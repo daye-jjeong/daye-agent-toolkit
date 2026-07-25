@@ -11,7 +11,6 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
     #expect(
         Set(rules.map(\.id)) == [
             "scene_skip",
-            "auto_start",
             "clear_touch",
             "reward_detail",
             "reward_retry",

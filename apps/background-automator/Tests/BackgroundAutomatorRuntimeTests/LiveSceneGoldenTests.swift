@@ -88,31 +88,6 @@ func retryMenuFiresAloneWhenCoinsAreSufficient() async throws {
 }
 
 @Test
-func autoStartGaugeIsSkippedByPressingTheStartButton() async throws {
-    // 실측(던전 입장 직후, 약 5초): 우하단에 나침반 버튼과 초록 링 게이지가
-    // 뜨고 '잠시 후 자동으로 진행됩니다.'가 표시된다. 링이 다 차야 자동
-    // 전투가 시작되므로 매 판 5초를 버린다. 버튼을 눌러 즉시 시작한다.
-    //
-    // 말풍선 자체는 '중단하려면 말풍선을 누르세요'라 눌러선 안 된다 —
-    // 누르면 자동 진행이 취소된다. 눌러야 하는 건 그 아래 'Space' 라벨이
-    // 붙은 원형 버튼이다.
-    let observer = SceneObserver()
-
-    let result = try await observer.observe(
-        image: try liveFixtureImage(named: "landscape-autostart-gauge"),
-        layout: .landscape,
-        rules: RuleLoader().loadDefaultRules()
-    )
-
-    #expect(result.actionCandidates.count == 1)
-    let candidate = try #require(result.actionCandidates.first)
-    #expect(candidate.ruleID == "auto_start")
-    #expect(candidate.targetText == "Space")
-    // 취소용 말풍선(y 0.75~0.79)이 아니라 그 아래 버튼을 눌러야 한다.
-    #expect(candidate.boundingBox.midY / 949 > 0.90)
-}
-
-@Test
 func earlyResultScreenWaitsInsteadOfClicking() async throws {
     // 실측(landscape-result-early): 클리어 직후 결과 화면에는 던전 이름과
     // 순수 전투 시간만 뜨고 '발견한 전리품'은 아직 없다. 누를 것이 없으니
