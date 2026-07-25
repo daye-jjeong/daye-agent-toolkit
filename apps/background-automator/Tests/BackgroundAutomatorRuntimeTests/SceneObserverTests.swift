@@ -108,6 +108,33 @@ func rewardDetailFiresAloneOnLootScreenClickingHeaderGlyph() async throws {
 }
 
 @Test
+func rewardDetailFiresFromRealOCROnLootScreenshot() async throws {
+    // 골든 테스트: 손먹인 OCR 값이 아니라 실제 캡처(landscape-reward-detail
+    // = 은동전런 발견전리품 화면)를 진짜 Vision OCR에 돌려 파이프라인 전체를
+    // 검증한다. 손먹인 테스트가 못 잡는 실화면 OCR 변화(') 입장하기' 류)를
+    // 여기서 잡는다. Vision은 OS버전 따라 미세 변동 → 박스 정확값 대신
+    // 발동·단독·중심 근사(±0.08)로 검증한다.
+    let observer = SceneObserver() // 실제 VisionTextRecognizer + 픽셀 분석기
+    let image = try fixtureImage(named: "landscape-reward-detail")
+
+    let result = try await observer.observe(
+        image: image,
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(result.actionCandidates.count == 1)
+    let candidate = try #require(
+        result.actionCandidates.first { $0.ruleID == "reward_detail" }
+    )
+    #expect(candidate.targetText == "발견한 전리품")
+    let centerX = candidate.boundingBox.midX / 1512.0
+    let centerY = candidate.boundingBox.midY / 949.0
+    #expect(abs(centerX - 0.50) < 0.08)
+    #expect(abs(centerY - 0.40) < 0.08)
+}
+
+@Test
 func lowConfidenceSceneSkipStillBlocksHighConfidenceAction() async throws {
     let observer = SceneObserver(
         textRecognizer: FakeTextRecognizer([
