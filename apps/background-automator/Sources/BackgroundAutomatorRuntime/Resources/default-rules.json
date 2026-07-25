@@ -76,7 +76,8 @@
       ],
       "forbiddenTexts": [
         "장면 넘기기",
-        "다시 하기"
+        "다시 하기",
+        "계속하기"
       ],
       "action": {
         "targetText": "발견한 전리품"

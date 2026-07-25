@@ -51,8 +51,13 @@ S8 던전 선택 구간 (선택됨/도전/입장하기) — 은동전 사용 결
    → 배선: `AutomationScene.rewardDetail` case + `expectedRuleID`="reward_detail" + `sceneHasDungeonName`=true.
    → 실측(loot3.png 1512×949): "발견한 전리품" cf **0.50**(장식 폰트) → low-conf 룰(minimumOCRConfidence 0.45, region landscape 0.35–0.65 / 0.33–0.50). exact-match + forbidden으로 오탐 차단. 코인 안 쓴 런도 이 글자가 떠서 눌리지만 무변화(사용자 확인).
    → **"다시 하기" forbidden 필수**: 실측(코인 안 쓴 런 결과 화면)에 "발견한 전리품"(y0.46)과 "다시 하기"(y0.91)가 **동시에** 뜬다 → 룰 2개가 동시 후보 → `ambiguousObservation`으로 자동화 정지. 코인런(loot3)엔 재도전 메뉴가 없어 안 겹쳤다. 재도전 메뉴가 이미 떴으면 헤더를 안 누르고 "다시 하기"로 직행(목적지 동일).
-2. **10+ 입장 정지**: 안내문 없어 deselect 안 뜸 + "입장하기" 완전일치라 "10 입장하기"(OCR `) 입장하기`) 안 맞아 enter 안 뜸 → 완전 정지.
-   → **enter_ready "입장하기" 접미사 매칭** (`) 입장하기`/`10 입장하기` 끝이 "입장하기" → 매칭). 부작용 거의 없음.
+2. ~~**10+ 입장 정지**~~ **[오판정 — 실측으로 철회]**
+   실측(2026-07-25, 은동전 **7개** 보유 = 10 미만인데도 `10 입장하기`가 뜸)으로 "10 = 보유량"이라는 전제가 틀렸음이 확인됐다. **"10"은 임무 전리품 2배에 드는 은동전 비용**이고, 버튼 글자는 **코인 잔량이 아니라 임무 선택 상태**를 따른다:
+   | 상태 | 안내문 | 뱃지 | 입장 버튼 |
+   |---|---|---|---|
+   | 선택됨 | 有 | 선택됨 | `10 입장하기` |
+   | 해제됨 | 無 | 도전 | `입장하기` |
+   → 즉 기존 흐름이 정상 동작한다: 안내문 → `deselect_challenge`가 `선택됨` 클릭 → 해제되면 버튼이 `입장하기`가 되어 `enter_ready` 발동. **접미사 매칭 불필요**(오히려 선택 상태에서 잘못 눌러 은동전을 소모할 위험). 골든 테스트 `entryButtonTextDependsOnMissionSelectionNotCoinBalance`로 고정.
 3. **코인 있을 때 deselect 루프**: deselect(선택됨→도전 활성)→mission_selection 재선택→반복.
    → **은동전 소모 옵션**(설정 토글). ON=선택됨 유지하고 입장(루프 회피). OFF+코인=별도 처리.
 
@@ -131,8 +136,28 @@ restorationFailed 로깅(이미 추가됨)과 같은 패턴 확장. activity-log
 3. **[P2] enter_ready 접미사 매칭** — 10+ 입장 해소.
 4. **[P2] 은동전 소모 옵션** — 설정 토글 + 코인 루프 회피.
 
+## 실측 캡처 인덱스 (Tests/Fixtures — 골든 테스트용, 커밋됨)
+2026-07-25 라이브 캡처. 모두 1512×949, 은동전 7개(=10 미만) 계정.
+
+| fixture | 장면 | 발동 룰 |
+|---|---|---|
+| landscape-scene-skip-boss-intro | S2 보스전 돌입 컷신(`장면 넘기기`+보스명) | scene_skip |
+| landscape-scene-skip-clear | S5 클리어 컷신(`장면 넘기기` 단독) | scene_skip |
+| landscape-clear-touch-live | S4 등급 화면(하단 `화면을 터치해 주세요` cf 1.0) | clear_touch |
+| landscape-result-early | S6 결과 초기(전리품 채워지기 전) | reward_detail |
+| landscape-reward-detail | S6 결과+전리품(**은동전 쓴 런**) | reward_detail |
+| landscape-reward-detail-nocoin | S6 결과+전리품+재도전 메뉴(안 쓴 런) | reward_retry |
+| landscape-loot-soulstone-nocoin | S6 **공명의 영혼석** 드랍 | reward_retry |
+| landscape-continue-dialog-nocoin | S7 계속하기 팝업(전리품 헤더가 뒤에 남음) | continue_dialog |
+| landscape-selected-nocoin | S8 임무 선택됨(안내문+`10 입장하기`) | deselect_challenge |
+| landscape-deselected-nocoin | S8 해제됨(`도전`+`입장하기`) | enter_ready |
+
+**S2 vs S5 구분**: 둘 다 `장면 넘기기`지만 S2는 보스 이름이 함께 뜬다(실측: "광기에 휩싸인 자이언트 헤드리스").
+**OCR 오독 실측**: `던전 클리어!` → `던전 플리어!`. clear_touch가 이 문구를 requiredText로 안 쓰고 `화면을 터치해 주세요`(cf 1.0)만 쓰는 게 옳았음이 확인됨.
+
 ## 열린 항목
-- S5(장면넘기기②) 성격 재확인.
+- ~~S5(장면넘기기②) 성격 재확인~~ → **확인 완료**(위 표: 보스명 유무로 S2와 구분).
+- **수량 뱃지 생략은 아이템마다 다름(실측)**: 같은 화면에서 `마물 퇴치 증표`=10, `미지의 소울 조각`=1인데 **`공명의 영혼석`만 뱃지가 아예 없다.** "뱃지 없음 = 1" 가정은 성립하지 않는다. 정확 수량은 게임 표시 규칙을 캡처로 더 모아 확정해야 함. 등장 여부(드랍률)는 이름만으로 정확.
 - **loot-log 던전명(P1b)**: 발견전리품 화면 던전명은 cf 0.50 < DungeonNameExtractor 임계 0.9 → 안 뽑힘. 이 씬만 임계 낮추거나 reward_retry/enter_ready 씬 던전명 사용.
 - coinUsed 판정 방법 확정.
 - 아이템 이름↔수량 위치 페어링 로직 + 수량 OCR 신뢰도.

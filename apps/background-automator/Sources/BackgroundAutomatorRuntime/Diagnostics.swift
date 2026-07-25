@@ -252,6 +252,69 @@ public enum DiagnosticsWriteResult: Equatable, Sendable {
     case failed(String)
 }
 
+/// 자동화가 멈춘 순간의 화면을 따로 보존한다.
+///
+/// status.json은 매 프레임 덮어써지므로, 멈춘 화면이 곧바로 사라져 사후에
+/// 원인을 확정할 수 없다(2026-07-25 21분 정지가 그랬다). 정지에 '진입할 때'
+/// 한 줄씩 남겨, 나중에 어떤 화면에서 무슨 텍스트가 보였는지 되짚는다.
+public final class StallSnapshotRecorder {
+    public static let fileName = "stall-log.jsonl"
+
+    private let directory: URL
+    private let fileURL: URL
+    private var wasStalled = false
+
+    public init(directory: URL) {
+        self.directory = directory
+        fileURL = directory.appendingPathComponent(Self.fileName)
+    }
+
+    /// 멈춘 상태로 '바뀐' 순간에만 기록한다. 같은 화면에서 계속 멈춰 있으면
+    /// 폴링마다 같은 내용이 쌓여 정작 필요한 기록을 덮으므로 건너뛴다.
+    public func record(
+        content: DiagnosticsSnapshot.Content,
+        isStalled: Bool,
+        at timestamp: Date = Date()
+    ) {
+        defer { wasStalled = isStalled }
+        guard isStalled, !wasStalled else {
+            return
+        }
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        guard
+            var line = try? encoder.encode(
+                DiagnosticsSnapshot(
+                    content: content,
+                    updatedAt: timestamp
+                )
+            )
+        else {
+            return
+        }
+        line.append(0x0A) // '\n'
+
+        // 진단 기록 실패가 자동화를 막아서는 안 되므로 조용히 넘어간다.
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            if let handle = try? FileHandle(forWritingTo: fileURL) {
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: line)
+            } else {
+                try line.write(to: fileURL, options: .atomic)
+            }
+        } catch {
+            return
+        }
+    }
+}
+
 public final class DiagnosticsFileWriter {
     public static let fileName = "status.json"
 

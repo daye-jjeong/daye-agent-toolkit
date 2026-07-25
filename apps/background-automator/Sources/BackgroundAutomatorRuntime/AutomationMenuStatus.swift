@@ -41,6 +41,20 @@ public enum AutomationMenuStatus: Equatable, Sendable {
         }
     }
 
+    /// 사람이 손대야 풀리는, 진행이 막힌 상태인지.
+    /// 전투 대기·쿨다운처럼 곧 스스로 풀리는 상태는 포함하지 않는다.
+    /// 이 상태로 들어간 순간의 화면을 따로 보존해 정지 원인을 진단한다.
+    public var isStalled: Bool {
+        switch self {
+        case .needsAttention, .pausedRestorationFailure:
+            true
+        case .stopped, .checkingPreflight, .observing, .combatWait,
+             .buttonDetected, .waitingForUserIdle, .clicking, .cooldown,
+             .stopping:
+            false
+        }
+    }
+
     /// 메뉴막대에서 상태를 한눈에 알리는 SF Symbol 이름.
     public var symbolName: String {
         switch self {

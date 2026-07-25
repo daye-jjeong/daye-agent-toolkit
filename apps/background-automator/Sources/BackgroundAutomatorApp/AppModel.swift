@@ -36,6 +36,7 @@ final class AppModel: ObservableObject {
     private let diagnosticsWriter: DiagnosticsFileWriter?
     private let activityWriter: ActivityLogWriter?
     private let cycleWriter: CycleLogWriter?
+    private let stallRecorder: StallSnapshotRecorder?
     private let retryPolicy = AutomationRetryPolicy()
     private let clock = ContinuousClock()
     private static let logger = Logger(
@@ -84,6 +85,7 @@ final class AppModel: ObservableObject {
         self.activityWriter = activityWriter
         let cycleWriter = directory.map { CycleLogWriter(directory: $0) }
         self.cycleWriter = cycleWriter
+        stallRecorder = directory.map { StallSnapshotRecorder(directory: $0) }
         if let summary = try? activityWriter?.summary() {
             activitySummary = summary
         }
@@ -240,20 +242,22 @@ private extension AppModel {
     }
 
     func writeDiagnostics() {
-        guard let diagnosticsWriter else {
-            return
-        }
-        diagnosticsWriter.write(
-            content: DiagnosticsSnapshot.Content(
-                schemaVersion: 1,
-                appVersion: Self.appVersion,
-                processID: ProcessInfo.processInfo.processIdentifier,
-                statusDescription: status.koreanDescription,
-                preflight: lastPreflightDiagnostics,
-                lastActionDescription: lastActionDescription,
-                lastActionAt: lastActionAt,
-                observation: lastObservationDiagnostics
-            )
+        let content = DiagnosticsSnapshot.Content(
+            schemaVersion: 1,
+            appVersion: Self.appVersion,
+            processID: ProcessInfo.processInfo.processIdentifier,
+            statusDescription: status.koreanDescription,
+            preflight: lastPreflightDiagnostics,
+            lastActionDescription: lastActionDescription,
+            lastActionAt: lastActionAt,
+            observation: lastObservationDiagnostics
+        )
+        diagnosticsWriter?.write(content: content)
+        // status.json은 매 상태 변화마다 덮어써져 멈춘 화면이 곧 사라진다.
+        // 진행이 막힌 순간만 따로 남겨 사후 진단에 쓴다.
+        stallRecorder?.record(
+            content: content,
+            isStalled: status.isStalled
         )
     }
 
