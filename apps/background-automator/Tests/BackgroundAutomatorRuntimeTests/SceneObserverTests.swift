@@ -135,6 +135,30 @@ func rewardDetailFiresFromRealOCROnLootScreenshot() async throws {
 }
 
 @Test
+func noCoinResultScreenPrefersRetryOverLootHeader() async throws {
+    // 골든 테스트(landscape-reward-detail-nocoin = 은동전 안 쓴 런의 결과
+    // 화면). 실측: 이 화면엔 '발견한 전리품'(cf 0.50)과 '다시 하기'(cf 1.0)가
+    // 함께 뜬다 — 코인런(landscape-reward-detail)엔 재도전 메뉴가 없어
+    // 안 겹쳤던 조합이다. 둘 다 후보가 되면 모호성으로 자동화가 얼어붙어
+    // 정지하므로, 재도전 메뉴가 이미 떴으면 전리품 헤더는 누르지 않고
+    // 곧장 '다시 하기'로 간다(목적지가 같다).
+    let observer = SceneObserver()
+    let image = try fixtureImage(named: "landscape-reward-detail-nocoin")
+
+    let result = try await observer.observe(
+        image: image,
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(result.actionCandidates.count == 1)
+    #expect(result.actionCandidates.first?.ruleID == "reward_retry")
+    #expect(
+        !result.actionCandidates.contains { $0.ruleID == "reward_detail" }
+    )
+}
+
+@Test
 func lowConfidenceSceneSkipStillBlocksHighConfidenceAction() async throws {
     let observer = SceneObserver(
         textRecognizer: FakeTextRecognizer([

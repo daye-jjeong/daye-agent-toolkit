@@ -36,7 +36,7 @@ S8 던전 선택 구간 (선택됨/도전/입장하기) — 은동전 사용 결
 | clear_touch | "화면을 터치해 주세요" | ¬장면넘기기 | 빈공간 | 0.85 |
 | reward_retry | "다시 하기" | ¬장면넘기기 | "다시 하기" | 0.85 |
 | continue_dialog | "계속하기" + "던전 탐험을 계속하시겠습니까?" | ¬장면넘기기 | "계속하기" | 0.45 |
-| reward_detail ✅ | "발견한 전리품" | ¬장면넘기기 | "발견한 전리품"(글자) | 0.45 |
+| reward_detail ✅ | "발견한 전리품" | ¬장면넘기기 **+ ¬"다시 하기"** | "발견한 전리품"(글자) | 0.45 |
 | mission_selection | "도전" | ¬장면넘기기 **+ 도전이 컬러(활성) appearance** | "도전" | 0.85 |
 | deselect_challenge | "선택을 해제하면 임무 없이 입장할 수 있습니다." | ¬장면넘기기 | "선택됨" | 0.45 |
 | enter_ready | "입장하기" | ¬장면넘기기 **+ ¬안내문** | "입장하기" | 0.45 |
@@ -50,6 +50,7 @@ S8 던전 선택 구간 (선택됨/도전/입장하기) — 은동전 사용 결
    → 패턴: `reward_retry`처럼 targetText 글자 클릭 + **정상 차단 룰**(forbiddenTexts에 "장면 넘기기"; scene_skip 예외 아님 — scene_skip은 차단의 유일한 예외라 반대 모델).
    → 배선: `AutomationScene.rewardDetail` case + `expectedRuleID`="reward_detail" + `sceneHasDungeonName`=true.
    → 실측(loot3.png 1512×949): "발견한 전리품" cf **0.50**(장식 폰트) → low-conf 룰(minimumOCRConfidence 0.45, region landscape 0.35–0.65 / 0.33–0.50). exact-match + forbidden으로 오탐 차단. 코인 안 쓴 런도 이 글자가 떠서 눌리지만 무변화(사용자 확인).
+   → **"다시 하기" forbidden 필수**: 실측(코인 안 쓴 런 결과 화면)에 "발견한 전리품"(y0.46)과 "다시 하기"(y0.91)가 **동시에** 뜬다 → 룰 2개가 동시 후보 → `ambiguousObservation`으로 자동화 정지. 코인런(loot3)엔 재도전 메뉴가 없어 안 겹쳤다. 재도전 메뉴가 이미 떴으면 헤더를 안 누르고 "다시 하기"로 직행(목적지 동일).
 2. **10+ 입장 정지**: 안내문 없어 deselect 안 뜸 + "입장하기" 완전일치라 "10 입장하기"(OCR `) 입장하기`) 안 맞아 enter 안 뜸 → 완전 정지.
    → **enter_ready "입장하기" 접미사 매칭** (`) 입장하기`/`10 입장하기` 끝이 "입장하기" → 매칭). 부작용 거의 없음.
 3. **코인 있을 때 deselect 루프**: deselect(선택됨→도전 활성)→mission_selection 재선택→반복.
