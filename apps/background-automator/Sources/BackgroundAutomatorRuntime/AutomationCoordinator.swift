@@ -445,7 +445,7 @@ extension AutomationCoordinator {
         case .rewardRetry, .missionSelection, .enterReady, .rewardDetail:
             true
         case .clearTouch, .continueDialog, .running, .deselectChallenge,
-             .sceneSkip:
+             .deselectDoubleLoot, .sceneSkip:
             false
         }
     }
@@ -468,6 +468,8 @@ extension AutomationCoordinator {
             "mission_selection"
         case .deselectChallenge:
             "deselect_challenge"
+        case .deselectDoubleLoot:
+            "deselect_double_loot"
         case .enterReady:
             "enter_ready"
         case .running:

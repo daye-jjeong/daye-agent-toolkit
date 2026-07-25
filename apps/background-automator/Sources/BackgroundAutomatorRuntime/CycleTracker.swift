@@ -38,12 +38,25 @@ public struct CycleTracker: Sendable {
     /// 전투 시간·난이도 같은 상단 메타 텍스트를 아이템으로 오인하지 않는다.
     static let itemMinimumY = 0.5
 
-    private var markerVisible = false
+    /// 결과 화면이 떠 있는 동안 모으는 중간 상태.
+    private struct PendingCycle {
+        var appearedAt: Date
+        var dungeon: String?
+        var combatSeconds: Int?
+        var items: [String]
+        var seenItems: Set<String>
+    }
+
+    private var pending: PendingCycle?
 
     public init() {}
 
-    /// 한 프레임을 관찰한다. 마커가 '안 보임 → 보임'으로 바뀐 순간에만
-    /// 사이클 기록을 돌려준다(같은 화면이 이어지는 동안은 nil).
+    /// 한 프레임을 관찰한다. 결과 화면이 떠 있는 동안은 아이템을 모으기만
+    /// 하고(nil), 화면이 닫히는 순간 한 판을 기록해 돌려준다.
+    ///
+    /// 처음 뜬 프레임만 보고 기록하면 은동전 쓴 런의 장비 드랍을 놓친다 —
+    /// 그 화면은 전리품 한 칸이 '?'로 가려져 있고 '발견한 전리품'을 눌러야
+    /// 드러나기 때문이다.
     public mutating func observe(
         texts: [RecognizedTextObservation],
         imageSize: CGSize,
@@ -53,23 +66,39 @@ public struct CycleTracker: Sendable {
             $0.text.contains(Self.markerText)
         }
         guard let marker else {
-            markerVisible = false
-            return nil
+            defer { pending = nil }
+            return pending.map {
+                CycleRecord(
+                    at: $0.appearedAt,
+                    dungeon: $0.dungeon,
+                    combatSeconds: $0.combatSeconds,
+                    items: $0.items
+                )
+            }
         }
-        guard !markerVisible else {
-            return nil
-        }
-        markerVisible = true
 
-        return CycleRecord(
-            at: now,
-            dungeon: DungeonNameExtractor.extract(
-                from: texts,
-                imageSize: imageSize
-            ),
-            combatSeconds: Self.combatSeconds(in: marker.text),
-            items: Self.itemNames(in: texts, imageSize: imageSize)
+        var cycle = pending ?? PendingCycle(
+            appearedAt: now,
+            dungeon: nil,
+            combatSeconds: nil,
+            items: [],
+            seenItems: []
         )
+        // 던전 이름·전투 시간은 연출 때문에 프레임마다 흔들린다.
+        // 한 번 제대로 읽은 값을 유지한다.
+        cycle.dungeon = cycle.dungeon ?? DungeonNameExtractor.extract(
+            from: texts,
+            imageSize: imageSize
+        )
+        cycle.combatSeconds = cycle.combatSeconds
+            ?? Self.combatSeconds(in: marker.text)
+        for name in Self.itemNames(in: texts, imageSize: imageSize)
+            where cycle.seenItems.insert(name).inserted
+        {
+            cycle.items.append(name)
+        }
+        pending = cycle
+        return nil
     }
 
     /// '순수 전투 시간 M:SS' → 초. 앞의 글머리표는 무시한다.

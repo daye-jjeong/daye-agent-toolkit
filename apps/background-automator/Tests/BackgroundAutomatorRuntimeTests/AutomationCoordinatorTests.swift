@@ -1747,6 +1747,8 @@ private func expectedRuleID(for scene: AutomationScene) -> String? {
         "mission_selection"
     case .deselectChallenge:
         "deselect_challenge"
+    case .deselectDoubleLoot:
+        "deselect_double_loot"
     case .enterReady:
         "enter_ready"
     case .running:
@@ -1770,6 +1772,8 @@ private func defaultTexts(for scene: AutomationScene) -> [String] {
         ["도전"]
     case .deselectChallenge:
         ["선택을 해제하면 임무 없이 입장할 수 있습니다.", "선택됨"]
+    case .deselectDoubleLoot:
+        ["도전에 성공하면 임무 전리품이 두 배가 됩니다.", "선택됨"]
     case .enterReady:
         ["입장하기"]
     case .running:

@@ -16,6 +16,7 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
             "continue_dialog",
             "mission_selection",
             "deselect_challenge",
+            "deselect_double_loot",
             "enter_ready",
             "running",
         ]
@@ -31,8 +32,8 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
     // 함께 요구하거나(continue_dialog·deselect_challenge) exact-match와
     // forbidden으로 오탐을 막는다(enter_ready).
     let lowConfidenceRules: Set<String> = [
-        "continue_dialog", "deselect_challenge", "enter_ready",
-        "scene_skip", "reward_detail",
+        "continue_dialog", "deselect_challenge", "deselect_double_loot",
+        "enter_ready", "scene_skip", "reward_detail",
     ]
 
     for rule in rules {

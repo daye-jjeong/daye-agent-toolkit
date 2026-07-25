@@ -54,53 +54,89 @@ private func battleTexts() -> [RecognizedTextObservation] {
 }
 
 @Test
-func markerAppearanceRecordsExactlyOneCycle() {
-    // 마커는 여러 프레임 연속으로 보인다. '안 보임 → 보임' 전이에서만
-    // 1회 기록해야 한다(같은 사이클을 프레임 수만큼 세면 안 된다).
+func cycleIsRecordedOnceWhenTheResultScreenCloses() {
+    // 결과 화면은 여러 프레임 이어진다. 화면이 떠 있는 동안은 아이템을
+    // 모으기만 하고, 화면이 닫힐 때 한 판으로 한 줄 남긴다.
     var tracker = CycleTracker()
 
     #expect(tracker.observe(texts: battleTexts(), imageSize: resultSize) == nil)
-    let first = tracker.observe(texts: resultTexts(), imageSize: resultSize)
-    #expect(first != nil)
     #expect(tracker.observe(texts: resultTexts(), imageSize: resultSize) == nil)
     #expect(tracker.observe(texts: resultTexts(), imageSize: resultSize) == nil)
+
+    let record = tracker.observe(texts: battleTexts(), imageSize: resultSize)
+    #expect(record != nil)
+    // 닫힌 뒤에는 더 나오지 않는다.
+    #expect(tracker.observe(texts: battleTexts(), imageSize: resultSize) == nil)
 }
 
 @Test
-func markerReappearanceAfterGapRecordsSecondCycle() {
-    // 마커가 사라졌다 다시 뜨면 다음 사이클이다.
+func hiddenLootRevealedMidScreenIsIncludedInTheSameCycle() {
+    // 실측(은동전 쓴 런): 결과 화면이 처음 뜰 때 전리품 일부가 '?'로
+    // 가려져 있고, '발견한 전리품'을 눌러야 장비 드랍이 드러난다.
+    // 처음 프레임만 보고 기록하면 가장 값진 드랍을 놓친다.
     var tracker = CycleTracker()
 
-    #expect(tracker.observe(texts: resultTexts(), imageSize: resultSize) != nil)
-    #expect(tracker.observe(texts: battleTexts(), imageSize: resultSize) == nil)
-    #expect(tracker.observe(texts: resultTexts(), imageSize: resultSize) != nil)
+    _ = tracker.observe(
+        texts: resultTexts(items: ["골드", "조각난 흑요석"]),
+        imageSize: resultSize
+    )
+    _ = tracker.observe(
+        texts: resultTexts(items: ["골드", "조각난 흑요석", "방패의 판금 갑옷 신발"]),
+        imageSize: resultSize
+    )
+    let record = tracker.observe(texts: battleTexts(), imageSize: resultSize)
+
+    let items = record?.items ?? []
+    #expect(items.contains("골드"))
+    #expect(items.contains("조각난 흑요석"))
+    #expect(items.contains("방패의 판금 갑옷 신발"))
+    // 같은 아이템이 여러 프레임에 보여도 한 번만 센다.
+    #expect(items.filter { $0 == "골드" }.count == 1)
+}
+
+@Test
+func twoResultScreensRecordTwoCycles() {
+    var tracker = CycleTracker()
+
+    _ = tracker.observe(texts: resultTexts(), imageSize: resultSize)
+    #expect(tracker.observe(texts: battleTexts(), imageSize: resultSize) != nil)
+    _ = tracker.observe(texts: resultTexts(), imageSize: resultSize)
+    #expect(tracker.observe(texts: battleTexts(), imageSize: resultSize) != nil)
 }
 
 @Test
 func recordedCycleCarriesDungeonAndCombatSeconds() {
     var tracker = CycleTracker()
 
-    let record = tracker.observe(
+    _ = tracker.observe(
         texts: resultTexts(combat: "• 순수 전투 시간 1:05"),
         imageSize: resultSize
     )
+    let record = tracker.observe(texts: battleTexts(), imageSize: resultSize)
 
     #expect(record?.dungeon == "룬다 1층 2구역")
     #expect(record?.combatSeconds == 65)
 }
 
 @Test
-func recordedCycleListsItemPresenceWithoutQuantities() {
-    // 지금 범위는 '이 사이클에 나왔나'(등장 여부)만. 정확 수량은 별도 과제.
+func recordIsStampedWhenTheResultScreenFirstAppeared() {
+    // 사이클이 '끝난 시각'은 결과 화면이 뜬 순간이다. 화면이 닫힐 때까지
+    // 기다렸다 남기더라도 시각은 처음 본 시점으로 찍는다.
     var tracker = CycleTracker()
+    let appeared = Date(timeIntervalSince1970: 1_800_000_000)
 
+    _ = tracker.observe(
+        texts: resultTexts(),
+        imageSize: resultSize,
+        at: appeared
+    )
     let record = tracker.observe(
-        texts: resultTexts(items: ["골드", "조각난 흑요석"]),
-        imageSize: resultSize
+        texts: battleTexts(),
+        imageSize: resultSize,
+        at: appeared.addingTimeInterval(6)
     )
 
-    #expect(record?.items.contains("골드") == true)
-    #expect(record?.items.contains("조각난 흑요석") == true)
+    #expect(record?.at == appeared)
 }
 
 @Test
@@ -127,14 +163,14 @@ func realResultScreenshotsRecordCycleRegardlessOfCoinUse(
     )
     var tracker = CycleTracker()
 
-    let recorded = tracker.observe(texts: texts, imageSize: resultSize)
+    // 결과 화면이 이어지는 동안은 모으기만 하고, 닫힐 때 한 줄 남긴다.
+    #expect(tracker.observe(texts: texts, imageSize: resultSize) == nil)
+    let recorded = tracker.observe(texts: [], imageSize: resultSize)
     let record = try #require(recorded)
 
     #expect(record.dungeon == "룬다 1층 2구역")
     #expect(record.combatSeconds != nil)
     #expect(!record.items.isEmpty)
-    // 같은 화면이 이어지는 동안은 다시 세지 않는다.
-    #expect(tracker.observe(texts: texts, imageSize: resultSize) == nil)
 }
 
 private func cycleFixtureImage(named name: String) throws -> CGImage {

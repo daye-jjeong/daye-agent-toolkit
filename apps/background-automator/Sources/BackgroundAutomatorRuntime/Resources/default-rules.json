@@ -252,6 +252,37 @@
       "cooldownSeconds": 1.0
     },
     {
+      "id": "deselect_double_loot",
+      "requiredTexts": [
+        "도전에 성공하면 임무 전리품이 두 배가 됩니다.",
+        "선택됨"
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기"
+      ],
+      "action": {
+        "targetText": "선택됨"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.15,
+          "minY": 0.25,
+          "maxX": 0.85,
+          "maxY": 0.95
+        },
+        "portrait-mobile": {
+          "minX": 0.05,
+          "minY": 0.25,
+          "maxX": 0.95,
+          "maxY": 0.95
+        }
+      },
+      "minimumOCRConfidence": 0.45,
+      "stableObservationCount": 2,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 1.0
+    },
+    {
       "id": "enter_ready",
       "requiredTexts": [
         "입장하기"

@@ -20,10 +20,15 @@ import Testing
     ("landscape-scene-skip-clear", "scene_skip"),
     // 보스 처치 후 등급 화면: 하단 '화면을 터치해 주세요'(cf 1.0).
     ("landscape-clear-touch-live", "clear_touch"),
-    // 임무 선택 상태: 안내문이 떠 있어 '선택됨'을 눌러 해제한다.
+    // 임무 선택 상태(은동전 부족): 안내문이 떠 있어 '선택됨'을 눌러 해제한다.
     ("landscape-selected-nocoin", "deselect_challenge"),
-    // 해제 상태: 버튼이 '입장하기'로 바뀌어 입장한다.
+    // 해제 상태(은동전 부족): 버튼이 '입장하기'로 바뀌어 입장한다.
     ("landscape-deselected-nocoin", "enter_ready"),
+    // 임무 선택 상태(은동전 충분): 안내문 대신 두 배 보상 안내가 뜬다.
+    // 은동전을 쓰지 않는 것이 기본이므로 '선택됨'을 눌러 해제한다.
+    ("landscape-mission-select-10coin", "deselect_double_loot"),
+    // 해제 상태(은동전 충분): '입장하기'가 깨끗하게 떠 입장한다.
+    ("landscape-deselected-10coin", "enter_ready"),
 ])
 func liveSceneFiresExactlyOneExpectedRule(
     fixture: String,
@@ -39,6 +44,47 @@ func liveSceneFiresExactlyOneExpectedRule(
 
     #expect(result.actionCandidates.count == 1)
     #expect(result.actionCandidates.first?.ruleID == expectedRuleID)
+}
+
+@Test
+func sufficientCoinsDoNotStallTheMissionSelectScreen() async throws {
+    // 회귀(2026-07-25): 은동전이 10개를 넘긴 순간 임무 선택 화면이 바뀐다.
+    // '선택을 해제하면 임무 없이 입장할 수 있습니다.' 안내문이 사라지고
+    // 두 배 보상 미리보기가 대신 뜨는데, 그러면
+    //   deselect_challenge → 시그니처(안내문)가 없어 안 걸림
+    //   enter_ready       → 버튼이 '10 입장하기'라 완전 일치 실패
+    //   mission_selection → '도전'이 신뢰도 0.50이라 기준 미달
+    // 셋 다 빗나가 후보가 0개가 되고 자동화가 통째로 멈췄다.
+    // 은동전을 쓰지 않는 기본 동작으로 '선택됨'을 눌러 해제해야 한다.
+    let observer = SceneObserver()
+
+    let result = try await observer.observe(
+        image: try liveFixtureImage(named: "landscape-mission-select-10coin"),
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(!result.actionCandidates.isEmpty)
+    #expect(result.actionCandidates.first?.targetText == "선택됨")
+}
+
+@Test
+func retryMenuFiresAloneWhenCoinsAreSufficient() async throws {
+    // 실측(은동전 10개 = 충분한 상태의 결과 화면): 코인이 모자랄 때 뜨던
+    // '다음 임무에 사용할 은동전이 부족해요.'가 사라지고 '다음 구역에
+    // 도전해 봐요.'로 바뀐다. 버튼 구성(나가기/다시 하기/다음 구역으로)은
+    // 같으므로, 코인 잔량과 무관하게 '다시 하기'만 눌러야 한다.
+    let observer = SceneObserver()
+
+    let result = try await observer.observe(
+        image: try liveFixtureImage(named: "landscape-retry-menu-10coin"),
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(result.actionCandidates.count == 1)
+    #expect(result.actionCandidates.first?.ruleID == "reward_retry")
+    #expect(result.actionCandidates.first?.targetText == "다시 하기")
 }
 
 @Test
@@ -58,6 +104,59 @@ func earlyResultScreenWaitsInsteadOfClicking() async throws {
 }
 
 @Test
+func revealedEquipmentDropIsRecordedInTheSameCycle() async throws {
+    // 실측(은동전 쓴 런): 결과 화면이 처음 뜰 때 전리품 한 칸이 '?'로
+    // 가려져 있고, '발견한 전리품'을 눌러야 장비 드랍이 드러난다. 두 프레임을
+    // 순서대로 흘려 넣어 한 판으로 합쳐지는지 본다 — 처음 프레임만 봤다면
+    // 장비를 통째로 놓친다.
+    let recognizer = VisionTextRecognizer()
+    let hidden = try await recognizer.recognizeText(
+        in: try liveFixtureImage(named: "landscape-loot-coin-used")
+    )
+    let revealed = try await recognizer.recognizeText(
+        in: try liveFixtureImage(named: "landscape-loot-coin-used-revealed")
+    )
+    var tracker = CycleTracker()
+    let size = CGSize(width: 1_512, height: 949)
+
+    _ = tracker.observe(texts: hidden, imageSize: size)
+    _ = tracker.observe(texts: revealed, imageSize: size)
+    let closed = tracker.observe(texts: [], imageSize: size)
+    let record = try #require(closed)
+
+    #expect(record.dungeon == "룬다 1층 2구역")
+    #expect(record.combatSeconds == 16)
+    // 가려져 있던 장비(OCR이 두 줄로 끊어 읽는다)가 들어와야 한다.
+    #expect(record.items.contains { $0.contains("방패의 판금") })
+    // 처음부터 보이던 것도 그대로 남는다.
+    #expect(record.items.contains("룬의 파편"))
+}
+
+@Test
+func coinUsedRunRecordsItsDoubledLoot() async throws {
+    // 실측(은동전 10개를 쓰고 들어간 런의 전리품 화면, 소모 후 잔량 0):
+    // 두 배 보상이라 아이템이 훨씬 많다(안 쓴 런 5종 → 17종). 화면 구조는
+    // 같으므로 같은 마커로 한 사이클이 기록돼야 한다.
+    let recognizer = VisionTextRecognizer()
+    let texts = try await recognizer.recognizeText(
+        in: try liveFixtureImage(named: "landscape-loot-coin-used")
+    )
+    var tracker = CycleTracker()
+
+    let size = CGSize(width: 1_512, height: 949)
+    _ = tracker.observe(texts: texts, imageSize: size)
+    let closed = tracker.observe(texts: [], imageSize: size)
+    let record = try #require(closed)
+
+    #expect(record.dungeon == "룬다 1층 2구역")
+    #expect(record.combatSeconds == 16)
+    #expect(record.items.contains("룬의 파편"))
+    #expect(record.items.contains("조각난 흑요석"))
+    // 두 배 보상 런은 안 쓴 런보다 확실히 많은 종류가 잡힌다.
+    #expect(record.items.count > 10)
+}
+
+@Test
 func loot_recordsItemsWithoutQuantityBadgeSuchAsSoulstone() async throws {
     // 실측(은동전 없이 돈 런, 공명의 영혼석 드랍): 같은 화면에서
     // '마물 퇴치 증표'는 10, '미지의 소울 조각'은 1이 찍히는데 '공명의
@@ -70,11 +169,10 @@ func loot_recordsItemsWithoutQuantityBadgeSuchAsSoulstone() async throws {
     )
     var tracker = CycleTracker()
 
-    let recorded = tracker.observe(
-        texts: texts,
-        imageSize: CGSize(width: 1_512, height: 949)
-    )
-    let record = try #require(recorded)
+    let size = CGSize(width: 1_512, height: 949)
+    _ = tracker.observe(texts: texts, imageSize: size)
+    let closed = tracker.observe(texts: [], imageSize: size)
+    let record = try #require(closed)
 
     #expect(record.dungeon == "룬다 1층 2구역")
     #expect(record.combatSeconds == 14)

@@ -8,6 +8,7 @@ public enum AutomationScene: String, CaseIterable, Equatable, Sendable {
     case continueDialog
     case missionSelection
     case deselectChallenge
+    case deselectDoubleLoot
     case enterReady
     case running
 
