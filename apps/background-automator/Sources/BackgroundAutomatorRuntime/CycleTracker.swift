@@ -34,9 +34,12 @@ public struct CycleTracker: Sendable {
     /// 읽으므로 포함 검사로 매칭한다.
     static let markerText = "순수 전투 시간"
 
-    /// 아이템 그리드는 결과 화면 아래쪽에 있다(실측 y≥0.5). 던전 이름·
-    /// 전투 시간·난이도 같은 상단 메타 텍스트를 아이템으로 오인하지 않는다.
+    /// 아이템 그리드가 놓이는 세로 구간(실측 0.55~0.78). 위로는 던전 이름·
+    /// 전투 시간 같은 메타 텍스트를, 아래로는 버튼과 안내문(y≥0.82: 나가기·
+    /// 다시 하기·'은동전이 부족해요.')을 잘라낸다. 상한이 없으면 그 UI가
+    /// 전리품 이름으로 섞여 드랍률 집계가 오염된다.
     static let itemMinimumY = 0.5
+    static let itemMaximumY = 0.80
 
     /// 결과 화면이 떠 있는 동안 모으는 중간 상태.
     private struct PendingCycle {
@@ -131,16 +134,28 @@ public struct CycleTracker: Sendable {
         }
         return texts.compactMap { observation in
             let name = observation.text.trimmingCharacters(in: .whitespaces)
+            let y = observation.boundingBox.midY / imageSize.height
             guard
-                observation.boundingBox.midY / imageSize.height
-                    >= itemMinimumY,
+                (itemMinimumY ... itemMaximumY).contains(y),
                 !name.isEmpty,
-                // 수량 뱃지(숫자만)는 이름이 아니다.
-                name.contains(where: { $0.isLetter })
+                // 전리품 이름은 한글이다. 수량 뱃지(숫자)와 'BO'·'BP' 같은
+                // 아이콘 오독을 함께 걸러낸다.
+                name.contains(where: { $0.isHangul })
             else {
                 return nil
             }
             return name
+        }
+    }
+}
+
+extension Character {
+    /// 한글 음절·자모인지. 전리품 이름을 아이콘 오독과 구분하는 데 쓴다.
+    var isHangul: Bool {
+        unicodeScalars.contains {
+            (0xAC00 ... 0xD7A3).contains($0.value) // 가–힣
+                || (0x1100 ... 0x11FF).contains($0.value) // 자모
+                || (0x3130 ... 0x318F).contains($0.value) // 호환 자모
         }
     }
 }

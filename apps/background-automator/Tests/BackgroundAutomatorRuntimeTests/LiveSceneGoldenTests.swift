@@ -181,6 +181,33 @@ func loot_recordsItemsWithoutQuantityBadgeSuchAsSoulstone() async throws {
 }
 
 @Test
+func recordedItemsExcludeButtonsAndNotices() async throws {
+    // 실측 회귀(첫 실사용 기록): 아이템 그리드 아래의 버튼·안내문이 전리품
+    // 이름으로 섞여 들어갔다('나가기', '다시 하기', '던전 탐험을
+    // 계속하시겠습니까?', '은동전이 부족해요.'). 드랍률 집계가 오염된다.
+    let recognizer = VisionTextRecognizer()
+    let texts = try await recognizer.recognizeText(
+        in: try liveFixtureImage(named: "landscape-loot-soulstone-nocoin")
+    )
+    var tracker = CycleTracker()
+    let size = CGSize(width: 1_512, height: 949)
+
+    _ = tracker.observe(texts: texts, imageSize: size)
+    let closed = tracker.observe(texts: [], imageSize: size)
+    let record = try #require(closed)
+
+    // 진짜 전리품은 남는다.
+    #expect(record.items.contains("공명의 영혼석"))
+    // 버튼·안내문·OCR 잡음은 빠진다.
+    for noise in [
+        "나가기", "다시 하기", "다음 구역으로", "은동전이 부족해요.", "BO", "BP",
+    ] {
+        #expect(!record.items.contains(noise), "전리품에 '\(noise)'가 섞였다")
+    }
+    #expect(!record.items.contains { $0.contains("상세 정보") })
+}
+
+@Test
 func loot_screenWithRetryMenuStillFiresOnlyRetry() async throws {
     // 결과 화면에는 '발견한 전리품'과 '다시 하기'가 함께 뜬다. 둘 다
     // 후보가 되면 모호성으로 정지하므로 재도전만 남아야 한다.
