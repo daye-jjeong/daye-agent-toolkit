@@ -2,6 +2,7 @@ import Foundation
 
 public enum AutomationScene: String, CaseIterable, Equatable, Sendable {
     case clearTouch
+    case rewardDetail
     case sceneSkip
     case rewardRetry
     case continueDialog

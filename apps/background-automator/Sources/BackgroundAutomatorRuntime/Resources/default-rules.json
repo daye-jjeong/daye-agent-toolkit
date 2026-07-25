@@ -70,6 +70,36 @@
       "cooldownSeconds": 1.0
     },
     {
+      "id": "reward_detail",
+      "requiredTexts": [
+        "발견한 전리품"
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기"
+      ],
+      "action": {
+        "targetText": "발견한 전리품"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.35,
+          "minY": 0.33,
+          "maxX": 0.65,
+          "maxY": 0.5
+        },
+        "portrait-mobile": {
+          "minX": 0.05,
+          "minY": 0.33,
+          "maxX": 0.95,
+          "maxY": 0.55
+        }
+      },
+      "minimumOCRConfidence": 0.45,
+      "stableObservationCount": 2,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 1.0
+    },
+    {
       "id": "reward_retry",
       "requiredTexts": [
         "다시 하기"

@@ -65,6 +65,49 @@ func observedForbiddenTextBlocksRetryCandidate() async throws {
 }
 
 @Test
+func rewardDetailFiresAloneOnLootScreenClickingHeaderGlyph() async throws {
+    // 실측(loot3.png 1512×949): 은동전 쓴 런의 발견전리품 화면. '발견한
+    // 전리품'(cf 0.50) 헤더 외에 다른 룰 시그니처(다시 하기·입장하기·도전·
+    // 계속하기·장면 넘기기·화면을 터치)가 없다 → reward_detail만 발동해
+    // 후보가 1개다(2개면 모호성으로 앱이 얼어붙어 정지한다). 빈 공간이
+    // 아니라 헤더 글자 박스를 눌러 재도전 메뉴(나가기/다시하기/다음구역)로
+    // 넘어간다.
+    let lootHeader = CGRect(x: 694, y: 369, width: 123, height: 27)
+    let observer = SceneObserver(
+        textRecognizer: FakeTextRecognizer([
+            recognized(
+                "룬다 1층 2구역",
+                confidence: 0.5,
+                rect: CGRect(x: 683, y: 251, width: 154, height: 32)
+            ),
+            recognized(
+                "C 순수 전투 시간 0:13",
+                confidence: 1.0,
+                rect: CGRect(x: 683, y: 295, width: 142, height: 17)
+            ),
+            recognized("발견한 전리품", confidence: 0.5, rect: lootHeader),
+            recognized(
+                "골드",
+                confidence: 0.5,
+                rect: CGRect(x: 551, y: 541, width: 32, height: 20)
+            ),
+        ])
+    )
+
+    let result = try await observer.observe(
+        image: try blankImage(width: 1512, height: 949),
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(result.actionCandidates.count == 1)
+    let candidate = try #require(result.actionCandidates.first)
+    #expect(candidate.ruleID == "reward_detail")
+    #expect(candidate.targetText == "발견한 전리품")
+    #expect(candidate.boundingBox == lootHeader)
+}
+
+@Test
 func lowConfidenceSceneSkipStillBlocksHighConfidenceAction() async throws {
     let observer = SceneObserver(
         textRecognizer: FakeTextRecognizer([
@@ -1129,6 +1172,26 @@ private func fixtureImage(named name: String) throws -> CGImage {
         let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
     else {
         throw FixtureError.invalidImage(name)
+    }
+    return image
+}
+
+/// FakeTextRecognizer는 이미지를 크기 계산에만 쓰므로, 실측 캡처 크기의
+/// 빈 이미지로 정규화 좌표를 실제 픽셀 박스와 일치시킨다.
+private func blankImage(width: Int, height: Int) throws -> CGImage {
+    guard
+        let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ),
+        let image = context.makeImage()
+    else {
+        throw FixtureError.invalidImage("blank \(width)x\(height)")
     }
     return image
 }

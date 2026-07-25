@@ -11,6 +11,7 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
         Set(rules.map(\.id)) == [
             "scene_skip",
             "clear_touch",
+            "reward_detail",
             "reward_retry",
             "continue_dialog",
             "mission_selection",
@@ -31,7 +32,7 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
     // forbidden으로 오탐을 막는다(enter_ready).
     let lowConfidenceRules: Set<String> = [
         "continue_dialog", "deselect_challenge", "enter_ready",
-        "scene_skip",
+        "scene_skip", "reward_detail",
     ]
 
     for rule in rules {
@@ -83,6 +84,7 @@ func clearTouchRequiresExactContextAndUsesOnlySafePoint() throws {
     ("mission_selection", "도전", 0.5),
     // A방식: 입장 후 억제를 2초로 단축(실시간 결과 감지).
     ("enter_ready", "입장하기", 2.0),
+    ("reward_detail", "발견한 전리품", 0.5),
 ])
 func textActionsUseExactOCRTargetBoundingBoxConfiguration(
     id: String,
@@ -115,6 +117,31 @@ func enterReadyBlocksSelectedStateAndUsesLowConfidenceExactMatch() throws {
             "선택을 해제하면 임무 없이 입장할 수 있습니다."
         )
     )
+}
+
+@Test
+func rewardDetailClicksLootHeaderWithLowConfidenceExactMatch() throws {
+    let rule = try workflowRule("reward_detail")
+
+    // 실측(2026-07-25, loot3.png 1512×949): '발견한 전리품'은 cf 0.50
+    // 장식 폰트로 화면 중앙(정규화 x0.50·y0.40)에 뜬다. 은동전 쓴 런은
+    // 결과가 접혀 있어 눌러야 펼쳐지고, 안 쓴 런은 눌러도 무변화(무해)다.
+    // 빈 공간이 아닌 글자 자체를 눌러 재도전 메뉴로 넘어간다. cf 0.50이라
+    // exact-match + '장면 넘기기' forbidden으로 오탐을 막는다.
+    #expect(rule.requiredTexts == ["발견한 전리품"])
+    #expect(rule.action.targetText == "발견한 전리품")
+    #expect(rule.action.safePointRegion == nil)
+    #expect(rule.minimumOCRConfidence >= 0.4)
+    #expect(rule.minimumOCRConfidence <= 0.5)
+    #expect(rule.appearance == nil)
+    // 규칙 id ↔ scene 매핑 누락(회귀 방지): 후보는 생겨도 adopt에서 막힘.
+    #expect(
+        AutomationCoordinator.scene(forRuleID: "reward_detail")
+            == .rewardDetail
+    )
+    // 발견전리품 화면엔 던전명이 표시된다(정규화 y0.26, cf 0.50 —
+    // 추출 신뢰도 향상은 loot-log 단계에서).
+    #expect(AutomationCoordinator.sceneHasDungeonName(.rewardDetail))
 }
 
 @Test
