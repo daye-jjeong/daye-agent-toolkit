@@ -4,6 +4,7 @@ import BackgroundAutomatorRuntime
 import Darwin
 import Foundation
 import ImageIO
+@preconcurrency import ScreenCaptureKit
 import UniformTypeIdentifiers
 
 enum ProbeError: Error {
@@ -39,6 +40,7 @@ enum ProbeCommand {
     case list
     case visibility(bundleIdentifier: String, title: String)
     case capture(bundleIdentifier: String, title: String, outputPath: String)
+    case benchCapture(bundleIdentifier: String)
     case click(
         bundleIdentifier: String,
         title: String,
@@ -110,6 +112,14 @@ enum ProbeCommand {
                 bundleIdentifier: bundleIdentifier,
                 title: title
             )
+
+        case "bench-capture":
+            guard arguments.count == 3, arguments[1] == "--bundle-id" else {
+                throw ProbeError.invalidArguments(
+                    "Usage: bench-capture --bundle-id <id>"
+                )
+            }
+            return .benchCapture(bundleIdentifier: arguments[2])
 
         case "capture":
             var values: [String: String] = [:]
@@ -330,6 +340,11 @@ do {
     let captureService = WindowCaptureService()
 
     switch command {
+    case let .benchCapture(bundleIdentifier):
+        let report = try await CaptureBenchmark()
+            .run(bundleIdentifier: bundleIdentifier)
+        print(report)
+
     case .version:
         print(
             "BackgroundAutomatorProbe "
@@ -576,4 +591,76 @@ do {
     fputs("Error: \(error.localizedDescription)\n", stderr)
     fflush(stderr)
     exit(EXIT_FAILURE)
+}
+
+
+/// 화면 한 장을 얻는 데 드는 시간을 구간별로 나눠 잰다.
+/// 어디를 줄여야 반응이 빨라지는지 추측하지 않기 위해서다.
+private actor CaptureBenchmark {
+    func run(bundleIdentifier: String) async throws -> String {
+        var enumerate: [Double] = []
+        var accessibility: [Double] = []
+        var pixels: [Double] = []
+
+        for round in 0 ..< 6 {
+            var mark = Date()
+            let content = try await SCShareableContent
+                .excludingDesktopWindows(false, onScreenWindowsOnly: false)
+            let enumerateMs = Self.elapsed(mark)
+
+            guard let window = content.windows.first(where: {
+                $0.owningApplication?.bundleIdentifier == bundleIdentifier
+            }) else {
+                throw ProbeError.invalidArguments("창을 찾지 못했습니다.")
+            }
+
+            mark = Date()
+            let element = AXUIElementCreateApplication(
+                window.owningApplication?.processID ?? 0
+            )
+            var value: CFTypeRef?
+            _ = AXUIElementCopyAttributeValue(
+                element,
+                kAXWindowsAttribute as CFString,
+                &value
+            )
+            let accessibilityMs = Self.elapsed(mark)
+
+            let configuration = SCStreamConfiguration()
+            configuration.showsCursor = false
+            configuration.width = Int(window.frame.width)
+            configuration.height = Int(window.frame.height)
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            mark = Date()
+            _ = try await SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: configuration
+            )
+            let pixelsMs = Self.elapsed(mark)
+
+            if round > 0 {
+                enumerate.append(enumerateMs)
+                accessibility.append(accessibilityMs)
+                pixels.append(pixelsMs)
+            }
+        }
+
+        let e = Self.median(enumerate)
+        let a = Self.median(accessibility)
+        let p = Self.median(pixels)
+        return [
+            String(format: "창 열거      %6.0fms", e),
+            String(format: "접근성 확인  %6.0fms", a),
+            String(format: "화면 캡처    %6.0fms", p),
+            String(format: "합계         %6.0fms", e + a + p),
+        ].joined(separator: "\n")
+    }
+
+    private static func elapsed(_ start: Date) -> Double {
+        Date().timeIntervalSince(start) * 1_000
+    }
+
+    private static func median(_ values: [Double]) -> Double {
+        values.sorted()[values.count / 2]
+    }
 }

@@ -430,9 +430,16 @@ private actor ScreenCaptureKitBackend: WindowCaptureBackend {
 
     private func loadWindows() async throws -> [SCWindow] {
         do {
+            // 화면에 떠 있는 창만 훑는다. 실측(창 230개 기준) 274ms →
+            // 120ms대로, 관찰 한 번의 가장 큰 비용이 여기였다.
+            //
+            // 안전 영향은 없다. 캡처는 WindowTarget.isCurrent가 이미
+            // isOnScreen을 요구하므로 화면 밖 창은 어차피 거부되고,
+            // 창 선택도 같은 조건으로 거른다. 최소화된 창은 목록에서
+            // 빠져 '창을 찾지 못함'으로 끝나며, 종전에도 같은 오류였다.
             let content = try await SCShareableContent.excludingDesktopWindows(
                 false,
-                onScreenWindowsOnly: false
+                onScreenWindowsOnly: true
             )
             return content.windows
         } catch {
