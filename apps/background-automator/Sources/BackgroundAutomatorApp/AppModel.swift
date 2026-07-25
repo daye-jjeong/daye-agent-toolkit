@@ -551,7 +551,8 @@ private extension AppModel {
                 at: Date(),
                 outcome: "clicked",
                 scene: click.ruleID,
-                dungeonName: click.dungeonName
+                dungeonName: click.dungeonName,
+                phases: click.phases
             )
         )
         if let summary = try? activityWriter.summary() {

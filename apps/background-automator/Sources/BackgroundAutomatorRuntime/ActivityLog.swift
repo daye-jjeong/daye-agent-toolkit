@@ -85,22 +85,68 @@ public enum DungeonNameExtractor {
     }
 }
 
+/// 클릭 한 번에 든 시간을 구간별로 쪼갠 값.
+///
+/// 실측(2026-07-25, 137판): 한 판 104초 중 89초는 게임이 쓰는 시간이고
+/// 앱이 쓰는 시간은 16초다. 그 16초가 어느 구간에 몰려 있는지 알아야
+/// 무엇을 줄일지 정할 수 있다.
+public struct ClickPhaseTimings: Codable, Equatable, Sendable {
+    /// 화면을 잡아 글자를 읽기까지.
+    public let observeMilliseconds: Int
+    /// 사용자가 손을 뗄 때까지 기다린 시간.
+    public let idleWaitMilliseconds: Int
+    /// 누르기 직전 화면을 다시 확인하는 데 든 시간.
+    public let reobserveMilliseconds: Int
+    /// 게임을 앞으로 올리고 눌렀다가 원래 앱으로 돌아오기까지.
+    public let clickMilliseconds: Int
+
+    public var totalMilliseconds: Int {
+        observeMilliseconds
+            + idleWaitMilliseconds
+            + reobserveMilliseconds
+            + clickMilliseconds
+    }
+
+    public init(
+        observe: Duration,
+        idleWait: Duration,
+        reobserve: Duration,
+        click: Duration
+    ) {
+        observeMilliseconds = Self.milliseconds(observe)
+        idleWaitMilliseconds = Self.milliseconds(idleWait)
+        reobserveMilliseconds = Self.milliseconds(reobserve)
+        clickMilliseconds = Self.milliseconds(click)
+    }
+
+    /// 클럭이 뒤로 가거나 측정이 어긋나도 음수가 남지 않게 자른다.
+    private static func milliseconds(_ duration: Duration) -> Int {
+        let components = duration.components
+        let value = components.seconds * 1_000
+            + components.attoseconds / 1_000_000_000_000_000
+        return value > 0 ? Int(value) : 0
+    }
+}
+
 public struct ActivityEvent: Codable, Equatable, Sendable {
     public let at: Date
     public let outcome: String
     public let scene: String?
     public let dungeonName: String?
+    public let phases: ClickPhaseTimings?
 
     public init(
         at: Date,
         outcome: String,
         scene: String?,
-        dungeonName: String?
+        dungeonName: String?,
+        phases: ClickPhaseTimings? = nil
     ) {
         self.at = at
         self.outcome = outcome
         self.scene = scene
         self.dungeonName = dungeonName
+        self.phases = phases
     }
 }
 

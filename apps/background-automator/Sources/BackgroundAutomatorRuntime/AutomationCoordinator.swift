@@ -122,10 +122,17 @@ public actor AutomationCoordinator {
     public struct ClickRecord: Equatable, Sendable {
         public let ruleID: String
         public let dungeonName: String?
+        /// 이 클릭에 든 시간을 구간별로 쪼갠 값. 어디가 느린지 짚는 데 쓴다.
+        public let phases: ClickPhaseTimings?
 
-        public init(ruleID: String, dungeonName: String?) {
+        public init(
+            ruleID: String,
+            dungeonName: String?,
+            phases: ClickPhaseTimings? = nil
+        ) {
             self.ruleID = ruleID
             self.dungeonName = dungeonName
+            self.phases = phases
         }
     }
 
@@ -277,10 +284,13 @@ public actor AutomationCoordinator {
         }
 
         try ensureCanContinue(token: cycleToken)
+        // 구간별 소요를 재 어디가 느린지 짚는다(관찰·유휴 대기·재관찰·클릭).
+        let observeStartedAt = await clock.now()
         let frame = try await observer.observe()
         lastObservation = ObservationDiagnostics(frame: frame)
         try ensureCanContinue(token: cycleToken)
         let now = await clock.now()
+        let observeDuration = now - observeStartedAt
         try ensureCanContinue(token: cycleToken)
 
         let validatedCandidate = evaluator.validatedCandidate(
@@ -333,6 +343,7 @@ public actor AutomationCoordinator {
 
         await statusReporter?(.buttonDetected)
         await statusReporter?(.waitingForUserIdle)
+        let idleStartedAt = await clock.now()
         let idleSnapshot: UserInputSnapshot
         do {
             idleSnapshot = try await inputMonitor.waitUntilIdle(
@@ -343,11 +354,14 @@ public actor AutomationCoordinator {
             throw CancellationError()
         }
         try ensureCanContinue(token: cycleToken)
+        let reobserveStartedAt = await clock.now()
+        let idleWaitDuration = reobserveStartedAt - idleStartedAt
 
         let freshFrame = try await observer.observe()
         lastObservation = ObservationDiagnostics(frame: freshFrame)
         try ensureCanContinue(token: cycleToken)
         let freshNow = await clock.now()
+        let reobserveDuration = freshNow - reobserveStartedAt
         try ensureCanContinue(token: cycleToken)
         let freshValidatedCandidate = evaluator.validatedCandidate(
             observation: freshFrame.observation,
@@ -390,16 +404,24 @@ public actor AutomationCoordinator {
             try ensureCanContinue(token: cycleToken)
             await statusReporter?(.clicking)
             try ensureCanContinue(token: cycleToken)
+            let clickStartedAt = await clock.now()
             _ = try await actionPerformer.perform(
                 targetApplication: targetApplication,
                 targetBox: screenTargetBox,
                 expectedInputGeneration: idleSnapshot.generation
             )
             try ensureCanContinue(token: cycleToken)
+            let clickFinishedAt = await clock.now()
             self.pendingCandidate = nil
             lastClick = ClickRecord(
                 ruleID: Self.expectedRuleID(for: scene) ?? "",
-                dungeonName: lastSeenDungeonName
+                dungeonName: lastSeenDungeonName,
+                phases: ClickPhaseTimings(
+                    observe: observeDuration,
+                    idleWait: idleWaitDuration,
+                    reobserve: reobserveDuration,
+                    click: clickFinishedAt - clickStartedAt
+                )
             )
             if scene == .enterReady {
                 let cooldownStart = await clock.now()
