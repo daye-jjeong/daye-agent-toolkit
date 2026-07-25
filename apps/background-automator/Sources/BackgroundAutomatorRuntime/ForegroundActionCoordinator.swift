@@ -142,6 +142,50 @@ private enum ForegroundActionAbort: Error {
     case failure(ForegroundActionFailure)
 }
 
+/// 클릭 목표 박스 안에서 실제 클릭 좌표를 고른다.
+protocol TargetPointSelecting: Sendable {
+    func point(in box: CGRect) -> CGPoint?
+}
+
+/// 항상 박스 정중앙. 테스트 결정성용 기본값.
+struct CenterTargetPointSelector: TargetPointSelecting {
+    func point(in box: CGRect) -> CGPoint? {
+        guard isUsableTargetBox(box) else { return nil }
+        return CGPoint(x: box.midX, y: box.midY)
+    }
+}
+
+/// 박스 가장자리에 insetFraction 여백을 두고 남은 중앙 영역에서 균일 임의
+/// 지점을 고른다. 매번 정중앙을 찍지 않고 흩뿌려 '동일 위치 반복'을 없앤다.
+/// 여백을 빼 범위가 사라지는 작은 박스는 중앙으로 폴백한다.
+struct RandomTargetPointSelector: TargetPointSelecting {
+    let insetFraction: Double
+
+    func point(in box: CGRect) -> CGPoint? {
+        guard isUsableTargetBox(box) else { return nil }
+        let insetX = box.width * insetFraction
+        let insetY = box.height * insetFraction
+        let lowX = box.minX + insetX
+        let highX = box.maxX - insetX
+        let lowY = box.minY + insetY
+        let highY = box.maxY - insetY
+        let x = highX > lowX ? Double.random(in: lowX ... highX) : box.midX
+        let y = highY > lowY ? Double.random(in: lowY ... highY) : box.midY
+        return CGPoint(x: x, y: y)
+    }
+}
+
+private func isUsableTargetBox(_ box: CGRect) -> Bool {
+    !box.isNull
+        && !box.isInfinite
+        && box.origin.x.isFinite
+        && box.origin.y.isFinite
+        && box.size.width.isFinite
+        && box.size.height.isFinite
+        && box.size.width >= 0
+        && box.size.height >= 0
+}
+
 public struct ForegroundActionCoordinator: Sendable {
     private let applications: any ApplicationCoordinating
     private let pointer: any PointerControlling
@@ -149,6 +193,7 @@ public struct ForegroundActionCoordinator: Sendable {
     private let sleeper: any ActionSleeping
     private let inputMonitor: any UserIdleMonitoring
     private let postActionDelay: Duration
+    private let pointSelector: any TargetPointSelecting
 
     public init(
         inputMonitor: any UserIdleMonitoring,
@@ -160,6 +205,7 @@ public struct ForegroundActionCoordinator: Sendable {
         sleeper = ContinuousActionSleeper()
         self.inputMonitor = inputMonitor
         self.postActionDelay = postActionDelay
+        pointSelector = RandomTargetPointSelector(insetFraction: 0.2)
     }
 
     init(
@@ -168,7 +214,8 @@ public struct ForegroundActionCoordinator: Sendable {
         clicker: any GlobalClicking,
         sleeper: any ActionSleeping,
         inputMonitor: any UserIdleMonitoring,
-        postActionDelay: Duration = .milliseconds(500)
+        postActionDelay: Duration = .milliseconds(500),
+        pointSelector: any TargetPointSelecting = CenterTargetPointSelector()
     ) {
         self.applications = applications
         self.pointer = pointer
@@ -176,6 +223,7 @@ public struct ForegroundActionCoordinator: Sendable {
         self.sleeper = sleeper
         self.inputMonitor = inputMonitor
         self.postActionDelay = postActionDelay
+        self.pointSelector = pointSelector
     }
 
     public func perform(
@@ -203,7 +251,7 @@ public struct ForegroundActionCoordinator: Sendable {
             )
         }
 
-        guard let targetPoint = Self.center(of: targetBox) else {
+        guard let targetPoint = pointSelector.point(in: targetBox) else {
             throw ForegroundActionCoordinatorError(
                 primaryFailure: .invalidTargetBox,
                 restorationFailures: []
@@ -415,22 +463,6 @@ public struct ForegroundActionCoordinator: Sendable {
                 ? .gameWasAlreadyFrontmost
                 : .restoredOriginalApplication
         )
-    }
-
-    private static func center(of box: CGRect) -> CGPoint? {
-        guard
-            !box.isNull,
-            !box.isInfinite,
-            box.origin.x.isFinite,
-            box.origin.y.isFinite,
-            box.size.width.isFinite,
-            box.size.height.isFinite,
-            box.size.width >= 0,
-            box.size.height >= 0
-        else {
-            return nil
-        }
-        return CGPoint(x: box.midX, y: box.midY)
     }
 
     private static func checkCancellation() throws {

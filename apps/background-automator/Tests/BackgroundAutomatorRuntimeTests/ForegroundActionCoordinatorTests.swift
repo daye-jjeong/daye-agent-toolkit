@@ -104,6 +104,67 @@ func foregroundActionActivatesClicksWaitsAndRestoresInOrder() async throws {
     #expect(clicker.clicks.count == 1)
 }
 
+private struct StubTargetPointSelector: TargetPointSelecting {
+    let fixed: CGPoint?
+    func point(in box: CGRect) -> CGPoint? { fixed }
+}
+
+@Test
+func performUsesInjectedPointSelectorNotHardcodedCenter() async throws {
+    // 코디네이터가 클릭 좌표를 하드코딩된 정중앙이 아니라 주입된 셀렉터에서
+    // 받는지 증명한다(랜덤 셀렉터 배선의 회귀 방지). 정중앙(140,220) 아닌
+    // 값을 주입해 그 값이 이동·클릭에 그대로 쓰이는지 본다.
+    let original = ApplicationIdentity(
+        processIdentifier: 10,
+        bundleIdentifier: "com.example.editor"
+    )
+    let game = ApplicationIdentity(
+        processIdentifier: 20,
+        bundleIdentifier: "com.example.game"
+    )
+    let log = ForegroundActionTestLog()
+    let applications = FakeApplicationCoordinator(
+        frontmost: original,
+        running: [original, game],
+        log: log
+    )
+    let pointer = FakePointerController(
+        location: CGPoint(x: 12, y: 34),
+        log: log
+    )
+    let clicker = FakeGlobalClicker(log: log)
+    let sleeper = FakeActionSleeper(log: log)
+    let monitor = FakeForegroundInputMonitor(
+        snapshots: [inputSnapshot(generation: 7)],
+        log: log
+    )
+    let coordinator = ForegroundActionCoordinator(
+        applications: applications,
+        pointer: pointer,
+        clicker: clicker,
+        sleeper: sleeper,
+        inputMonitor: monitor,
+        postActionDelay: .milliseconds(500),
+        pointSelector: StubTargetPointSelector(
+            fixed: CGPoint(x: 128, y: 214)
+        )
+    )
+
+    let result = try await coordinator.perform(
+        targetApplication: game,
+        targetBox: CGRect(x: 100, y: 200, width: 80, height: 40),
+        expectedInputGeneration: 7
+    )
+
+    // 정중앙(140,220)이 아니라 주입값(128,214)을 써야 한다.
+    #expect(result.targetPoint == CGPoint(x: 128, y: 214))
+    #expect(
+        log.entries.contains(
+            "click:128.0,214.0:\(AutomatorSyntheticEvent.sourceIdentifier)"
+        )
+    )
+}
+
 @Test
 func globalClickPostsOneTaggedDownUpPair() throws {
     let point = CGPoint(x: 140, y: 220)
