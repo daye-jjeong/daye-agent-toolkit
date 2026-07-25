@@ -70,6 +70,37 @@
       "cooldownSeconds": 1.0
     },
     {
+      "id": "auto_start",
+      "requiredTexts": [
+        "잠시 후 자동으로 진행됩니다.",
+        "Space"
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기"
+      ],
+      "action": {
+        "targetText": "Space"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.78,
+          "minY": 0.68,
+          "maxX": 1.0,
+          "maxY": 1.0
+        },
+        "portrait-mobile": {
+          "minX": 0.6,
+          "minY": 0.68,
+          "maxX": 1.0,
+          "maxY": 1.0
+        }
+      },
+      "minimumOCRConfidence": 0.85,
+      "stableObservationCount": 2,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 5.0
+    },
+    {
       "id": "reward_detail",
       "requiredTexts": [
         "발견한 전리품"
@@ -281,6 +312,38 @@
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
+    },
+    {
+      "id": "enter_with_coin",
+      "requiredTexts": [
+        "도전에 성공하면 임무 전리품이 두 배가 됩니다.",
+        "선택됨"
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기"
+      ],
+      "action": {
+        "targetText": "입장하기",
+        "targetTextSuffix": "입장하기"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.15,
+          "minY": 0.25,
+          "maxX": 0.85,
+          "maxY": 0.95
+        },
+        "portrait-mobile": {
+          "minX": 0.05,
+          "minY": 0.25,
+          "maxX": 0.95,
+          "maxY": 0.95
+        }
+      },
+      "minimumOCRConfidence": 0.45,
+      "stableObservationCount": 2,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 2.0
     },
     {
       "id": "enter_ready",

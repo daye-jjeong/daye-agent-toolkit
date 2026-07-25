@@ -1,6 +1,7 @@
 import Foundation
 
 public enum AutomationScene: String, CaseIterable, Equatable, Sendable {
+    case autoStart
     case clearTouch
     case rewardDetail
     case sceneSkip
@@ -9,6 +10,7 @@ public enum AutomationScene: String, CaseIterable, Equatable, Sendable {
     case missionSelection
     case deselectChallenge
     case deselectDoubleLoot
+    case enterWithCoin
     case enterReady
     case running
 

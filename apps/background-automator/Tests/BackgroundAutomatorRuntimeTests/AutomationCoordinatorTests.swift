@@ -1733,6 +1733,8 @@ private func coordinatorImage(width: Int, height: Int) -> CGImage {
 
 private func expectedRuleID(for scene: AutomationScene) -> String? {
     switch scene {
+    case .autoStart:
+        "auto_start"
     case .clearTouch:
         "clear_touch"
     case .rewardDetail:
@@ -1749,6 +1751,8 @@ private func expectedRuleID(for scene: AutomationScene) -> String? {
         "deselect_challenge"
     case .deselectDoubleLoot:
         "deselect_double_loot"
+    case .enterWithCoin:
+        "enter_with_coin"
     case .enterReady:
         "enter_ready"
     case .running:
@@ -1758,6 +1762,8 @@ private func expectedRuleID(for scene: AutomationScene) -> String? {
 
 private func defaultTexts(for scene: AutomationScene) -> [String] {
     switch scene {
+    case .autoStart:
+        ["잠시 후 자동으로 진행됩니다.", "Space"]
     case .clearTouch:
         ["던전 클리어", "화면을 터치해주세요"]
     case .rewardDetail:
@@ -1774,6 +1780,8 @@ private func defaultTexts(for scene: AutomationScene) -> [String] {
         ["선택을 해제하면 임무 없이 입장할 수 있습니다.", "선택됨"]
     case .deselectDoubleLoot:
         ["도전에 성공하면 임무 전리품이 두 배가 됩니다.", "선택됨"]
+    case .enterWithCoin:
+        ["도전에 성공하면 임무 전리품이 두 배가 됩니다.", "선택됨", "10 입장하기"]
     case .enterReady:
         ["입장하기"]
     case .running:

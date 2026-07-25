@@ -38,7 +38,10 @@ public struct VisionTextRecognizer: TextRecognizing, Sendable {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = Self.recognitionLanguages
-        request.usesLanguageCorrection = true
+        // 언어 보정을 끄면 인식이 40% 빨라진다(실측 392→233ms, 492→265ms).
+        // 규칙은 글자를 정확히 맞춰 보므로 보정이 오히려 원문을 바꿀 수 있고,
+        // 실캡처 10장 골든 테스트로 모든 장면이 그대로 인식됨을 확인했다.
+        request.usesLanguageCorrection = false
         request.minimumTextHeight = Self.minimumTextHeight
 
         let handler = VNImageRequestHandler(

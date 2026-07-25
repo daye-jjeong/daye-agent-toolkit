@@ -93,6 +93,16 @@ struct MenuContentView: View {
                 Text("\(model.cycleSummary.totalCycles)회")
             }
 
+            Toggle("은동전 쓰기 (전리품 2배)", isOn: $model.usesSilverCoin)
+                .disabled(model.isRunning || model.isTransitioning)
+            Text(
+                model.usesSilverCoin
+                    ? "임무를 그대로 두고 입장합니다. 한 판에 은동전 10개."
+                    : "임무를 해제하고 입장합니다. 은동전을 쓰지 않습니다."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
             Button("진단 폴더 열기") {
                 model.openDiagnosticsFolder()
             }

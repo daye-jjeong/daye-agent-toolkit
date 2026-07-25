@@ -9,6 +9,13 @@ import os
 final class AppModel: ObservableObject {
     @Published var bundleIdentifier: String
     @Published var titleContains: String
+    /// 임무를 그대로 두고 들어가 전리품을 두 배로 받을지(은동전 10개 소모).
+    /// 끄면 임무를 해제하고 들어가 은동전을 아낀다.
+    @Published var usesSilverCoin: Bool {
+        didSet {
+            defaults.set(usesSilverCoin, forKey: Self.usesSilverCoinKey)
+        }
+    }
     @Published private(set) var status: AutomationMenuStatus = .stopped {
         didSet {
             writeDiagnostics()
@@ -63,6 +70,7 @@ final class AppModel: ObservableObject {
         bundleIdentifier = defaults.string(
             forKey: Self.bundleIdentifierKey
         ) ?? ""
+        usesSilverCoin = defaults.bool(forKey: Self.usesSilverCoinKey)
         titleContains = defaults.string(
             forKey: Self.titleContainsKey
         ) ?? ""
@@ -324,7 +332,9 @@ private extension AppModel {
         }
 
         do {
-            let rules = try RuleLoader().loadDefaultRules()
+            let rules = try RuleLoader().loadDefaultRules(
+                usesSilverCoin: usesSilverCoin
+            )
             let idleMonitor = UserIdleMonitor()
             try idleMonitor.start()
 
@@ -595,6 +605,8 @@ private extension AppModel {
             )
         )
     }
+
+    static let usesSilverCoinKey = "usesSilverCoin"
 
     func saveConfiguration(_ configuration: TargetConfiguration) {
         defaults.set(

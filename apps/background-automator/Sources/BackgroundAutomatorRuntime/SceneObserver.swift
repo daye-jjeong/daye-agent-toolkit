@@ -241,8 +241,14 @@ extension SceneObserver {
         }
 
         if let targetText = rule.action.targetText {
+            // 끝말 일치는 사용자가 켠 규칙에만 쓴다(그 외는 완전 일치).
             let targets = observationsInRegion.filter {
-                Self.semanticText($0.text) == Self.semanticText(targetText)
+                if let suffix = rule.action.targetTextSuffix {
+                    return Self.semanticText($0.text)
+                        .hasSuffix(Self.semanticText(suffix))
+                }
+                return Self.semanticText($0.text)
+                    == Self.semanticText(targetText)
             }
             guard targets.count == 1, let target = targets.first else {
                 return nil

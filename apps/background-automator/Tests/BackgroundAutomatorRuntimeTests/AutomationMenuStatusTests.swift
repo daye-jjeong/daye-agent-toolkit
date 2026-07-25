@@ -83,9 +83,11 @@ func menuStatusProjectsCoordinatorStates() {
 
 @Test
 func pollingScheduleUsesFastAndLongIntervalsWithoutBusySpin() {
-    #expect(AutomationPollingSchedule.delay(for: .observing) == .milliseconds(250))
-    #expect(AutomationPollingSchedule.delay(for: .buttonDetected) == .milliseconds(250))
-    // 액션 구간은 250ms로 빠르게, 클릭 직후 쿨다운은 500ms로 단축.
+    // 버튼을 찾은 뒤 안정화까지 관찰을 두 번 하므로, 이 구간의 간격이
+    // 곧 반응 시간이다. 인식 자체가 265ms라 100ms면 쉬지 않고 이어 본다.
+    #expect(AutomationPollingSchedule.delay(for: .observing) == .milliseconds(100))
+    #expect(AutomationPollingSchedule.delay(for: .buttonDetected) == .milliseconds(100))
+    // 클릭 직후 쿨다운은 500ms로 단축.
     // 전투 대기(~90s 게임 시간)만 1초 유지해 폴링 낭비를 막는다.
     #expect(AutomationPollingSchedule.delay(for: .cooldown) == .milliseconds(500))
     #expect(AutomationPollingSchedule.delay(for: .combatWait) == .seconds(1))

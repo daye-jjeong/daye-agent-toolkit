@@ -5,11 +5,13 @@ import Testing
 
 @Test
 func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
+    // 기본은 은동전을 쓰지 않는다 — 임무를 해제하고 들어간다.
     let rules = try RuleLoader().loadDefaultRules()
 
     #expect(
         Set(rules.map(\.id)) == [
             "scene_skip",
+            "auto_start",
             "clear_touch",
             "reward_detail",
             "reward_retry",
@@ -21,6 +23,20 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
             "running",
         ]
     )
+}
+
+@Test
+func silverCoinChoiceSwapsExactlyOneRule() throws {
+    // 두 규칙은 같은 화면(임무 선택, 은동전 충분)에 반응하므로 하나만
+    // 남긴다. 둘 다 두면 후보가 겹쳐 자동화가 모호성으로 멈춘다.
+    let off = try RuleLoader().loadDefaultRules(usesSilverCoin: false)
+    let on = try RuleLoader().loadDefaultRules(usesSilverCoin: true)
+
+    #expect(off.contains { $0.id == "deselect_double_loot" })
+    #expect(!off.contains { $0.id == "enter_with_coin" })
+    #expect(on.contains { $0.id == "enter_with_coin" })
+    #expect(!on.contains { $0.id == "deselect_double_loot" })
+    #expect(off.count == on.count)
 }
 
 @Test

@@ -1,13 +1,21 @@
 public struct AutomationAction: Codable, Equatable, Sendable {
     public let targetText: String?
     public let safePointRegion: NormalizedRegion?
+    /// 글자 끝말로 누를 대상을 찾는다.
+    ///
+    /// 기본은 완전 일치다 — 그 엄격함이 '10 입장하기'를 눌러 은동전을
+    /// 몰래 쓰는 일을 막는다. 사용자가 은동전 사용을 켠 규칙에서만,
+    /// OCR이 ') 입장하기'처럼 앞을 흘려 읽어도 잡도록 끝말을 쓴다.
+    public let targetTextSuffix: String?
 
     public init(
         targetText: String?,
-        safePointRegion: NormalizedRegion?
+        safePointRegion: NormalizedRegion?,
+        targetTextSuffix: String? = nil
     ) {
         self.targetText = targetText
         self.safePointRegion = safePointRegion
+        self.targetTextSuffix = targetTextSuffix
     }
 }
 

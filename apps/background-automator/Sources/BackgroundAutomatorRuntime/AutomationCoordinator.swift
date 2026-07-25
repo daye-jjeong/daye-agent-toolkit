@@ -464,10 +464,11 @@ extension AutomationCoordinator {
     /// 없으므로 이 화면에서 뽑은 텍스트는 던전 이름으로 신뢰하지 않는다.
     static func sceneHasDungeonName(_ scene: AutomationScene) -> Bool {
         switch scene {
-        case .rewardRetry, .missionSelection, .enterReady, .rewardDetail:
+        case .rewardRetry, .missionSelection, .enterReady, .rewardDetail,
+             .enterWithCoin:
             true
         case .clearTouch, .continueDialog, .running, .deselectChallenge,
-             .deselectDoubleLoot, .sceneSkip:
+             .deselectDoubleLoot, .sceneSkip, .autoStart:
             false
         }
     }
@@ -476,6 +477,8 @@ extension AutomationCoordinator {
         for scene: AutomationScene
     ) -> String? {
         switch scene {
+        case .autoStart:
+            "auto_start"
         case .clearTouch:
             "clear_touch"
         case .rewardDetail:
@@ -492,6 +495,8 @@ extension AutomationCoordinator {
             "deselect_challenge"
         case .deselectDoubleLoot:
             "deselect_double_loot"
+        case .enterWithCoin:
+            "enter_with_coin"
         case .enterReady:
             "enter_ready"
         case .running:
