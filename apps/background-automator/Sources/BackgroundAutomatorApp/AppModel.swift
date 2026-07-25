@@ -21,12 +21,21 @@ final class AppModel: ObservableObject {
         dungeonRuns: 0,
         byDungeon: [:]
     )
+    @Published private(set) var cycleSummary = CycleSummary(
+        totalCycles: 0,
+        byDungeon: [:]
+    )
+
+    /// 결과 화면은 몇 초간 떠 있으므로 2초면 놓치지 않는다. 더 촘촘히
+    /// 보면 OCR 비용만 늘고, 더 성기면 빠르게 넘긴 사이클을 놓친다.
+    static let cycleObservationInterval = Duration.seconds(2)
 
     private let defaults: UserDefaults
     private let captureService: WindowCaptureService
     private let preflightService: PreflightService
     private let diagnosticsWriter: DiagnosticsFileWriter?
     private let activityWriter: ActivityLogWriter?
+    private let cycleWriter: CycleLogWriter?
     private let retryPolicy = AutomationRetryPolicy()
     private let clock = ContinuousClock()
     private static let logger = Logger(
@@ -40,6 +49,10 @@ final class AppModel: ObservableObject {
     private var startPending = false
     private var operationTask: Task<Void, Never>?
     private var loopTask: Task<Void, Never>?
+    /// 클릭 루프와 분리된 읽기 전용 관찰 루프. 사용자가 중간에 직접
+    /// 버튼을 눌러 넘긴 사이클도 놓치지 않으려면 클릭 여부와 무관하게
+    /// 화면을 계속 봐야 한다.
+    private var cycleTask: Task<Void, Never>?
     private var coordinator: AutomationCoordinator?
     private var idleMonitor: UserIdleMonitor?
     private var lastPreflightIssue: PreflightIssue?
@@ -69,8 +82,13 @@ final class AppModel: ObservableObject {
             ActivityLogWriter(directory: $0)
         }
         self.activityWriter = activityWriter
+        let cycleWriter = directory.map { CycleLogWriter(directory: $0) }
+        self.cycleWriter = cycleWriter
         if let summary = try? activityWriter?.summary() {
             activitySummary = summary
+        }
+        if let summary = try? cycleWriter?.summary() {
+            cycleSummary = summary
         }
         writeDiagnostics()
     }
@@ -354,6 +372,12 @@ private extension AppModel {
                     token: token
                 )
             }
+            cycleTask = Task { [weak self, observer] in
+                await self?.runCycleObservationLoop(
+                    observer: observer,
+                    token: token
+                )
+            }
         } catch {
             guard lifecycleGate.isCurrent(token) else {
                 return
@@ -371,7 +395,10 @@ private extension AppModel {
         status = .stopping
         let task = loopTask
         task?.cancel()
+        let cycles = cycleTask
+        cycles?.cancel()
         await task?.value
+        await cycles?.value
 
         if let coordinator {
             await coordinator.stop()
@@ -380,7 +407,46 @@ private extension AppModel {
         idleMonitor = nil
         coordinator = nil
         loopTask = nil
+        cycleTask = nil
         status = .stopped
+    }
+
+    /// 화면만 보고 던전 1판(사이클)을 센다. 클릭 루프와 분리돼 있어
+    /// 사용자가 중간에 직접 버튼을 눌러 넘긴 사이클도 빠지지 않는다.
+    /// 결과 화면이 뜬 '순간'에만 한 줄 남기고, 실패는 조용히 넘긴다 —
+    /// 기록이 자동화를 막아서는 안 된다.
+    func runCycleObservationLoop(
+        observer: any AutomationScreenObserving,
+        token: AutomationLifecycleGate.Token
+    ) async {
+        var tracker = CycleTracker()
+        while !Task.isCancelled {
+            do {
+                let frame = try await observer.observe()
+                try Task.checkCancellation()
+                guard lifecycleGate.isCurrent(token) else {
+                    return
+                }
+                if
+                    let size = frame.observation.imageSize,
+                    let record = tracker.observe(
+                        texts: frame.observation.recognizedTexts,
+                        imageSize: size
+                    )
+                {
+                    recordCycle(record)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // 창 전환·게임 재시작 등 일시적 실패는 다음 주기에 다시 본다.
+            }
+            do {
+                try await clock.sleep(for: Self.cycleObservationInterval)
+            } catch {
+                return
+            }
+        }
     }
 
     func runLoop(
@@ -486,6 +552,16 @@ private extension AppModel {
         )
         if let summary = try? activityWriter.summary() {
             activitySummary = summary
+        }
+    }
+
+    func recordCycle(_ record: CycleRecord) {
+        guard let cycleWriter else {
+            return
+        }
+        try? cycleWriter.append(record)
+        if let summary = try? cycleWriter.summary() {
+            cycleSummary = summary
         }
     }
 

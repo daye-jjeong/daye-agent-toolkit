@@ -28,6 +28,43 @@ func extractsDungeonNameFromLiveResultScreenTopCenter() {
 }
 
 @Test
+func extractsDungeonNameWhenCoinRunOverlayLowersConfidence() {
+    // 실측(2026-07-25 은동전 쓴 런 결과 화면): 같은 '룬다 1층 2구역'이
+    // 연출 오버레이 때문에 conf 0.50으로 떨어진다(코인 안 쓴 런은 1.0).
+    // 신뢰도만으로 거르면 코인런의 던전 이름을 통째로 잃는다. 난이도
+    // 라벨은 던전 이름보다 위에 있어 완화 시 오답이 되므로 함께 막는다.
+    let texts = [
+        liveText("어려움", conf: 0.50, nx: 0.496, ny: 0.241),
+        liveText("룬다 1층 2구역", conf: 0.50, nx: 0.502, ny: 0.281),
+        liveText("C 순수 전투 시간 0:13", conf: 1.0, nx: 0.499, ny: 0.319),
+    ]
+
+    let name = DungeonNameExtractor.extract(
+        from: texts,
+        imageSize: CGSize(width: 1_512, height: 949)
+    )
+
+    #expect(name == "룬다 1층 2구역")
+}
+
+@Test(arguments: ["쉬움", "보통", "어려움", "매우 어려움", "어려움]"])
+func neverReturnsDifficultyLabelAsDungeonName(label: String) {
+    // 난이도 라벨은 던전 이름 바로 위(더 작은 y)에 뜬다. '가장 위' 규칙만
+    // 두면 신뢰도 완화 후 난이도가 이름으로 뽑힌다.
+    let texts = [
+        liveText(label, conf: 0.50, nx: 0.496, ny: 0.241),
+        liveText("룬다 1층 2구역", conf: 0.50, nx: 0.502, ny: 0.281),
+    ]
+
+    let name = DungeonNameExtractor.extract(
+        from: texts,
+        imageSize: CGSize(width: 1_512, height: 949)
+    )
+
+    #expect(name == "룬다 1층 2구역")
+}
+
+@Test
 func returnsNilWhenNoDungeonNameInTopCenter() {
     let texts = [
         liveText("마비노기 모바일", conf: 1.0, nx: 0.082, ny: 0.017),

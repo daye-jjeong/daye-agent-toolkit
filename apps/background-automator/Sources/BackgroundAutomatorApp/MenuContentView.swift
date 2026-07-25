@@ -87,6 +87,12 @@ struct MenuContentView: View {
                 }
             }
 
+            // 클릭이 아니라 결과 화면 등장으로 세기 때문에, 사용자가 직접
+            // 넘긴 판도 포함된다(위 '완료한 던전'은 앱이 누른 것만 센다).
+            LabeledContent("기록된 사이클") {
+                Text("\(model.cycleSummary.totalCycles)회")
+            }
+
             Button("진단 폴더 열기") {
                 model.openDiagnosticsFolder()
             }

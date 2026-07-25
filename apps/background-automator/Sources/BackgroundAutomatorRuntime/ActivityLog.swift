@@ -8,7 +8,11 @@ import Foundation
 /// 중앙 밴드에 찍히고, 난이도(신뢰도 낮음)·전투 시간·상태이상 설명과
 /// 위치·신뢰도·키워드로 구분된다. 완벽한 파싱이 아니라 최선 추정이다.
 public enum DungeonNameExtractor {
-    static let minimumConfidence = 0.9
+    /// 실측(2026-07-25): 같은 던전 이름이 은동전 쓴 런에서는 연출 오버레이
+    /// 탓에 conf 0.50까지 떨어진다(안 쓴 런은 1.0). 0.9로 거르면 코인런의
+    /// 이름을 통째로 잃어 던전별 집계가 빈다. 장식 폰트 수준까지 낮추고,
+    /// 완화로 밴드에 들어오는 난이도 라벨은 difficultyLabels로 막는다.
+    static let minimumConfidence = 0.45
     static let bandMinY = 0.20
     static let bandMaxY = 0.33
     static let bandMinX = 0.30
@@ -20,6 +24,13 @@ public enum DungeonNameExtractor {
         "은동전", "떨어졌", "싸우", "쉬워", "얻습니다", "점",
         "등급", "전리품", "포인트", "증표", "경험치", "아이템",
         "상세", "클리어", "터치",
+    ]
+
+    /// 난이도 라벨은 던전 이름 바로 위(더 작은 y)에 뜨므로 '가장 위' 규칙
+    /// 아래서 이름을 밀어낸다. 유한 집합이라 정확히 일치할 때만 배제한다
+    /// (부분 일치로 막으면 이름에 같은 글자가 든 던전까지 걸린다).
+    static let difficultyLabels: Set<String> = [
+        "쉬움", "보통", "어려움", "매우어려움", "노말", "하드",
     ]
 
     public static func extract(
@@ -51,6 +62,11 @@ public enum DungeonNameExtractor {
             else {
                 return false
             }
+            guard !difficultyLabels.contains(
+                normalizedLabel(observation.text)
+            ) else {
+                return false
+            }
             return !excludedKeywords.contains { keyword in
                 observation.text.contains(keyword)
             }
@@ -60,6 +76,12 @@ public enum DungeonNameExtractor {
         return candidates
             .min { $0.boundingBox.midY < $1.boundingBox.midY }?
             .text
+    }
+
+    /// OCR이 라벨에 붙이는 공백·괄호 같은 잡음을 떼고 글자만 남긴다
+    /// ('어려움]' → '어려움', '매우 어려움' → '매우어려움').
+    private static func normalizedLabel(_ text: String) -> String {
+        String(text.filter { $0.isLetter })
     }
 }
 
