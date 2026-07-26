@@ -68,10 +68,7 @@ public struct StallImageWriter: Sendable {
                 $0.hasPrefix(Self.filePrefix) && $0.hasSuffix(".png")
             }
             .sorted()
-        guard snapshots.count > keepCount else {
-            return
-        }
-        for name in snapshots.prefix(snapshots.count - keepCount) {
+        for name in snapshots.dropLast(keepCount) {
             try? FileManager.default.removeItem(
                 at: directory.appendingPathComponent(name)
             )

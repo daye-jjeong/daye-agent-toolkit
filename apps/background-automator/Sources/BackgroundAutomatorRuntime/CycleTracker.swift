@@ -125,6 +125,11 @@ public struct CycleTracker: Sendable {
         return minutes * 60 + seconds
     }
 
+    /// 수량 뱃지에 숫자와 함께 붙는 단위·구분 기호.
+    private static let quantityUnits: Set<Character> = [
+        "만", "천", "억", ",", ".", "+", "%",
+    ]
+
     /// 수량 뱃지인지. 아이콘 위에 얹힌 '255.3만'·'1,382' 같은 숫자다.
     ///
     /// 한글 필터만으로는 못 거른다 — 단위 '만'·'천'·'억'이 한글이라
@@ -132,11 +137,13 @@ public struct CycleTracker: Sendable {
     /// 말고 다른 글자가 하나라도 있으면 진짜 이름으로 본다('만병통치약').
     static func isQuantityBadge(_ text: String) -> Bool {
         let stripped = text.filter { !$0.isWhitespace }
-        guard !stripped.isEmpty, stripped.contains(where: \.isNumber) else {
+        // 숫자가 없으면 뱃지가 아니다. 빈 문자열도 여기서 함께 걸린다.
+        guard stripped.contains(where: \.isNumber) else {
             return false
         }
-        let units: Set<Character> = ["만", "천", "억", ",", ".", "+", "%"]
-        return stripped.allSatisfy { $0.isNumber || units.contains($0) }
+        return stripped.allSatisfy {
+            $0.isNumber || quantityUnits.contains($0)
+        }
     }
 
     static func itemNames(
@@ -152,7 +159,7 @@ public struct CycleTracker: Sendable {
             return (itemMinimumY ... itemMaximumY).contains(y)
                 && !name.isEmpty
                 // 전리품 이름은 한글이다. 'BO'·'BP' 같은 아이콘 오독을 건다.
-                && name.contains(where: { $0.isHangul })
+                && name.contains(where: \.isHangul)
                 && !isQuantityBadge(name)
         }
         return joinStackedLabels(labels)
@@ -168,13 +175,16 @@ public struct CycleTracker: Sendable {
         let sorted = labels.sorted {
             $0.boundingBox.midY < $1.boundingBox.midY
         }
-        var used = Set<Int>()
+        // 윗줄에 붙여 쓴 라벨. 자기 이름으로 다시 나오면 안 된다.
+        var joined = Set<Int>()
         var names: [String] = []
-        for (index, top) in sorted.enumerated() where !used.contains(index) {
+        for index in sorted.indices where !joined.contains(index) {
+            let top = sorted[index]
             var name = top.text.trimmingCharacters(in: .whitespaces)
-            for (other, below) in sorted.enumerated()
-                where other > index && !used.contains(other)
+            for next in (index + 1) ..< sorted.count
+                where !joined.contains(next)
             {
+                let below = sorted[next]
                 let gap = below.boundingBox.midY - top.boundingBox.midY
                 // 다음 줄은 글자 높이의 두 배 안쪽이다. 다음 아이템 행은
                 // 그보다 훨씬 멀다(실측 8배).
@@ -185,10 +195,9 @@ public struct CycleTracker: Sendable {
                     continue
                 }
                 name += " " + below.text.trimmingCharacters(in: .whitespaces)
-                used.insert(other)
+                joined.insert(next)
                 break
             }
-            used.insert(index)
             names.append(name)
         }
         return names
