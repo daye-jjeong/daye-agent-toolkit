@@ -74,7 +74,9 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard(
                 }
             )
         }
-        #expect(rule.stableObservationCount >= 2)
+        // 1로 내렸다 — 클릭 직전 재확인이 남아 방어는 유지된다.
+        // 근거는 RuleSafetyMinimums.stableObservationCount 주석.
+        #expect(rule.stableObservationCount >= 1)
         if lowestConfidenceRules.contains(rule.id) {
             #expect(rule.minimumOCRConfidence >= 0.2)
         } else if lowConfidenceRules.contains(rule.id) {

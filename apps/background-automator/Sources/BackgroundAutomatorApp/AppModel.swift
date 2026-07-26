@@ -33,9 +33,12 @@ final class AppModel: ObservableObject {
         byDungeon: [:]
     )
 
-    /// 결과 화면은 몇 초간 떠 있으므로 2초면 놓치지 않는다. 더 촘촘히
-    /// 보면 OCR 비용만 늘고, 더 성기면 빠르게 넘긴 사이클을 놓친다.
-    static let cycleObservationInterval = Duration.seconds(2)
+    /// 결과 화면이 떠 있는 5~8초 동안 전리품이 차례로 채워진다. 2초로
+    /// 보면 3~4번뿐이라 그 사이에 들어온 항목을 놓쳤다 — 실측 248판에서
+    /// '확정' 라벨이 붙은 보상마저 92~95%만 잡혔다(100%여야 한다).
+    /// 1.2초로 좁혀 관찰을 1.7배로 늘린다. 늘어난 OCR 부담은 클릭 루프의
+    /// 관찰을 3회에서 2회로 줄여(stableObservationCount 1) 상쇄한다.
+    static let cycleObservationInterval = Duration.milliseconds(1200)
     /// 폴링 간격을 기준값 둘레로 흩뿌린다. 평균은 그대로라 느려지지 않는다.
     static let pollingJitter = TimingJitter()
 

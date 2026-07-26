@@ -6,7 +6,9 @@ import Testing
 @testable import BackgroundAutomatorRuntime
 
 @Test
-func oneStableObservationIsInsufficient() throws {
+func oneObservationIsEnoughAtTheApprovedMinimum() throws {
+    // 하한이 2 → 1로 내려갔다(2026-07-26). 오클릭을 실제로 막는 건
+    // 코디네이터가 클릭 직전에 하는 재확인이고 그건 그대로 남는다.
     var tracker = try StableObservationTracker(
         targetRectangleTolerancePixels: 2
     )
@@ -16,7 +18,21 @@ func oneStableObservationIsInsufficient() throws {
         requiredObservationCount: RuleSafetyMinimums.stableObservationCount
     )
 
-    #expect(result == nil)
+    #expect(result != nil)
+}
+
+@Test
+func trackerStillWithholdsUntilTheRequestedCountIsMet() throws {
+    // 규칙이 2를 요구하면 여전히 두 번 봐야 한다 — 하한만 내렸지
+    // 안정화 장치 자체를 없앤 게 아니다.
+    var tracker = try StableObservationTracker(
+        targetRectangleTolerancePixels: 2
+    )
+
+    #expect(
+        tracker.record(trackerCandidate(), requiredObservationCount: 2)
+            == nil
+    )
 }
 
 @Test
