@@ -125,6 +125,20 @@ public struct CycleTracker: Sendable {
         return minutes * 60 + seconds
     }
 
+    /// 수량 뱃지인지. 아이콘 위에 얹힌 '255.3만'·'1,382' 같은 숫자다.
+    ///
+    /// 한글 필터만으로는 못 거른다 — 단위 '만'·'천'·'억'이 한글이라
+    /// '255.3만'이 그대로 전리품 이름으로 쌓였다(실측 로그). 숫자와 단위
+    /// 말고 다른 글자가 하나라도 있으면 진짜 이름으로 본다('만병통치약').
+    static func isQuantityBadge(_ text: String) -> Bool {
+        let stripped = text.filter { !$0.isWhitespace }
+        guard !stripped.isEmpty, stripped.contains(where: \.isNumber) else {
+            return false
+        }
+        let units: Set<Character> = ["만", "천", "억", ",", ".", "+", "%"]
+        return stripped.allSatisfy { $0.isNumber || units.contains($0) }
+    }
+
     static func itemNames(
         in texts: [RecognizedTextObservation],
         imageSize: CGSize
@@ -132,20 +146,66 @@ public struct CycleTracker: Sendable {
         guard imageSize.height > 0 else {
             return []
         }
-        return texts.compactMap { observation in
+        let labels = texts.filter { observation in
             let name = observation.text.trimmingCharacters(in: .whitespaces)
             let y = observation.boundingBox.midY / imageSize.height
-            guard
-                (itemMinimumY ... itemMaximumY).contains(y),
-                !name.isEmpty,
-                // 전리품 이름은 한글이다. 수량 뱃지(숫자)와 'BO'·'BP' 같은
-                // 아이콘 오독을 함께 걸러낸다.
-                name.contains(where: { $0.isHangul })
-            else {
-                return nil
-            }
-            return name
+            return (itemMinimumY ... itemMaximumY).contains(y)
+                && !name.isEmpty
+                // 전리품 이름은 한글이다. 'BO'·'BP' 같은 아이콘 오독을 건다.
+                && name.contains(where: { $0.isHangul })
+                && !isQuantityBadge(name)
         }
+        return joinStackedLabels(labels)
+    }
+
+    /// 아이콘 하나 밑에 이름이 두 줄로 쌓이면 OCR이 따로 준다
+    /// ('세공된 블루' / '스피넬Z'). 같은 칸(가로로 겹침)에서 바로 아래
+    /// 줄이면 한 이름으로 잇는다. 좌표를 상수로 박지 않고 글자 높이로
+    /// 재므로 창 크기가 달라도 같은 기준이 선다.
+    static func joinStackedLabels(
+        _ labels: [RecognizedTextObservation]
+    ) -> [String] {
+        let sorted = labels.sorted {
+            $0.boundingBox.midY < $1.boundingBox.midY
+        }
+        var used = Set<Int>()
+        var names: [String] = []
+        for (index, top) in sorted.enumerated() where !used.contains(index) {
+            var name = top.text.trimmingCharacters(in: .whitespaces)
+            for (other, below) in sorted.enumerated()
+                where other > index && !used.contains(other)
+            {
+                let gap = below.boundingBox.midY - top.boundingBox.midY
+                // 다음 줄은 글자 높이의 두 배 안쪽이다. 다음 아이템 행은
+                // 그보다 훨씬 멀다(실측 8배).
+                guard gap <= top.boundingBox.height * 2 else {
+                    break
+                }
+                guard horizontallyOverlap(top, below) else {
+                    continue
+                }
+                name += " " + below.text.trimmingCharacters(in: .whitespaces)
+                used.insert(other)
+                break
+            }
+            used.insert(index)
+            names.append(name)
+        }
+        return names
+    }
+
+    private static func horizontallyOverlap(
+        _ lhs: RecognizedTextObservation,
+        _ rhs: RecognizedTextObservation
+    ) -> Bool {
+        let a = lhs.boundingBox
+        let b = rhs.boundingBox
+        let overlap = min(a.maxX, b.maxX) - max(a.minX, b.minX)
+        let narrower = min(a.width, b.width)
+        guard narrower > 0 else {
+            return false
+        }
+        return overlap / narrower >= 0.5
     }
 }
 
