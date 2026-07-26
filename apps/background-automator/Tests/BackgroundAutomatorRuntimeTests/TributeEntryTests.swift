@@ -92,10 +92,32 @@ func exhaustedAndDeselectedTributeScreenEnters(
     #expect(candidate.ruleID == "enter_ready")
 }
 
+@Test(arguments: [false, true])
+func exhaustedSilverCoinIsResolvedByDeselecting(
+    usesSilverCoin: Bool
+) async throws {
+    // 재화가 바닥나면 '쓰기'를 켜 뒀어도 해제해야 빠져나온다. 은동전이
+    // 임무값에도 모자라면 더블 루팅 카드가 통째로 사라져 '도전에 성공하면
+    // 임무 전리품이 두 배가 됩니다.'가 없고, 대신 해제 안내문이 뜬다.
+    // 그래서 enter_with_coin이 죽은 버튼을 누르는 일이 없다.
+    let image = try tributeFixture("landscape-selected-nocoin")
+    let result = try await SceneObserver().observe(
+        image: image,
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules(usesSilverCoin: usesSilverCoin)
+    )
+
+    #expect(result.actionCandidates.count == 1)
+    let candidate = try #require(result.actionCandidates.first)
+    #expect(candidate.ruleID == "deselect_challenge")
+    #expect(candidate.targetText == "선택됨")
+}
+
 @Test(arguments: [
     "landscape-double-loot-selected",
     "landscape-mission-select-10coin",
     "landscape-double-loot-available-off",
+    "landscape-selected-nocoin",
 ])
 func tributeRulesStayQuietOnSilverCoinScreens(
     fixture: String
