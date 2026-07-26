@@ -111,12 +111,14 @@ struct MenuContentView: View {
                 }
             }
 
-            Toggle("은동전 쓰기 (전리품 2배)", isOn: $model.usesSilverCoin)
+            // '전리품 2배'는 이 토글이 아니라 아래 '더블 루팅(도전)'의
+            // 문구다. 임무 선택은 보상을 받느냐 마느냐다.
+            Toggle("은동전 쓰기 (임무 보상 받기)", isOn: $model.usesSilverCoin)
                 .disabled(model.isRunning || model.isTransitioning)
             Text(
                 model.usesSilverCoin
-                    ? "임무를 그대로 두고 입장합니다. 한 판에 은동전 10개."
-                    : "임무를 해제하고 입장합니다. 은동전을 쓰지 않습니다."
+                    ? "임무를 그대로 두고 입장해 임무 보상을 받습니다. 한 판에 은동전 10개."
+                    : "임무를 해제하고 입장합니다. 은동전도 임무 보상도 없습니다."
             )
             .font(.caption)
             .foregroundStyle(.secondary)

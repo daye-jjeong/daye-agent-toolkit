@@ -1257,3 +1257,35 @@ private func expectSceneRect(
     #expect(abs(actual.size.width - expected.size.width) < tolerance)
     #expect(abs(actual.size.height - expected.size.height) < tolerance)
 }
+
+@Test
+func entryNeverFiresWhileTheMissionBadgeIsStillOnScreen() throws {
+    // 회귀(2026-07-26 13:16:50): 임무를 해제하지 않은 채 '입장하기'를 눌러
+    // 은동전 10개가 나갔다. 그때까지 이 규칙을 막던 건 둘 다 불안정했다 —
+    // 25자 안내문 완전일치, 그리고 OCR이 코인 숫자를 버튼 글자에 붙여
+    // ('10 입장하기') 읽어 주기를 바라는 것. 둘 다 어긋나면 그대로 뚫린다.
+    // '선택됨'은 3글자에 선택 상태에서만 뜨므로 훨씬 단단한 가드다.
+    let rule = try #require(
+        try RuleLoader().loadDefaultRules().first { $0.id == "enter_ready" }
+    )
+    let size = CGSize(width: 1512, height: 949)
+    let candidate = SceneObserver.actionCandidate(
+        for: rule,
+        observations: [
+            recognized(
+                "입장하기",
+                confidence: 0.5,
+                rect: CGRect(x: 1100, y: 865, width: 100, height: 30)
+            ),
+            recognized(
+                "선택됨",
+                confidence: 0.5,
+                rect: CGRect(x: 536, y: 374, width: 68, height: 27)
+            ),
+        ],
+        layout: .landscape,
+        imageSize: size
+    )
+
+    #expect(candidate == nil)
+}
