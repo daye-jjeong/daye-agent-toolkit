@@ -39,7 +39,7 @@ S8 던전 선택 구간 (선택됨/도전/입장하기) — 은동전 사용 결
 | continue_dialog | "계속하기" + "던전 탐험을 계속하시겠습니까?" | ¬장면넘기기 | "계속하기" | 0.45 |
 | turn_off_double_loot | "도전에 성공하면…두 배가 됩니다." | ¬장면넘기기 | 그 문장 **아래**의 "선택됨" | 0.45 |
 | deselect_challenge | "선택을 해제하면 임무 없이…" | ¬장면넘기기 | "선택됨" | 0.45 |
-| deselect_double_loot ᴼᶠᶠ | "도전에 성공하면…" + "선택됨" | ¬장면넘기기 | "선택됨" | 0.45 |
+| deselect_coin ᴼᶠᶠ | "도전에 성공하면…" + "선택됨" | ¬장면넘기기 | "선택됨" | 0.45 |
 | enter_with_coin ᴼᴺ | "도전에 성공하면…" + "선택됨" | ¬장면넘기기 | 끝말 "입장하기" | 0.25 |
 | enter_ready | "입장하기" | ¬장면넘기기 ¬안내문 **¬선택됨** | "입장하기" | 0.45 |
 | running | (센티넬, 매칭 안 됨) | — | 없음 | 0.90 |
@@ -158,13 +158,13 @@ restorationFailed 로깅(이미 추가됨)과 같은 패턴 확장. activity-log
 | landscape-continue-dialog-nocoin | S7 계속하기 팝업(전리품 헤더가 뒤에 남음) | continue_dialog |
 | landscape-selected-nocoin | S8 임무 선택됨(안내문+`10 입장하기`) | deselect_challenge |
 | landscape-deselected-nocoin | S8 해제됨(`도전`+`입장하기`) | enter_ready |
-| landscape-mission-select-10coin | S8 은동전 10, 임무 선택됨(안내문 無) | deselect_double_loot |
+| landscape-mission-select-10coin | S8 은동전 10, 임무 선택됨(안내문 無) | deselect_coin |
 | landscape-deselected-10coin | S8 은동전 10, 해제됨 | enter_ready |
 | landscape-retry-menu-10coin | S7 재도전 메뉴(은동전 10) | reward_retry |
 | landscape-loot-coin-used / -revealed | S6 코인런 결과(접힘/펼침) | reward_detail |
 | landscape-autostart-gauge | 던전 입장 직후 자동시작 게이지 | (규칙 없음 — 아래 참조) |
 | **landscape-double-loot-nomission** | S8 둘 다 해제, `총 탐험 전리품`, 🪙0 | enter_ready |
-| **landscape-double-loot-available-off** | S8 임무만, 더블루팅 `도전` 활성, 🪙10 | deselect_double_loot |
+| **landscape-double-loot-available-off** | S8 임무만, 더블루팅 `도전` 활성, 🪙10 | deselect_coin |
 | **landscape-double-loot-selected** | S8 둘 다 `선택됨`, 🪙20 | turn_off_double_loot |
 | **landscape-loot-double-collapsed** | S6 더블루팅 결과, 접힘 | reward_detail |
 | **landscape-loot-double-revealed** | S6 더블루팅 결과, 펼침 | reward_retry |

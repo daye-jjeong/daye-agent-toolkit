@@ -60,7 +60,7 @@ func coinOnEntersWithTheMissionKept() async throws {
     // 버튼 글자가 흔들려도(') 입장하기') 끝말로 잡는다.
     #expect(candidate.targetText?.hasSuffix("입장하기") == true)
     // 해제 규칙은 빠져 있어야 한다 — 함께 뜨면 모호성으로 멈춘다.
-    #expect(!rules.contains { $0.id == "deselect_double_loot" })
+    #expect(!rules.contains { $0.id == "deselect_coin" })
 }
 
 @Test

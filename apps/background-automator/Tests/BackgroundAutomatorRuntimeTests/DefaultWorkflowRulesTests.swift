@@ -17,7 +17,7 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
             "continue_dialog",
             "turn_off_double_loot",
             "deselect_challenge",
-            "deselect_double_loot",
+            "deselect_coin",
             // 공물 던전(페카)은 더블 루팅이 없어 은동전 규칙이 못 잡는다.
             // 기본은 공물도 쓰지 않는다 — 임무를 해제하고 들어간다.
             "deselect_tribute",
@@ -34,10 +34,10 @@ func silverCoinChoiceSwapsExactlyOneRule() throws {
     let off = try RuleLoader().loadDefaultRules(usesSilverCoin: false)
     let on = try RuleLoader().loadDefaultRules(usesSilverCoin: true)
 
-    #expect(off.contains { $0.id == "deselect_double_loot" })
+    #expect(off.contains { $0.id == "deselect_coin" })
     #expect(!off.contains { $0.id == "enter_with_coin" })
     #expect(on.contains { $0.id == "enter_with_coin" })
-    #expect(!on.contains { $0.id == "deselect_double_loot" })
+    #expect(!on.contains { $0.id == "deselect_coin" })
     #expect(off.count == on.count)
 }
 
@@ -57,7 +57,7 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard(
     // forbidden으로 오탐을 막는다(enter_ready).
     // clear_touch도 2026-07-26에 0.85에서 내렸다 — 아래 전용 테스트 참조.
     let lowConfidenceRules: Set<String> = [
-        "continue_dialog", "deselect_challenge", "deselect_double_loot",
+        "continue_dialog", "deselect_challenge", "deselect_coin",
         "enter_ready", "scene_skip", "reward_detail", "clear_touch",
         "reward_retry", "turn_off_double_loot",
         // 공물 화면의 '선택됨'·'공물1 입장하기'는 은동전 화면과 같은

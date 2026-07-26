@@ -78,7 +78,7 @@ public struct RuleLoader: Sendable {
     /// 임무를 그대로 두고 들어가 임무 보상을 받는 규칙(은동전 10개 소모).
     static let silverCoinRuleID = "enter_with_coin"
     /// 임무를 해제해 은동전을 아끼는 규칙.
-    static let silverCoinFreeRuleID = "deselect_double_loot"
+    static let silverCoinFreeRuleID = "deselect_coin"
     /// 임무를 그대로 두고 들어가는 규칙(공물 1개 소모).
     static let tributeRuleID = "enter_with_tribute"
     /// 임무를 해제해 공물을 아끼는 규칙.

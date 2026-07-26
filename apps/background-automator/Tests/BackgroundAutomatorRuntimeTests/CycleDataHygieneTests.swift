@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import ImageIO
 import Testing
 
 @testable import BackgroundAutomatorRuntime
@@ -61,6 +62,29 @@ func confirmDialogFreezesLootCollectionForThatFrame() {
 
     let items = try? #require(record).items
     #expect(items == ["마물 퇴치 증표"])
+}
+
+@Test
+func theAnimatingResultHeaderYieldsNoLootOnTheRealFrame() async throws {
+    // 헤더가 수집 구간을 지나간다는 건 추측이었는데, 이 프레임이 증거다 —
+    // 상자가 열리는 중이라 전리품도 버튼도 없고 '룬다 1층 2구역'(y=0.505)과
+    // '순수 전투 시간 0:20'(y=0.544)만 구간 안에 들어와 있다.
+    let url = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/landscape-result-early.png")
+    let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+    let image = try #require(
+        CGImageSourceCreateImageAtIndex(source, 0, nil)
+    )
+    let texts = try await VisionTextRecognizer().recognizeText(in: image)
+
+    let names = CycleTracker.itemNames(
+        in: texts,
+        imageSize: CGSize(width: image.width, height: image.height)
+    )
+
+    #expect(names.isEmpty)
 }
 
 // MARK: - 띄어쓰기만 다른 던전 이름
