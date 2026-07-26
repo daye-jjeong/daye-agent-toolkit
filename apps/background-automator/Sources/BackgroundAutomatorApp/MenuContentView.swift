@@ -91,7 +91,13 @@ struct MenuContentView: View {
             // 넘긴 판도 포함된다(위 '완료한 던전'은 앱이 누른 것만 센다).
             LabeledContent("오늘 사이클") {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(model.cycleSummary.todayCycles)회")
+                    // 돌린 시간은 자리를 비운 공백을 빼고 센다. '가동 시간'은
+                    // 이번에 시작한 뒤부터라 껐다 켜면 0으로 돌아간다.
+                    if let active = model.cycleSummary.todayActiveDescription {
+                        Text("\(model.cycleSummary.todayCycles)회 · \(active)")
+                    } else {
+                        Text("\(model.cycleSummary.todayCycles)회")
+                    }
                     Text("누적 \(model.cycleSummary.totalCycles)회")
                         .font(.caption)
                         .foregroundStyle(.secondary)
