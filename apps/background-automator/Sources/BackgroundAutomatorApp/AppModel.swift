@@ -316,10 +316,14 @@ private extension AppModel {
     /// PNG로 남긴다. 상태가 `.observing`인 채 굳으면 겉보기엔 정상이라
     /// 사용자가 우연히 볼 때까지 몇 분씩 그냥 흘러갔다.
     func applyQuietStall(result: AutomationCycleResult) async {
+        // '.action'은 클릭 말고 취소·복원실패·중단에도 붙는다. 그것까지
+        // 동작으로 세면 입력 generation이 계속 튀는 상황에서 클릭이 한 번도
+        // 안 나가는데 침묵 시계만 살아나, 잡으려던 멈춤을 그대로 놓친다.
         let didAct: Bool
-        if case .action = result {
+        switch result {
+        case .action(.clicked), .action(.clickOutcomeUncertain):
             didAct = true
-        } else {
+        default:
             didAct = false
         }
 
@@ -340,8 +344,12 @@ private extension AppModel {
         }
     }
 
-    static let quietStallGuidance =
-        "2분 넘게 누를 버튼을 못 찾았습니다. 게임 화면을 확인하세요."
+    static let quietStallGuidance: String = {
+        let seconds = QuietStallDetector.defaultThreshold
+            .components.seconds
+        return "\(seconds)초 넘게 누를 버튼을 못 찾았습니다."
+            + " 게임 화면을 확인하세요."
+    }()
 
     private func captureStallImage() async {
         guard let stallImageWriter else {
@@ -646,6 +654,12 @@ private extension AppModel {
                 lastActionDescription = "클릭 결과 확인 필요"
                 lastActionAt = Date()
             }
+        }
+        // 침묵 멈춤 안내를 매 사이클 지웠다 다시 씌우면 status가 false→true로
+        // 계속 튀어, 엣지에서만 쓰는 stall-log가 폴링마다 한 줄씩 쌓인다
+        // (실측: 멈춤 1회에 14줄, 40줄에 103KB). 안내가 살아 있으면 유지한다.
+        guard quietStallGuidance == nil else {
+            return
         }
         status = .projecting(state)
     }

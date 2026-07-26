@@ -38,9 +38,15 @@ func silverCoinChoiceSwapsExactlyOneRule() throws {
     #expect(off.count == on.count)
 }
 
-@Test
-func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
-    let rules = try RuleLoader().loadDefaultRules()
+/// 은동전을 쓰는 enter_with_coin은 코인 off 모드에서 로드조차 되지 않아
+/// 이 가드레일 밖에 있었다 — 파일에서 가장 낮은 문턱(0.25)에 유일한 끝말
+/// 일치인데도 어떤 테스트도 안 봤다. 두 모드를 모두 검사한다.
+@Test(arguments: [false, true])
+func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard(
+    usesSilverCoin: Bool
+) throws {
+    let rules = try RuleLoader()
+        .loadDefaultRules(usesSilverCoin: usesSilverCoin)
 
     // 실측(2026-07-24): '계속하기'·'입장하기'·'선택됨'은 신뢰도 0.50
     // 장식 폰트라 기준을 낮춘다. 각 규칙은 신뢰도 1.0 고유 시그니처를
@@ -52,6 +58,9 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
         "enter_ready", "scene_skip", "reward_detail", "clear_touch",
         "reward_retry", "turn_off_double_loot",
     ]
+    // enter_with_coin만 더 낮다 — 실측 ') 입장하기' cf 0.30.
+    // 정확한 하한은 silverCoinEntryKeepsItsMeasuredSafetyBounds가 못박는다.
+    let lowestConfidenceRules: Set<String> = ["enter_with_coin"]
 
     for rule in rules {
         #expect(rule.regions[.landscape] != nil)
@@ -66,7 +75,9 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
             )
         }
         #expect(rule.stableObservationCount >= 2)
-        if lowConfidenceRules.contains(rule.id) {
+        if lowestConfidenceRules.contains(rule.id) {
+            #expect(rule.minimumOCRConfidence >= 0.2)
+        } else if lowConfidenceRules.contains(rule.id) {
             #expect(rule.minimumOCRConfidence >= 0.4)
         } else {
             #expect(rule.minimumOCRConfidence >= 0.8)
@@ -269,4 +280,31 @@ private func workflowRule(_ id: String) throws -> AutomationRule {
 
 private func normalizedWorkflowText(_ text: String) -> String {
     text.filter { !$0.isWhitespace }
+}
+
+
+@Test
+func silverCoinEntryKeepsItsMeasuredSafetyBounds() throws {
+    let rule = try #require(
+        try RuleLoader().loadDefaultRules(usesSilverCoin: true)
+            .first { $0.id == "enter_with_coin" }
+    )
+
+    // 실측(2026-07-26, landscape-mission-select-10coin): 이 버튼은
+    // ') 입장하기' cf 0.30으로 읽힌다 — OCR이 코인 아이콘을 글자로 흘려
+    // 앞에 붙이고 신뢰도도 떨군다. 0.45로는 걸러져 코인런이 멈췄다.
+    #expect(rule.minimumOCRConfidence <= 0.30)
+    #expect(rule.minimumOCRConfidence >= 0.20)
+    // 앞이 흔들려도 끝말로 잡되, 완전 일치가 아니므로 시그니처 문장 두 개로
+    // 화면을 못박아 엉뚱한 '입장하기'를 누르지 않게 한다.
+    #expect(rule.action.targetTextSuffix == "입장하기")
+    #expect(rule.requiredTexts.count == 2)
+    #expect(rule.requiredTexts.contains("선택됨"))
+    #expect(
+        rule.forbiddenTexts.contains {
+            normalizedWorkflowText($0) == "장면넘기기"
+        }
+    )
+    // 입장 직후 결과 화면을 실시간 감지하므로 억제는 2초.
+    #expect(rule.cooldownSeconds >= 2)
 }

@@ -191,7 +191,10 @@ def report_phases(events):
 def normalize_dungeon(name):
     """같은 던전이 '룬다 1층 2구역'·'룬다. 1층 2구역'·"룬다 '1층 2구역*"
     셋으로 쌓여 통계가 쪼개졌다. 앱과 같은 규칙으로 모은다."""
-    return " ".join(re.sub(r"[^\w가-힣]+", " ", name).split())
+    # 파이썬 \w는 '_'를 포함하지만 앱의 normalizedName은 글자·숫자만
+    # 남긴다. OCR이 밑줄을 뱉는 건 실제 사례가 있다('장면 넘기기_').
+    # 어긋나면 --rewrite한 과거 로그와 앞으로 쌓일 이름이 갈린다.
+    return " ".join(re.sub(r"[^0-9A-Za-z가-힣]+", " ", name).split())
 
 
 def rewrite_cycles(path, cycles):
