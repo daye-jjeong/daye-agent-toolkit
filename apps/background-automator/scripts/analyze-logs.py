@@ -245,6 +245,62 @@ def report_daily(cycles):
               f"  {per:6.0f}초  {combat:5.1f}초  {r['soul']:3d}판 {rate:4.1f}%")
 
 
+UNSTAMPED = "(스탬프 이전)"
+# 이만큼은 쌓여야 판당 소요 중앙값을 믿는다. 배포 직후 두세 판으로 "빨라졌다"
+# 를 말했다가 뒤집힌 적이 있다(2026-07-26).
+MIN_SAMPLES = 20
+
+
+def report_builds(cycles, events, builds):
+    """빌드별 성능 비교.
+
+    시각으로 배포 전후를 가르면 두 군데서 어긋난다 — 빌드해도 앱을 다시
+    켜지 않으면 옛 바이너리가 계속 돌고, 배포 시각이 로그에 없어 기억으로
+    역산해야 한다. 그래서 기록에 박힌 빌드 아이디로 나눈다.
+    """
+    if not cycles:
+        return
+    summaries = {b["build"]: b.get("summary") for b in builds}
+
+    times, app_ms, got_items = defaultdict(list), defaultdict(list), defaultdict(list)
+    for cycle in cycles:
+        build = cycle.get("build") or UNSTAMPED
+        times[build].append(kst(cycle["at"]))
+        got_items[build].append(bool(clean_items(cycle.get("items", []))))
+    for event in events:
+        if not event.get("phases"):
+            continue
+        app_ms[event.get("build") or UNSTAMPED].append(
+            sum(v for k, v in event["phases"].items()
+                if k.endswith("Milliseconds") and k != "totalMilliseconds")
+        )
+
+    print("\n■ 빌드별 비교")
+    print(f"  {'빌드':<19} {'판수':>5} {'판당':>7} {'앱 구간':>9}"
+          f" {'보상읽기':>7}  변경")
+    print(f"  {'-' * 76}")
+    thin = []
+    for build, stamps in sorted(times.items(), key=lambda kv: max(kv[1]),
+                                reverse=True):
+        stamps.sort()
+        # 같은 빌드 안에서만 이어 잰다. 재시작으로 벌어진 간격은 잘라낸다.
+        gaps = [(b - a).total_seconds() for a, b in zip(stamps, stamps[1:])]
+        gaps = [g for g in gaps if g < 300]
+        per = statistics.median(gaps) if gaps else 0
+        phases = app_ms.get(build) or []
+        hits = got_items[build]
+        mark = "" if len(gaps) >= MIN_SAMPLES else "*"
+        if mark:
+            thin.append(build)
+        print(f"  {build:<19} {len(stamps):>5}"
+              f" {per:>6.0f}초{mark:<1}"
+              f" {statistics.median(phases) if phases else 0:>7.0f}ms"
+              f" {sum(hits) / len(hits) * 100:>6.0f}%"
+              f"  {summaries.get(build) or '—'}")
+    if thin:
+        print(f"  * 표본 {MIN_SAMPLES}판 미만 — 판당 소요를 비교에 쓰지 마라")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rewrite", action="store_true",
@@ -257,8 +313,10 @@ def main():
     cycles = read_jsonl(cycle_path)
     events = read_jsonl(directory / "activity-log.jsonl")
     stalls = read_jsonl(directory / "stall-log.jsonl")
+    builds = read_jsonl(directory / "builds.jsonl")
 
     report_cycles(cycles)
+    report_builds(cycles, events, builds)
     report_daily(cycles)
     report_drops(cycles)
     report_phases(events)

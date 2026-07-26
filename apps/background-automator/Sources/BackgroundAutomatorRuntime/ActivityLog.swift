@@ -143,19 +143,38 @@ public struct ActivityEvent: Codable, Equatable, Sendable {
     public let scene: String?
     public let dungeonName: String?
     public let phases: ClickPhaseTimings?
+    /// 이 기록을 남긴 빌드. 채우는 쪽은 writer라 호출부는 건드리지 않는다.
+    /// 스탬프를 찍기 전에 쌓인 기록에는 없으므로 옵셔널이다.
+    public let build: String?
 
     public init(
         at: Date,
         outcome: String,
         scene: String?,
         dungeonName: String?,
-        phases: ClickPhaseTimings? = nil
+        phases: ClickPhaseTimings? = nil,
+        build: String? = nil
     ) {
         self.at = at
         self.outcome = outcome
         self.scene = scene
         self.dungeonName = dungeonName
         self.phases = phases
+        self.build = build
+    }
+
+    func stamped(_ build: String?) -> ActivityEvent {
+        guard let build else {
+            return self
+        }
+        return ActivityEvent(
+            at: at,
+            outcome: outcome,
+            scene: scene,
+            dungeonName: dungeonName,
+            phases: phases,
+            build: build
+        )
     }
 }
 
@@ -183,9 +202,11 @@ public final class ActivityLogWriter {
 
     private let directory: URL
     private let fileURL: URL
+    private let build: String?
 
-    public init(directory: URL) {
+    public init(directory: URL, build: String? = nil) {
         self.directory = directory
+        self.build = build
         fileURL = directory.appendingPathComponent(Self.fileName)
     }
 
@@ -193,20 +214,11 @@ public final class ActivityLogWriter {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.withoutEscapingSlashes]
-        var line = try encoder.encode(event)
-        line.append(0x0A) // '\n'
-
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
+        try JSONLinesFile.append(
+            encoder.encode(event.stamped(build)),
+            to: fileURL,
+            in: directory
         )
-        if let handle = try? FileHandle(forWritingTo: fileURL) {
-            defer { try? handle.close() }
-            try handle.seekToEnd()
-            try handle.write(contentsOf: line)
-        } else {
-            try line.write(to: fileURL, options: .atomic)
-        }
     }
 
     public func summary() throws -> ActivitySummary {

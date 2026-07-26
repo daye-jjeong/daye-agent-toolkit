@@ -10,17 +10,35 @@ public struct CycleRecord: Codable, Equatable, Sendable {
     /// 담는다 — 정확한 개수는 이름↔수량 페어링과 수량 생략 규칙이
     /// 확정돼야 해서 별도 과제다.
     public let items: [String]
+    /// 이 판을 남긴 빌드. 채우는 쪽은 writer라 호출부는 건드리지 않는다.
+    /// 스탬프를 찍기 전에 쌓인 기록에는 없으므로 옵셔널이다.
+    public let build: String?
 
     public init(
         at: Date,
         dungeon: String?,
         combatSeconds: Int?,
-        items: [String]
+        items: [String],
+        build: String? = nil
     ) {
         self.at = at
         self.dungeon = dungeon
         self.combatSeconds = combatSeconds
         self.items = items
+        self.build = build
+    }
+
+    func stamped(_ build: String?) -> CycleRecord {
+        guard let build else {
+            return self
+        }
+        return CycleRecord(
+            at: at,
+            dungeon: dungeon,
+            combatSeconds: combatSeconds,
+            items: items,
+            build: build
+        )
     }
 }
 
@@ -254,9 +272,11 @@ public final class CycleLogWriter {
 
     private let directory: URL
     private let fileURL: URL
+    private let build: String?
 
-    public init(directory: URL) {
+    public init(directory: URL, build: String? = nil) {
         self.directory = directory
+        self.build = build
         fileURL = directory.appendingPathComponent(Self.fileName)
     }
 
@@ -264,20 +284,11 @@ public final class CycleLogWriter {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.withoutEscapingSlashes]
-        var line = try encoder.encode(record)
-        line.append(0x0A) // '\n'
-
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true
+        try JSONLinesFile.append(
+            encoder.encode(record.stamped(build)),
+            to: fileURL,
+            in: directory
         )
-        if let handle = try? FileHandle(forWritingTo: fileURL) {
-            defer { try? handle.close() }
-            try handle.seekToEnd()
-            try handle.write(contentsOf: line)
-        } else {
-            try line.write(to: fileURL, options: .atomic)
-        }
     }
 
     public func summary(
