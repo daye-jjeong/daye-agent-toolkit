@@ -319,16 +319,34 @@ public struct CycleSummary: Codable, Equatable, Sendable {
     /// 오늘(로컬 달력 기준) 돈 판. 누적만 보면 오늘 얼마나 돌았는지
     /// 알 수 없고, 파밍은 자정을 넘겨 이어지므로 날짜로 끊는다.
     public let todayCycles: Int
+    /// 오늘 실제로 돌린 시간(초). 판 수만으로는 얼마나 붙잡고 있었는지
+    /// 알 수 없고, '가동 시간'은 이번에 시작한 뒤부터라 중간에 멈췄다
+    /// 다시 켜면 0으로 돌아간다. 자리를 비운 공백은 빼고 센다.
+    public let todayActiveSeconds: Int
     public let byDungeon: [String: Int]
 
     public init(
         totalCycles: Int,
         todayCycles: Int = 0,
+        todayActiveSeconds: Int = 0,
         byDungeon: [String: Int]
     ) {
         self.totalCycles = totalCycles
         self.todayCycles = todayCycles
+        self.todayActiveSeconds = todayActiveSeconds
         self.byDungeon = byDungeon
+    }
+
+    /// "2시간 15분" 꼴. 오늘 한 판도 안 돌았으면 nil.
+    public var todayActiveDescription: String? {
+        guard todayActiveSeconds > 0 else {
+            return nil
+        }
+        let minutes = todayActiveSeconds / 60
+        guard minutes >= 60 else {
+            return "\(minutes)분"
+        }
+        return "\(minutes / 60)시간 \(minutes % 60)분"
     }
 }
 
@@ -374,6 +392,8 @@ public final class CycleLogWriter {
         let startOfToday = calendar.startOfDay(for: now)
         var totalCycles = 0
         var todayCycles = 0
+        var todayActiveSeconds = 0.0
+        var previousToday: Date?
         var byDungeon: [String: Int] = [:]
         // 띄어쓰기를 지운 이름 → 처음 읽은 표기. OCR이 같은 던전을 '페카 고분
         // 심층 1층 2구역'과 '페카고분 심층 1층 2구역'으로 갈라 읽어 통계가
@@ -393,6 +413,14 @@ public final class CycleLogWriter {
             totalCycles += 1
             if record.at >= startOfToday {
                 todayCycles += 1
+                if let previous = previousToday,
+                   case let gap = record.at.timeIntervalSince(previous),
+                   gap > 0,
+                   gap <= Self.maximumCycleGapSeconds
+                {
+                    todayActiveSeconds += gap
+                }
+                previousToday = record.at
             }
             if let dungeon = record.dungeon {
                 let key = dungeon.filter { !$0.isWhitespace }
@@ -405,7 +433,13 @@ public final class CycleLogWriter {
         return CycleSummary(
             totalCycles: totalCycles,
             todayCycles: todayCycles,
+            todayActiveSeconds: Int(todayActiveSeconds),
             byDungeon: byDungeon
         )
     }
+
+    /// 이보다 벌어진 간격은 자리를 비운 것으로 본다. 정상 판당 소요는
+    /// 105~130초고 멈춤 감지 기준이 150초라, 5분이면 정상 파밍은 한 번도
+    /// 끊기지 않으면서 휴식은 확실히 걸러진다.
+    static let maximumCycleGapSeconds: TimeInterval = 300
 }

@@ -280,23 +280,28 @@ def report_daily(cycles):
     for c in cycles:
         day = kst(c["at"]).date()
         row = by_day.setdefault(day, {"n": 0, "combat": [], "soul": 0,
-                                      "first": None, "last": None})
+                                      "active": 0.0, "prev": None})
         row["n"] += 1
         if c.get("combatSeconds"):
             row["combat"].append(c["combatSeconds"])
         if any("영혼석" in i for i in c.get("items", [])):
             row["soul"] += 1
         at = kst(c["at"])
-        row["first"] = min(row["first"] or at, at)
-        row["last"] = max(row["last"] or at, at)
+        # 앱의 CycleSummary.todayActiveSeconds와 같은 기준. 처음~끝 폭으로
+        # 재면 자리를 비운 시간까지 '돌린 시간'에 들어가 판당 소요가 거짓이 된다.
+        if row["prev"] is not None:
+            gap = (at - row["prev"]).total_seconds()
+            if 0 < gap <= MAX_CYCLE_GAP:
+                row["active"] += gap
+        row["prev"] = at
 
     print("\n■ 날짜별 기록")
     print("  날짜          판수   가동      판당    전투    영혼석")
     for day in sorted(by_day):
         r = by_day[day]
-        span = (r["last"] - r["first"]).total_seconds()
+        span = r["active"]
         hours = span / 3600
-        per = span / r["n"] if r["n"] else 0
+        per = span / (r["n"] - 1) if r["n"] > 1 else 0
         combat = statistics.mean(r["combat"]) if r["combat"] else 0
         rate = r["soul"] / r["n"] * 100 if r["n"] else 0
         print(f"  {day:%m/%d}  {r['n']:8d}  {hours:5.1f}h"
@@ -307,6 +312,10 @@ UNSTAMPED = "(스탬프 이전)"
 # 이만큼은 쌓여야 판당 소요 중앙값을 믿는다. 배포 직후 두세 판으로 "빨라졌다"
 # 를 말했다가 뒤집힌 적이 있다(2026-07-26).
 MIN_SAMPLES = 20
+# 이보다 벌어진 간격은 자리를 비운 것으로 본다. 앱의
+# CycleTracker.maximumCycleGapSeconds와 같은 값이어야 두 곳의 "가동 시간"이
+# 갈리지 않는다. 정상 판당 105~130초, 멈춤 감지 기준 150초.
+MAX_CYCLE_GAP = 300
 
 
 def report_builds(cycles, events, builds):
