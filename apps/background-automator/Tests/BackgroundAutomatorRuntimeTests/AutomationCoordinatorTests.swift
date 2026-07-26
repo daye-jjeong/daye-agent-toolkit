@@ -1740,6 +1740,8 @@ private func expectedRuleID(for scene: AutomationScene) -> String? {
         "clear_touch"
     case .rewardDetail:
         "reward_detail"
+    case .turnOffDoubleLoot:
+        "turn_off_double_loot"
     case .sceneSkip:
         "scene_skip"
     case .rewardRetry:
@@ -1769,6 +1771,8 @@ private func defaultTexts(for scene: AutomationScene) -> [String] {
         ["던전 클리어", "화면을 터치해주세요"]
     case .rewardDetail:
         ["발견한 전리품"]
+    case .turnOffDoubleLoot:
+        ["도전에 성공하면 임무 전리품이 두 배가 됩니다.", "선택됨"]
     case .sceneSkip:
         ["장면 넘기기"]
     case .rewardRetry:

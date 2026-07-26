@@ -15,7 +15,7 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
             "reward_detail",
             "reward_retry",
             "continue_dialog",
-            "mission_selection",
+            "turn_off_double_loot",
             "deselect_challenge",
             "deselect_double_loot",
             "enter_ready",
@@ -50,7 +50,7 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
     let lowConfidenceRules: Set<String> = [
         "continue_dialog", "deselect_challenge", "deselect_double_loot",
         "enter_ready", "scene_skip", "reward_detail", "clear_touch",
-        "reward_retry",
+        "reward_retry", "turn_off_double_loot",
     ]
 
     for rule in rules {
@@ -106,7 +106,6 @@ func clearTouchRequiresExactContextAndUsesOnlySafePoint() throws {
 @Test(arguments: [
     ("reward_retry", "다시 하기", 0.5),
     ("continue_dialog", "계속하기", 0.5),
-    ("mission_selection", "도전", 0.5),
     // A방식: 입장 후 억제를 2초로 단축(실시간 결과 감지).
     ("enter_ready", "입장하기", 2.0),
     ("reward_detail", "발견한 전리품", 0.5),
@@ -215,14 +214,16 @@ func sceneSkipClicksEmptySafePointAndOmitsForbiddenGuard() throws {
 }
 
 @Test
-func missionSelectionKeepsOCRTargetAndHighConfidence() throws {
-    let rule = try workflowRule("mission_selection")
-
-    // 실측(2026-07-24): 해제 상태의 '도전'(cf 0.50)을 다시 눌러
-    // 선택하면 '선택↔해제' 무한 토글이 된다. 높은 신뢰도 기준을
-    // 유지해 저신뢰 '도전'을 트리거하지 않는다.
-    #expect(rule.action.targetText == "도전")
-    #expect(rule.minimumOCRConfidence >= 0.8)
+func noRuleEverClicksTheChallengeButton() throws {
+    // 제거(2026-07-26): '도전'을 노리던 mission_selection을 뺐다.
+    // 실측 세 상태를 다 보니 이 버튼이 눌릴 수 있는 유일한 경우가
+    // '임무만 선택된 화면의 더블 루팅 도전'이었다 — 누르면 은동전이
+    // 10개 더 나가 한 판 20개가 된다. 더블 루팅은 아직 지원하지 않으므로
+    // 이 규칙이 할 수 있는 일은 원치 않는 소모뿐이다.
+    let rules = try RuleLoader().loadDefaultRules(usesSilverCoin: true)
+        + RuleLoader().loadDefaultRules(usesSilverCoin: false)
+    #expect(!rules.contains { $0.action.targetText == "도전" })
+    #expect(!rules.contains { $0.id == "mission_selection" })
 }
 
 @Test

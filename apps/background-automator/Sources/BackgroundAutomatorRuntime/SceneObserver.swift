@@ -242,13 +242,26 @@ extension SceneObserver {
 
         if let targetText = rule.action.targetText {
             // 끝말 일치는 사용자가 켠 규칙에만 쓴다(그 외는 완전 일치).
-            let targets = observationsInRegion.filter {
+            var targets = observationsInRegion.filter {
                 if let suffix = rule.action.targetTextSuffix {
                     return Self.semanticText($0.text)
                         .hasSuffix(Self.semanticText(suffix))
                 }
                 return Self.semanticText($0.text)
                     == Self.semanticText(targetText)
+            }
+            // 앵커 글자보다 아래에 있는 것만 남긴다. 앵커가 화면에 없거나
+            // 여럿이면 기준선을 세울 수 없으니 아무것도 누르지 않는다.
+            if let below = rule.action.targetBelowText {
+                let anchors = confidentObservations.filter {
+                    Self.semanticText($0.text) == Self.semanticText(below)
+                }
+                guard anchors.count == 1, let anchor = anchors.first else {
+                    return nil
+                }
+                targets = targets.filter {
+                    $0.boundingBox.midY > anchor.boundingBox.midY
+                }
             }
             guard targets.count == 1, let target = targets.first else {
                 return nil

@@ -468,7 +468,7 @@ extension AutomationCoordinator {
              .enterWithCoin:
             true
         case .clearTouch, .continueDialog, .running, .deselectChallenge,
-             .deselectDoubleLoot, .sceneSkip, .autoStart:
+             .deselectDoubleLoot, .turnOffDoubleLoot, .sceneSkip, .autoStart:
             false
         }
     }
@@ -493,6 +493,8 @@ extension AutomationCoordinator {
             "mission_selection"
         case .deselectChallenge:
             "deselect_challenge"
+        case .turnOffDoubleLoot:
+            "turn_off_double_loot"
         case .deselectDoubleLoot:
             "deselect_double_loot"
         case .enterWithCoin:

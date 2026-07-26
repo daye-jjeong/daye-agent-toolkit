@@ -265,6 +265,7 @@ private extension RuleLoader {
                         "targetText",
                         "safePointRegion",
                         "targetTextSuffix",
+                        "targetBelowText",
                     ]
                 )
                 if let safeRegion = action["safePointRegion"] as? [String: Any] {

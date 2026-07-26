@@ -7,15 +7,24 @@ public struct AutomationAction: Codable, Equatable, Sendable {
     /// 몰래 쓰는 일을 막는다. 사용자가 은동전 사용을 켠 규칙에서만,
     /// OCR이 ') 입장하기'처럼 앞을 흘려 읽어도 잡도록 끝말을 쓴다.
     public let targetTextSuffix: String?
+    /// 같은 글자가 화면에 여러 번 뜰 때, 이 글자보다 아래에 있는 것만
+    /// 대상으로 삼는다.
+    ///
+    /// 던전 입장 화면엔 '선택됨'이 둘이다 — 위는 임무, 아래는 더블 루팅.
+    /// 좌표로 가르면 창 비율이 바뀔 때 깨지므로, 카드 안에 늘 있는 안내문을
+    /// 기준선으로 쓴다. 세로로 쌓인 카드라 위아래 순서는 비율과 무관하다.
+    public let targetBelowText: String?
 
     public init(
         targetText: String?,
         safePointRegion: NormalizedRegion?,
-        targetTextSuffix: String? = nil
+        targetTextSuffix: String? = nil,
+        targetBelowText: String? = nil
     ) {
         self.targetText = targetText
         self.safePointRegion = safePointRegion
         self.targetTextSuffix = targetTextSuffix
+        self.targetBelowText = targetBelowText
     }
 }
 

@@ -163,15 +163,16 @@
       "cooldownSeconds": 1.0
     },
     {
-      "id": "mission_selection",
+      "id": "turn_off_double_loot",
       "requiredTexts": [
-        "도전"
+        "도전에 성공하면 임무 전리품이 두 배가 됩니다."
       ],
       "forbiddenTexts": [
         "장면 넘기기"
       ],
       "action": {
-        "targetText": "도전"
+        "targetText": "선택됨",
+        "targetBelowText": "도전에 성공하면 임무 전리품이 두 배가 됩니다."
       },
       "regions": {
         "landscape": {
@@ -187,36 +188,7 @@
           "maxY": 0.95
         }
       },
-      "appearance": {
-        "contextText": "도전",
-        "contextRegions": {
-          "landscape": {
-            "minX": 0.15,
-            "minY": 0.25,
-            "maxX": 0.85,
-            "maxY": 0.95
-          },
-          "portrait-mobile": {
-            "minX": 0.05,
-            "minY": 0.25,
-            "maxX": 0.95,
-            "maxY": 0.95
-          }
-        },
-        "contextRange": {
-          "minimumSaturation": 0.25,
-          "maximumSaturation": 1.0,
-          "minimumLuminance": 0.25,
-          "maximumLuminance": 0.95
-        },
-        "targetRange": {
-          "minimumSaturation": 0.25,
-          "maximumSaturation": 1.0,
-          "minimumLuminance": 0.25,
-          "maximumLuminance": 0.95
-        }
-      },
-      "minimumOCRConfidence": 0.85,
+      "minimumOCRConfidence": 0.45,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
