@@ -36,20 +36,39 @@ HANGUL = re.compile(r"[가-힣]")
 
 def clean_item(raw):
     """OCR이 흘린 기호를 떼고 전리품 이름만 남긴다. 아니면 None."""
+    # 수량 뱃지('255.3만', '1.3만', '1,382'). 단위 '만'이 한글이라
+    # 한글 필터를 그냥 통과했다.
+    if QUANTITY.fullmatch(raw.strip()):
+        return None
     name = re.sub(r"^[^가-힣]+", "", raw)
     name = re.sub(r"[^가-힣 ]+$", "", name).strip()
     if not name or not HANGUL.search(name):
         return None
     if NOT_LOOT.search(name):
         return None
+    # 단위 한 글자만 남은 잔해('만', '천').
+    if name in {"만", "천", "억"}:
+        return None
     # 자주 나오는 OCR 오독을 표준 이름으로 모은다.
-    name = name.replace("마울", "마물")
-    # 두 줄로 끊겨 읽힌 이름을 합친다.
-    return {
-        "미지의": "미지의 소울 조각",
-        "소울 조각": "미지의 소울 조각",
-        "다이아몬드": "조각난 다이아몬드",
-    }.get(name, name)
+    for wrong, right in (("마울", "마물"), ("종표", "증표"), ("퇴 치", "퇴치")):
+        name = name.replace(wrong, right)
+    return FRAGMENTS.get(name, name)
+
+
+# 아이콘 하나 밑에 두 줄로 쌓인 이름이 따로 기록된 것들.
+# 앱은 2026-07-26부터 좌표로 이어 붙이지만, 그 전 로그엔 조각으로 남아 있다.
+FRAGMENTS = {
+    "미지의": "미지의 소울 조각",
+    "소울 조각": "미지의 소울 조각",
+    "조각난": "조각난 다이아몬드",
+    "다이아몬드": "조각난 다이아몬드",
+    "세공된 블루": "세공된 블루 스피넬",
+    "스피넬": "세공된 블루 스피넬",
+    "타격의 블루": "타격의 블루 스피넬 펜던트",
+    "스피넬 펜던트": "타격의 블루 스피넬 펜던트",
+}
+
+QUANTITY = re.compile(r"[\d][\d,.\s]*[만천억]?")
 
 
 def clean_items(items):
@@ -169,6 +188,12 @@ def report_phases(events):
               f"  ({len(values)}회)")
 
 
+def normalize_dungeon(name):
+    """같은 던전이 '룬다 1층 2구역'·'룬다. 1층 2구역'·"룬다 '1층 2구역*"
+    셋으로 쌓여 통계가 쪼개졌다. 앱과 같은 규칙으로 모은다."""
+    return " ".join(re.sub(r"[^\w가-힣]+", " ", name).split())
+
+
 def rewrite_cycles(path, cycles):
     backup = path.with_suffix(".jsonl.bak")
     if not backup.exists():
@@ -177,6 +202,8 @@ def rewrite_cycles(path, cycles):
     for cycle in cycles:
         cycle = dict(cycle)
         cycle["items"] = clean_items(cycle.get("items", []))
+        if cycle.get("dungeon"):
+            cycle["dungeon"] = normalize_dungeon(cycle["dungeon"])
         lines.append(json.dumps(cycle, ensure_ascii=False))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"\n정리 완료: {path}")
