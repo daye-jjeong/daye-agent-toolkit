@@ -11,7 +11,7 @@ func decodesPortraitRetryRuleFromBundledDefaults() throws {
 
     #expect(retry.action.targetText == "다시 하기")
     #expect(retry.regions[.portraitMobile] != nil)
-    #expect(retry.stableObservationCount == 2)
+    #expect(retry.stableObservationCount == 1)
 }
 
 @Test
@@ -285,20 +285,23 @@ func rejectsUnknownFieldsForCurrentSchemaVersion() throws {
 
 @Test
 func exposesApprovedGlobalSafetyMinima() {
-    #expect(RuleSafetyMinimums.stableObservationCount == 2)
+    // 2 → 1 (2026-07-26). 클릭 직전 재확인이 남아 방어는 유지되고,
+    // 클릭당 OCR이 3회에서 2회로 줄어 판당 3.3초가 빠진다.
+    #expect(RuleSafetyMinimums.stableObservationCount == 1)
     #expect(RuleSafetyMinimums.postActionDelaySeconds == 0.5)
     #expect(RuleSafetyMinimums.cooldownSeconds == 0.5)
 }
 
 @Test
 func rejectsStableObservationCountBelowSafetyMinimum() throws {
+    // 0이면 관찰 없이도 누른다는 뜻이라 반드시 막아야 한다.
     let data = try makeRuleDocument(
-        stableObservationCount: 1
+        stableObservationCount: 0
     )
 
     #expect(throws: RuleLoaderError.malformedSemantics(
         ruleID: "test_rule",
-        reason: "stableObservationCount must be at least 2"
+        reason: "stableObservationCount must be at least 1"
     )) {
         try RuleLoader().load(data: data)
     }

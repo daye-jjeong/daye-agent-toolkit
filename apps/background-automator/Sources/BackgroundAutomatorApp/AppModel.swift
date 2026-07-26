@@ -33,9 +33,12 @@ final class AppModel: ObservableObject {
         byDungeon: [:]
     )
 
-    /// 결과 화면은 몇 초간 떠 있으므로 2초면 놓치지 않는다. 더 촘촘히
-    /// 보면 OCR 비용만 늘고, 더 성기면 빠르게 넘긴 사이클을 놓친다.
-    static let cycleObservationInterval = Duration.seconds(2)
+    /// 결과 화면이 떠 있는 5~8초 동안 전리품이 차례로 채워진다. 2초로
+    /// 보면 3~4번뿐이라 그 사이에 들어온 항목을 놓쳤다 — 실측 248판에서
+    /// '확정' 라벨이 붙은 보상마저 92~95%만 잡혔다(100%여야 한다).
+    /// 1.2초로 좁혀 관찰을 1.7배로 늘린다. 늘어난 OCR 부담은 클릭 루프의
+    /// 관찰을 3회에서 2회로 줄여(stableObservationCount 1) 상쇄한다.
+    static let cycleObservationInterval = Duration.milliseconds(1200)
     /// 폴링 간격을 기준값 둘레로 흩뿌린다. 평균은 그대로라 느려지지 않는다.
     static let pollingJitter = TimingJitter()
 
@@ -71,7 +74,7 @@ final class AppModel: ObservableObject {
     private var quietDetector = QuietStallDetector()
     private var quietStallGuidance: String?
     /// 감지기는 경과 시간(Duration)으로 판단하므로 기준 시점을 잡아 둔다.
-    private var quietClockOrigin = ContinuousClock().now
+    private var quietClockOrigin = ContinuousClock.now
     /// 이번에 돌리기 시작한 시각. 정지하면 비운다.
     @Published private(set) var runningSince: Date?
     private var cyclesAtStart = 0
@@ -81,10 +84,8 @@ final class AppModel: ObservableObject {
         guard let runningSince else {
             return nil
         }
-        let minutes = max(
-            0,
-            Int(Date().timeIntervalSince(runningSince) / 60)
-        )
+        let elapsed = Date().timeIntervalSince(runningSince)
+        let minutes = max(0, Int(elapsed / 60))
         guard minutes >= 60 else {
             return "\(minutes)분"
         }
@@ -97,14 +98,11 @@ final class AppModel: ObservableObject {
             return nil
         }
         let hours = Date().timeIntervalSince(runningSince) / 3600
-        guard hours >= 1.0 / 6 else {
+        guard hours >= 10.0 / 60 else {
             return nil
         }
         let cycles = cycleSummary.totalCycles - cyclesAtStart
-        return String(
-            format: "시간당 %.1f판",
-            Double(cycles) / hours
-        )
+        return String(format: "시간당 %.1f판", Double(cycles) / hours)
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -316,17 +314,18 @@ private extension AppModel {
     /// PNG로 남긴다. 상태가 `.observing`인 채 굳으면 겉보기엔 정상이라
     /// 사용자가 우연히 볼 때까지 몇 분씩 그냥 흘러갔다.
     func applyQuietStall(result: AutomationCycleResult) async {
-        let didAct: Bool
-        if case .action = result {
-            didAct = true
-        } else {
-            didAct = false
-        }
+        // '.action'은 클릭 말고 취소·복원실패·중단에도 붙는다. 그것까지
+        // 동작으로 세면 입력 generation이 계속 튀는 상황에서 클릭이 한 번도
+        // 안 나가는데 침묵 시계만 살아나, 잡으려던 멈춤을 그대로 놓친다.
+        // .clickOutcomeUncertain은 클릭이 실제로 나간 뒤 결과만 불확실한
+        // 경우라 함께 센다. 빼면 클릭이 나가는데도 침묵으로 오판한다.
+        let didAct = result == .action(.clicked)
+            || result == .action(.clickOutcomeUncertain)
 
         let elapsed = clock.now - quietClockOrigin
         switch quietDetector.note(didAct: didAct, at: elapsed) {
         case .entered:
-            quietStallGuidance = Self.quietStallGuidance
+            quietStallGuidance = Self.quietStallMessage
             await captureStallImage()
         case .recovered:
             quietStallGuidance = nil
@@ -340,14 +339,18 @@ private extension AppModel {
         }
     }
 
-    static let quietStallGuidance =
-        "2분 넘게 누를 버튼을 못 찾았습니다. 게임 화면을 확인하세요."
+    /// 안내 문구의 초를 감지 임계값에서 그대로 가져와, 둘이 어긋나
+    /// 사용자가 엉뚱한 시간을 기다리는 일이 없게 한다.
+    static var quietStallMessage: String {
+        let seconds = QuietStallDetector.defaultThreshold
+            .components.seconds
+        return "\(seconds)초 넘게 누를 버튼을 못 찾았습니다."
+            + " 게임 화면을 확인하세요."
+    }
 
-    private func captureStallImage() async {
-        guard let stallImageWriter else {
-            return
-        }
+    func captureStallImage() async {
         guard
+            let stallImageWriter,
             let capture = try? await captureService.captureWindow(
                 bundleIdentifier: bundleIdentifier,
                 titleContains: titleContains
@@ -646,6 +649,12 @@ private extension AppModel {
                 lastActionDescription = "클릭 결과 확인 필요"
                 lastActionAt = Date()
             }
+        }
+        // 침묵 멈춤 안내를 매 사이클 지웠다 다시 씌우면 status가 false→true로
+        // 계속 튀어, 엣지에서만 쓰는 stall-log가 폴링마다 한 줄씩 쌓인다
+        // (실측: 멈춤 1회에 14줄, 40줄에 103KB). 안내가 살아 있으면 유지한다.
+        guard quietStallGuidance == nil else {
+            return
         }
         status = .projecting(state)
     }

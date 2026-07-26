@@ -30,7 +30,7 @@
         }
       },
       "minimumOCRConfidence": 0.4,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
     },
@@ -65,7 +65,7 @@
         }
       },
       "minimumOCRConfidence": 0.45,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
     },
@@ -97,7 +97,7 @@
         }
       },
       "minimumOCRConfidence": 0.45,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
     },
@@ -127,7 +127,7 @@
         }
       },
       "minimumOCRConfidence": 0.45,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
     },
@@ -158,7 +158,7 @@
         }
       },
       "minimumOCRConfidence": 0.45,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
     },
@@ -189,7 +189,7 @@
         }
       },
       "minimumOCRConfidence": 0.45,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
     },
@@ -219,7 +219,7 @@
         }
       },
       "minimumOCRConfidence": 0.45,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
     },
@@ -250,7 +250,7 @@
         }
       },
       "minimumOCRConfidence": 0.45,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
     },
@@ -282,7 +282,7 @@
         }
       },
       "minimumOCRConfidence": 0.25,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 2.0
     },
@@ -314,7 +314,7 @@
         }
       },
       "minimumOCRConfidence": 0.45,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 2.0
     },
@@ -342,7 +342,7 @@
         }
       },
       "minimumOCRConfidence": 0.9,
-      "stableObservationCount": 2,
+      "stableObservationCount": 1,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 120.0
     }

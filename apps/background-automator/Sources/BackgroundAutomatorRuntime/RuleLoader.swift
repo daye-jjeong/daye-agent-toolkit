@@ -10,7 +10,15 @@ public enum RuleLoaderError: Error, Equatable, Sendable {
 }
 
 public struct RuleSafetyMinimums: Sendable {
-    public static let stableObservationCount = 2
+    /// 후보를 몇 번 봐야 누를지.
+    ///
+    /// 2였다가 1로 내렸다(2026-07-26). 2면 서로 다른 사이클에서 두 번
+    /// 잡혀야 하는데, 코디네이터는 그 뒤 클릭 직전에 화면을 **또 한 번**
+    /// 확인한다. 즉 클릭 하나에 OCR이 세 번 돌았다(실측 클릭당 +550ms,
+    /// 판당 +3.3초). 오클릭을 실제로 막는 건 클릭 직전 재확인이고 그건
+    /// 그대로 남는다. 앞의 중복 확인은 OCR 잡음을 거르는 용도였는데, 지금은
+    /// 고유 문장 완전 일치와 forbidden 가드가 그 역할을 한다.
+    public static let stableObservationCount = 1
     public static let postActionDelaySeconds = 0.5
     public static let cooldownSeconds = 0.5
 

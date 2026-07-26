@@ -1281,3 +1281,63 @@ func clickHoldsButtonForHumanDuration() async throws {
     #expect(ForegroundActionCoordinator.clickHold >= .milliseconds(50))
     #expect(ForegroundActionCoordinator.clickHold <= .milliseconds(120))
 }
+
+@Test
+func globalClickHoldsBetweenDownAndUpWithoutASuspensionPoint() throws {
+    // hold 분기(ClickService)는 새로 생겼는데 실제로 도는 테스트가 없었다.
+    // 여기서 (1) 실제로 기다리는지 (2) 그 사이에 태스크 취소가 끼어들
+      // 여지가 없는지를 함께 본다 — 눌린 채 남으면 사용자 조작이 망가진다.
+    let point = CGPoint(x: 140, y: 220)
+    let poster = RecordingGlobalEventPoster()
+    let service = GlobalClickService(
+        eventFactory: RecordingGlobalClickEventFactory(
+            events: try #require(makeForegroundTestClickEvents(at: point))
+        ),
+        eventPoster: poster
+    )
+
+    let started = ContinuousClock().now
+    try service.click(
+        screenPoint: point,
+        sourceIdentifier: AutomatorSyntheticEvent.sourceIdentifier,
+        hold: .milliseconds(80)
+    )
+    let elapsed = ContinuousClock().now - started
+
+    #expect(elapsed >= .milliseconds(75))
+    #expect(elapsed < .seconds(1))
+    #expect(
+        poster.records.map(\.eventType) == [.leftMouseDown, .leftMouseUp]
+    )
+}
+
+@Test
+func cancelledTaskStillReleasesTheMouseButton() async throws {
+    // 누름과 뗌 사이를 await로 끊지 않았음을 행동으로 못박는다. 취소된
+    // 태스크 안에서 눌러도 up이 반드시 따라 나가야 한다.
+    let point = CGPoint(x: 10, y: 20)
+    let poster = RecordingGlobalEventPoster()
+    let service = GlobalClickService(
+        eventFactory: RecordingGlobalClickEventFactory(
+            events: try #require(makeForegroundTestClickEvents(at: point))
+        ),
+        eventPoster: poster
+    )
+
+    let task = Task {
+        while !Task.isCancelled {
+            await Task.yield()
+        }
+        try service.click(
+            screenPoint: point,
+            sourceIdentifier: AutomatorSyntheticEvent.sourceIdentifier,
+            hold: .milliseconds(60)
+        )
+    }
+    task.cancel()
+    try await task.value
+
+    #expect(
+        poster.records.map(\.eventType) == [.leftMouseDown, .leftMouseUp]
+    )
+}
