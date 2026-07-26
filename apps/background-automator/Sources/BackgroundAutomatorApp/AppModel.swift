@@ -127,11 +127,20 @@ final class AppModel: ObservableObject {
         diagnosticsWriter = directory.map {
             DiagnosticsFileWriter(directory: $0)
         }
+        // 기록마다 어느 빌드가 남겼는지 찍어 둔다. 배포 전후 비교를 시각으로
+        // 자르면, 빌드했지만 앱을 다시 켜지 않은 구간이 새 빌드로 잘못 잡힌다.
+        let build = BuildIdentity.current()
+        if let directory {
+            _ = try? BuildLogWriter(directory: directory)
+                .recordIfNeeded(build)
+        }
         let activityWriter = directory.map {
-            ActivityLogWriter(directory: $0)
+            ActivityLogWriter(directory: $0, build: build.id)
         }
         self.activityWriter = activityWriter
-        let cycleWriter = directory.map { CycleLogWriter(directory: $0) }
+        let cycleWriter = directory.map {
+            CycleLogWriter(directory: $0, build: build.id)
+        }
         self.cycleWriter = cycleWriter
         stallRecorder = directory.map { StallSnapshotRecorder(directory: $0) }
         stallImageWriter = directory.map { StallImageWriter(directory: $0) }
