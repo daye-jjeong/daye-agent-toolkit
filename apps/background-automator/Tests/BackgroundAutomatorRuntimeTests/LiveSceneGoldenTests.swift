@@ -26,7 +26,7 @@ import Testing
     ("landscape-deselected-nocoin", "enter_ready"),
     // 임무 선택 상태(은동전 충분): 안내문 대신 두 배 보상 안내가 뜬다.
     // 은동전을 쓰지 않는 것이 기본이므로 '선택됨'을 눌러 해제한다.
-    ("landscape-mission-select-10coin", "deselect_double_loot"),
+    ("landscape-mission-select-10coin", "deselect_coin"),
     // 해제 상태(은동전 충분): '입장하기'가 깨끗하게 떠 입장한다.
     ("landscape-deselected-10coin", "enter_ready"),
 ])

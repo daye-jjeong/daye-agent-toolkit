@@ -224,7 +224,7 @@
       "cooldownSeconds": 1.0
     },
     {
-      "id": "deselect_double_loot",
+      "id": "deselect_coin",
       "requiredTexts": [
         "도전에 성공하면 임무 전리품이 두 배가 됩니다.",
         "선택됨"

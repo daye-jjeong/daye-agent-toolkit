@@ -185,6 +185,17 @@ def report_drops_by_entry(cycles):
                   f" ±{margin * 100:.1f}%p")
 
 
+# 규칙 이름이 바뀌면 옛 로그와 새 로그가 다른 줄로 갈린다. 실제로는 같은
+# 동작이라 하나로 묶어 본다(2026-07-26: deselect_double_loot → deselect_coin,
+# 임무 해제인데 더블 루팅을 끄는 것처럼 읽혀서 바꿨다).
+RENAMED_SCENES = {"deselect_double_loot": "deselect_coin"}
+
+
+def scene_name(event):
+    scene = event.get("scene")
+    return RENAMED_SCENES.get(scene, scene)
+
+
 def report_phases(events):
     clicks = [e for e in events if e.get("phases")]
     if not clicks:
@@ -217,7 +228,7 @@ def report_phases(events):
 
     by_scene = defaultdict(list)
     for event in clicks:
-        by_scene[event.get("scene")].append(
+        by_scene[scene_name(event)].append(
             sum(v for k, v in event["phases"].items()
                 if k.endswith("Milliseconds") and k != "totalMilliseconds")
         )
