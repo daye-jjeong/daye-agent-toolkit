@@ -464,11 +464,13 @@ extension AutomationCoordinator {
     /// 없으므로 이 화면에서 뽑은 텍스트는 던전 이름으로 신뢰하지 않는다.
     static func sceneHasDungeonName(_ scene: AutomationScene) -> Bool {
         switch scene {
+        // 공물 규칙은 은동전 짝과 같은 화면에 서므로 판정도 같이 간다.
         case .rewardRetry, .missionSelection, .enterReady, .rewardDetail,
-             .enterWithCoin:
+             .enterWithCoin, .enterWithTribute:
             true
         case .clearTouch, .continueDialog, .running, .deselectChallenge,
-             .deselectDoubleLoot, .turnOffDoubleLoot, .sceneSkip, .autoStart:
+             .deselectDoubleLoot, .turnOffDoubleLoot, .sceneSkip, .autoStart,
+             .deselectTribute:
             false
         }
     }
@@ -499,6 +501,10 @@ extension AutomationCoordinator {
             "deselect_double_loot"
         case .enterWithCoin:
             "enter_with_coin"
+        case .deselectTribute:
+            "deselect_tribute"
+        case .enterWithTribute:
+            "enter_with_tribute"
         case .enterReady:
             "enter_ready"
         case .running:

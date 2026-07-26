@@ -75,17 +75,25 @@ public struct RuleLoader: Sendable {
 
     public init() {}
 
-    /// 임무를 그대로 두고 들어가 전리품을 두 배로 받는 규칙(은동전 10개 소모).
+    /// 임무를 그대로 두고 들어가 임무 보상을 받는 규칙(은동전 10개 소모).
     static let silverCoinRuleID = "enter_with_coin"
     /// 임무를 해제해 은동전을 아끼는 규칙.
     static let silverCoinFreeRuleID = "deselect_double_loot"
+    /// 임무를 그대로 두고 들어가는 규칙(공물 1개 소모).
+    static let tributeRuleID = "enter_with_tribute"
+    /// 임무를 해제해 공물을 아끼는 규칙.
+    static let tributeFreeRuleID = "deselect_tribute"
 
-    /// - Parameter usesSilverCoin: 켜면 임무를 그대로 두고 들어가 전리품을
-    ///   두 배로 받고(은동전 10개 소모), 끄면 임무를 해제해 아낀다.
-    ///   두 규칙은 같은 화면에 반응하므로 하나만 남긴다 — 둘 다 두면
-    ///   후보가 겹쳐 자동화가 모호성으로 멈춘다.
+    /// - Parameters:
+    ///   - usesSilverCoin: 켜면 임무를 그대로 두고 들어가 임무 보상을 받고
+    ///     (은동전 10개 소모), 끄면 임무를 해제해 아낀다.
+    ///   - usesTribute: 공물 던전(페카 고분)에서 같은 선택. 공물은 1개 소모다.
+    ///
+    /// 재화마다 두 규칙이 같은 화면에 반응하므로 하나만 남긴다 — 둘 다 두면
+    /// 후보가 겹쳐 자동화가 모호성으로 멈춘다.
     public func loadDefaultRules(
-        usesSilverCoin: Bool = false
+        usesSilverCoin: Bool = false,
+        usesTribute: Bool = false
     ) throws -> [AutomationRule] {
         let mainBundle = Bundle.main
         let overrideURL = BackgroundAutomatorPaths.overrideRulesURL()
@@ -105,20 +113,23 @@ public struct RuleLoader: Sendable {
                 ),
                 overrideURL: overrideURL
             )
-        return Self.applyingSilverCoinChoice(
+        return Self.applyingCurrencyChoices(
             try loadDefaultRules(context: context),
-            usesSilverCoin: usesSilverCoin
+            usesSilverCoin: usesSilverCoin,
+            usesTribute: usesTribute
         )
     }
 
-    static func applyingSilverCoinChoice(
+    static func applyingCurrencyChoices(
         _ rules: [AutomationRule],
-        usesSilverCoin: Bool
+        usesSilverCoin: Bool,
+        usesTribute: Bool = false
     ) -> [AutomationRule] {
-        let excluded = usesSilverCoin
-            ? silverCoinFreeRuleID
-            : silverCoinRuleID
-        return rules.filter { $0.id != excluded }
+        let excluded: Set<String> = [
+            usesSilverCoin ? silverCoinFreeRuleID : silverCoinRuleID,
+            usesTribute ? tributeFreeRuleID : tributeRuleID,
+        ]
+        return rules.filter { !excluded.contains($0.id) }
     }
 
     func loadDefaultRules(resourceRoot: URL) throws -> [AutomationRule] {

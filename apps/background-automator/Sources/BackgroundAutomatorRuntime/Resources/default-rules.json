@@ -287,6 +287,73 @@
       "cooldownSeconds": 2.0
     },
     {
+      "id": "deselect_tribute",
+      "requiredTexts": [
+        "선택됨",
+        "입장하기"
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기",
+        "도전에 성공하면 임무 전리품이 두 배가 됩니다.",
+        "선택을 해제하면 임무 없이 입장할 수 있습니다."
+      ],
+      "action": {
+        "targetText": "선택됨"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.15,
+          "minY": 0.25,
+          "maxX": 0.85,
+          "maxY": 0.95
+        },
+        "portrait-mobile": {
+          "minX": 0.05,
+          "minY": 0.25,
+          "maxX": 0.95,
+          "maxY": 0.95
+        }
+      },
+      "minimumOCRConfidence": 0.45,
+      "stableObservationCount": 1,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 1.0
+    },
+    {
+      "id": "enter_with_tribute",
+      "requiredTexts": [
+        "선택됨",
+        "입장하기"
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기",
+        "도전에 성공하면 임무 전리품이 두 배가 됩니다.",
+        "선택을 해제하면 임무 없이 입장할 수 있습니다."
+      ],
+      "action": {
+        "targetText": "입장하기",
+        "targetTextSuffix": "입장하기"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.15,
+          "minY": 0.25,
+          "maxX": 0.85,
+          "maxY": 0.95
+        },
+        "portrait-mobile": {
+          "minX": 0.05,
+          "minY": 0.25,
+          "maxX": 0.95,
+          "maxY": 0.95
+        }
+      },
+      "minimumOCRConfidence": 0.45,
+      "stableObservationCount": 1,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 2.0
+    },
+    {
       "id": "enter_ready",
       "requiredTexts": [
         "입장하기"

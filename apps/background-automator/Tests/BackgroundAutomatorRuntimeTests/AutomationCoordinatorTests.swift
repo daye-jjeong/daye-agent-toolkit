@@ -1756,6 +1756,10 @@ private func expectedRuleID(for scene: AutomationScene) -> String? {
         "deselect_double_loot"
     case .enterWithCoin:
         "enter_with_coin"
+    case .deselectTribute:
+        "deselect_tribute"
+    case .enterWithTribute:
+        "enter_with_tribute"
     case .enterReady:
         "enter_ready"
     case .running:
@@ -1787,6 +1791,11 @@ private func defaultTexts(for scene: AutomationScene) -> [String] {
         ["도전에 성공하면 임무 전리품이 두 배가 됩니다.", "선택됨"]
     case .enterWithCoin:
         ["도전에 성공하면 임무 전리품이 두 배가 됩니다.", "선택됨", "10 입장하기"]
+    // 공물 화면엔 더블 루팅 안내문이 없다 — 그게 은동전 화면과 갈리는 지점.
+    case .deselectTribute:
+        ["선택됨", "입장하기"]
+    case .enterWithTribute:
+        ["선택됨", "1 입장하기"]
     case .enterReady:
         ["입장하기"]
     case .running:

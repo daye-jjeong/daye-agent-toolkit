@@ -123,6 +123,17 @@ struct MenuContentView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
+            // 공물 던전(페카 고분)은 더블 루팅이 없어 은동전 규칙이 못 잡는다.
+            Toggle("공물 쓰기 (임무 보상 받기)", isOn: $model.usesTribute)
+                .disabled(model.isRunning || model.isTransitioning)
+            Text(
+                model.usesTribute
+                    ? "임무를 그대로 두고 입장해 임무 보상을 받습니다. 한 판에 공물 1개."
+                    : "임무를 해제하고 입장합니다. 공물도 임무 보상도 없습니다."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
             Button("진단 폴더 열기") {
                 model.openDiagnosticsFolder()
             }

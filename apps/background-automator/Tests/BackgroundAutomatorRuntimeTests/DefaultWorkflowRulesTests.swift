@@ -18,6 +18,9 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
             "turn_off_double_loot",
             "deselect_challenge",
             "deselect_double_loot",
+            // 공물 던전(페카)은 더블 루팅이 없어 은동전 규칙이 못 잡는다.
+            // 기본은 공물도 쓰지 않는다 — 임무를 해제하고 들어간다.
+            "deselect_tribute",
             "enter_ready",
             "running",
         ]
@@ -57,6 +60,9 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard(
         "continue_dialog", "deselect_challenge", "deselect_double_loot",
         "enter_ready", "scene_skip", "reward_detail", "clear_touch",
         "reward_retry", "turn_off_double_loot",
+        // 공물 화면의 '선택됨'·'공물1 입장하기'는 은동전 화면과 같은
+        // 수준으로 흐릿하게 읽힌다(실측 픽스처 9종 골든 테스트).
+        "deselect_tribute", "enter_with_tribute",
     ]
     // enter_with_coin만 더 낮다 — 실측 ') 입장하기' cf 0.30.
     // 정확한 하한은 silverCoinEntryKeepsItsMeasuredSafetyBounds가 못박는다.

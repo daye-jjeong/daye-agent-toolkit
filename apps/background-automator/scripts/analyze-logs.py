@@ -13,6 +13,7 @@
 
 import argparse
 import json
+import math
 import pathlib
 import re
 import statistics
@@ -124,8 +125,17 @@ def report_cycles(cycles):
         print(f"  전투   평균 {sum(combat) / len(combat):.1f}초"
               f" (최소 {min(combat)} · 최대 {max(combat)})")
 
-    dungeons = Counter(c.get("dungeon") for c in cycles if c.get("dungeon"))
+    display = group_dungeons(cycles)
+    dungeons = Counter(
+        display[dungeon_key(c["dungeon"])] for c in cycles if c.get("dungeon")
+    )
     print(f"  던전   {dict(dungeons.most_common(3))}")
+
+    entries = Counter(c.get("entry") or "미기록" for c in cycles)
+    labels = {"coin": "은동전 씀", "tribute": "공물 씀", "free": "임무 해제"}
+    print("  입장   " + " · ".join(
+        f"{labels.get(k, k)} {v}판" for k, v in entries.most_common()
+    ))
 
 
 def report_drops(cycles):
@@ -141,6 +151,38 @@ def report_drops(cycles):
     print(f"  {'-' * 34}")
     for name, count in counts.most_common(20):
         print(f"  {name:<20} {count:>5} {count / total * 100:>7.1f}%")
+
+
+def report_drops_by_entry(cycles):
+    """재화를 쓰고 들어간 판과 아닌 판을 갈라 본다.
+
+    입장 방식이 기록되기 전에는 전리품 칸 수로 짐작해야 했다(재화를 쓰면
+    3칸 → 24칸). 짐작은 기록이 아니라서, 판마다 어떤 규칙으로 들어갔는지를
+    같이 남긴다. `미기록`은 앱이 입장 버튼을 누르지 않은 판이다.
+    """
+    groups = defaultdict(list)
+    for cycle in cycles:
+        groups[cycle.get("entry") or "미기록"].append(cycle)
+    known = {k: v for k, v in groups.items() if k != "미기록"}
+    if not known:
+        return
+
+    labels = {"coin": "은동전 씀", "tribute": "공물 씀", "free": "임무 해제"}
+    print("\n■ 입장 방식별 드랍률")
+    for key, sel in sorted(known.items(), key=lambda kv: -len(kv[1])):
+        n = len(sel)
+        counts = Counter()
+        for cycle in sel:
+            for name in clean_items(cycle.get("items", [])):
+                counts[name] += 1
+        print(f"\n  {labels.get(key, key)} — {n}판")
+        if n < MIN_SAMPLES:
+            print(f"    표본 {MIN_SAMPLES}판 미만 — 비율을 비교에 쓰지 마라")
+        for name, count in counts.most_common(8):
+            share = count / n
+            margin = 1.96 * math.sqrt(share * (1 - share) / n)
+            print(f"    {name:<18} {count:>4}판 {share * 100:>5.1f}%"
+                  f" ±{margin * 100:.1f}%p")
 
 
 def report_phases(events):
@@ -195,6 +237,22 @@ def normalize_dungeon(name):
     # 남긴다. OCR이 밑줄을 뱉는 건 실제 사례가 있다('장면 넘기기_').
     # 어긋나면 --rewrite한 과거 로그와 앞으로 쌓일 이름이 갈린다.
     return " ".join(re.sub(r"[^0-9A-Za-z가-힣]+", " ", name).split())
+
+
+def dungeon_key(name):
+    """띄어쓰기를 지운 집계 키. OCR이 '페카고분 심층 1층 2구역'(27판)과
+    '페카 고분 심층 1층 2구역'(8판)으로 갈라 읽어 같은 던전이 쪼개졌다."""
+    return re.sub(r"\s+", "", normalize_dungeon(name or ""))
+
+
+def group_dungeons(cycles):
+    """집계 키 → 대표 표기(처음 읽은 것). 붙여 쓴 표기가 이기면 읽기 나쁘다."""
+    display = {}
+    for cycle in cycles:
+        name = cycle.get("dungeon")
+        if name:
+            display.setdefault(dungeon_key(name), normalize_dungeon(name))
+    return display
 
 
 def rewrite_cycles(path, cycles):
@@ -319,6 +377,7 @@ def main():
     report_builds(cycles, events, builds)
     report_daily(cycles)
     report_drops(cycles)
+    report_drops_by_entry(cycles)
     report_phases(events)
 
     print(f"\n■ 정지 기록 {len(stalls)}건"
