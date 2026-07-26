@@ -44,9 +44,12 @@ public protocol Clicking: Sendable {
 }
 
 public protocol GlobalClicking: Sendable {
+    /// `hold`는 버튼을 누르고 있는 시간이다. 0이면 누름과 뗌이 같은
+    /// 순간에 나가는데, 사람 손으로는 낼 수 없는 값이다.
     func click(
         screenPoint: CGPoint,
-        sourceIdentifier: Int64
+        sourceIdentifier: Int64,
+        hold: Duration
     ) throws
 }
 
@@ -179,7 +182,8 @@ public struct GlobalClickService: GlobalClicking {
 
     public func click(
         screenPoint: CGPoint,
-        sourceIdentifier: Int64
+        sourceIdentifier: Int64,
+        hold: Duration
     ) throws {
         guard let events = eventFactory.makeEvents(at: screenPoint) else {
             throw ClickError.cannotCreateEvent
@@ -194,6 +198,14 @@ public struct GlobalClickService: GlobalClicking {
             value: sourceIdentifier
         )
         eventPoster.post(events.down)
+        // 누른 채 기다리는 구간은 await로 끊지 않는다. 그 사이에 태스크가
+        // 취소되면 버튼이 눌린 채로 남아 사용자 조작을 통째로 망가뜨린다.
+        // 협동 스레드를 잠깐 막지만 클릭은 판당 6회뿐이라 무시할 수준이다.
+        if hold > .zero {
+            Thread.sleep(
+                forTimeInterval: Double(hold.microseconds) / 1_000_000
+            )
+        }
         eventPoster.post(events.up)
     }
 }

@@ -186,3 +186,14 @@ private func cycleFixtureImage(named name: String) throws -> CGImage {
 }
 
 private let resultSize = CGSize(width: 1512, height: 949)
+
+@Test(arguments: [
+    "룬다 1층 2구역",
+    "룬다. 1층 2구역",
+    "룬다 '1층 2구역*",
+    "  룬다   1층 2구역 ",
+])
+func dungeonNamesCollapseToOneSpelling(raw: String) {
+    // 실측 로그에 같은 던전이 세 가지 철자로 쌓여 통계가 쪼개졌다.
+    #expect(DungeonNameExtractor.normalizedName(raw) == "룬다 1층 2구역")
+}

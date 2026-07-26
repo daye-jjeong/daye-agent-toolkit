@@ -46,9 +46,11 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard() throws {
     // 장식 폰트라 기준을 낮춘다. 각 규칙은 신뢰도 1.0 고유 시그니처를
     // 함께 요구하거나(continue_dialog·deselect_challenge) exact-match와
     // forbidden으로 오탐을 막는다(enter_ready).
+    // clear_touch도 2026-07-26에 0.85에서 내렸다 — 아래 전용 테스트 참조.
     let lowConfidenceRules: Set<String> = [
         "continue_dialog", "deselect_challenge", "deselect_double_loot",
-        "enter_ready", "scene_skip", "reward_detail",
+        "enter_ready", "scene_skip", "reward_detail", "clear_touch",
+        "reward_retry",
     ]
 
     for rule in rules {
@@ -92,6 +94,13 @@ func clearTouchRequiresExactContextAndUsesOnlySafePoint() throws {
     #expect(rule.action.targetText == nil)
     #expect(rule.action.safePointRegion != nil)
     #expect(rule.cooldownSeconds >= 1)
+    // 회귀(2026-07-26): 기준이 0.85라 전체 규칙 중 가장 높았고, 같은
+    // 화면에서 신뢰도가 흔들리면 이 규칙만 골라서 안 잡혔다. 실측으로
+    // 정적 UI 글자도 몇 분 사이 1.00 → 0.50 → 0.30으로 움직인다.
+    // 시그니처가 9글자 고유 문장이라 exact-match 자체가 필터 역할을
+    // 하므로 신뢰도 문턱은 다른 장면 규칙과 같은 0.45로 낮춘다.
+    #expect(rule.minimumOCRConfidence <= 0.45)
+    #expect(rule.minimumOCRConfidence >= 0.4)
 }
 
 @Test(arguments: [

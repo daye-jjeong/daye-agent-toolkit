@@ -38,10 +38,15 @@ public struct VisionTextRecognizer: TextRecognizing, Sendable {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = Self.recognitionLanguages
-        // 언어 보정을 끄면 인식이 40% 빨라진다(실측 392→233ms, 492→265ms).
-        // 규칙은 글자를 정확히 맞춰 보므로 보정이 오히려 원문을 바꿀 수 있고,
-        // 실캡처 10장 골든 테스트로 모든 장면이 그대로 인식됨을 확인했다.
-        request.usesLanguageCorrection = false
+        // 보정을 끄면 40% 빨라지지만(실측 392→233ms) 글자가 흔들린다 —
+        // 2026-07-26 landscape-scene-skip-clear에서 '장면 넘기기'가
+        // '장면 넘기기_'로 읽혀 exact-match가 깨졌다. 이 문자열은 컷신
+        // 감지이자 다른 모든 규칙의 컷신 차단 가드라, 어긋나면 컷신을 못
+        // 넘기는 데다 컷신 중 오클릭까지 열린다. 판당 1.5초를 주고 켠다.
+        //
+        // 보정을 켜면 장식 폰트 신뢰도가 1.00에서 0.50으로 내려가지만,
+        // 규칙 문턱을 전부 0.45 이하로 낮춰 뒀으므로 전 장면이 잡힌다.
+        request.usesLanguageCorrection = true
         request.minimumTextHeight = Self.minimumTextHeight
 
         let handler = VNImageRequestHandler(

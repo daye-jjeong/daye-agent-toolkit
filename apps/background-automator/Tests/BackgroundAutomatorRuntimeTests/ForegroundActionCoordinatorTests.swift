@@ -179,7 +179,8 @@ func globalClickPostsOneTaggedDownUpPair() throws {
 
     try service.click(
         screenPoint: point,
-        sourceIdentifier: AutomatorSyntheticEvent.sourceIdentifier
+        sourceIdentifier: AutomatorSyntheticEvent.sourceIdentifier,
+        hold: .zero
     )
 
     #expect(factory.requestedPoints == [point])
@@ -1041,6 +1042,7 @@ private final class FakeGlobalClicker:
     private let lock = NSLock()
     private let log: ForegroundActionTestLog
     private var storedClicks: [Click] = []
+    private var storedHolds: [Duration] = []
     var error: (any Error)?
 
     init(log: ForegroundActionTestLog) {
@@ -1051,10 +1053,16 @@ private final class FakeGlobalClicker:
         lock.withLock { storedClicks }
     }
 
+    var holds: [Duration] {
+        lock.withLock { storedHolds }
+    }
+
     func click(
         screenPoint: CGPoint,
-        sourceIdentifier: Int64
+        sourceIdentifier: Int64,
+        hold: Duration
     ) throws {
+        lock.withLock { storedHolds.append(hold) }
         log.append(
             "click:\(screenPoint.x),\(screenPoint.y):\(sourceIdentifier)"
         )
@@ -1230,4 +1238,46 @@ private final class RecordingGlobalEventPoster:
             )
         }
     }
+}
+
+@Test
+func clickHoldsButtonForHumanDuration() async throws {
+    // 누름과 뗌이 같은 순간(0ms)이면 사람 손으로 낼 수 없는 값이다.
+    let original = ApplicationIdentity(
+        processIdentifier: 10,
+        bundleIdentifier: "com.example.editor"
+    )
+    let game = ApplicationIdentity(
+        processIdentifier: 20,
+        bundleIdentifier: "com.example.game"
+    )
+    let log = ForegroundActionTestLog()
+    let clicker = FakeGlobalClicker(log: log)
+    let coordinator = ForegroundActionCoordinator(
+        applications: FakeApplicationCoordinator(
+            frontmost: original,
+            running: [original, game],
+            log: log
+        ),
+        pointer: FakePointerController(
+            location: CGPoint(x: 12, y: 34),
+            log: log
+        ),
+        clicker: clicker,
+        sleeper: FakeActionSleeper(log: log),
+        inputMonitor: FakeForegroundInputMonitor(
+            snapshots: [inputSnapshot(generation: 7)],
+            log: log
+        )
+    )
+
+    _ = try await coordinator.perform(
+        targetApplication: game,
+        targetBox: CGRect(x: 100, y: 200, width: 80, height: 40),
+        expectedInputGeneration: 7
+    )
+
+    #expect(clicker.holds == [ForegroundActionCoordinator.clickHold])
+    #expect(ForegroundActionCoordinator.clickHold >= .milliseconds(50))
+    #expect(ForegroundActionCoordinator.clickHold <= .milliseconds(120))
 }

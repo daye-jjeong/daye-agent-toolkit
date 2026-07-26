@@ -36,6 +36,8 @@ final class AppModel: ObservableObject {
     /// 결과 화면은 몇 초간 떠 있으므로 2초면 놓치지 않는다. 더 촘촘히
     /// 보면 OCR 비용만 늘고, 더 성기면 빠르게 넘긴 사이클을 놓친다.
     static let cycleObservationInterval = Duration.seconds(2)
+    /// 폴링 간격을 기준값 둘레로 흩뿌린다. 평균은 그대로라 느려지지 않는다.
+    static let pollingJitter = TimingJitter()
 
     private let defaults: UserDefaults
     private let captureService: WindowCaptureService
@@ -44,6 +46,7 @@ final class AppModel: ObservableObject {
     private let activityWriter: ActivityLogWriter?
     private let cycleWriter: CycleLogWriter?
     private let stallRecorder: StallSnapshotRecorder?
+    private let stallImageWriter: StallImageWriter?
     private let retryPolicy = AutomationRetryPolicy()
     private let clock = ContinuousClock()
     private static let logger = Logger(
@@ -64,6 +67,45 @@ final class AppModel: ObservableObject {
     private var coordinator: AutomationCoordinator?
     private var idleMonitor: UserIdleMonitor?
     private var lastPreflightIssue: PreflightIssue?
+    /// 아무 버튼도 못 찾는 침묵이 길어지면 멈춤으로 본다.
+    private var quietDetector = QuietStallDetector()
+    private var quietStallGuidance: String?
+    /// 감지기는 경과 시간(Duration)으로 판단하므로 기준 시점을 잡아 둔다.
+    private var quietClockOrigin = ContinuousClock().now
+    /// 이번에 돌리기 시작한 시각. 정지하면 비운다.
+    @Published private(set) var runningSince: Date?
+    private var cyclesAtStart = 0
+
+    /// "3시간 12분" 꼴. 돌리는 중이 아니면 nil.
+    var uptimeDescription: String? {
+        guard let runningSince else {
+            return nil
+        }
+        let minutes = max(
+            0,
+            Int(Date().timeIntervalSince(runningSince) / 60)
+        )
+        guard minutes >= 60 else {
+            return "\(minutes)분"
+        }
+        return "\(minutes / 60)시간 \(minutes % 60)분"
+    }
+
+    /// 이번 세션의 시간당 판 수. 10분은 돌아야 의미가 있다.
+    var cycleRateDescription: String? {
+        guard let runningSince else {
+            return nil
+        }
+        let hours = Date().timeIntervalSince(runningSince) / 3600
+        guard hours >= 1.0 / 6 else {
+            return nil
+        }
+        let cycles = cycleSummary.totalCycles - cyclesAtStart
+        return String(
+            format: "시간당 %.1f판",
+            Double(cycles) / hours
+        )
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -94,6 +136,7 @@ final class AppModel: ObservableObject {
         let cycleWriter = directory.map { CycleLogWriter(directory: $0) }
         self.cycleWriter = cycleWriter
         stallRecorder = directory.map { StallSnapshotRecorder(directory: $0) }
+        stallImageWriter = directory.map { StallImageWriter(directory: $0) }
         if let summary = try? activityWriter?.summary() {
             activitySummary = summary
         }
@@ -269,7 +312,58 @@ private extension AppModel {
         )
     }
 
+    /// 클릭이 오래 끊기면 메뉴바를 '확인 필요'로 바꾸고 그때 화면을
+    /// PNG로 남긴다. 상태가 `.observing`인 채 굳으면 겉보기엔 정상이라
+    /// 사용자가 우연히 볼 때까지 몇 분씩 그냥 흘러갔다.
+    func applyQuietStall(result: AutomationCycleResult) async {
+        let didAct: Bool
+        if case .action = result {
+            didAct = true
+        } else {
+            didAct = false
+        }
+
+        let elapsed = clock.now - quietClockOrigin
+        switch quietDetector.note(didAct: didAct, at: elapsed) {
+        case .entered:
+            quietStallGuidance = Self.quietStallGuidance
+            await captureStallImage()
+        case .recovered:
+            quietStallGuidance = nil
+        case .none:
+            break
+        }
+
+        // updateAfterCycle이 매 사이클 status를 덮어쓰므로 그 뒤에 다시 씌운다.
+        if let quietStallGuidance, !status.isStalled {
+            status = .needsAttention(quietStallGuidance)
+        }
+    }
+
+    static let quietStallGuidance =
+        "2분 넘게 누를 버튼을 못 찾았습니다. 게임 화면을 확인하세요."
+
+    private func captureStallImage() async {
+        guard let stallImageWriter else {
+            return
+        }
+        guard
+            let capture = try? await captureService.captureWindow(
+                bundleIdentifier: bundleIdentifier,
+                titleContains: titleContains
+            )
+        else {
+            return
+        }
+        stallImageWriter.write(capture.image, at: Date())
+    }
+
     func beginStart() {
+        quietDetector.reset()
+        quietStallGuidance = nil
+        quietClockOrigin = clock.now
+        runningSince = Date()
+        cyclesAtStart = cycleSummary.totalCycles
         let session = lifecycleGate.beginStart(
             target: TargetConfiguration(
                 bundleIdentifier: bundleIdentifier,
@@ -422,6 +516,7 @@ private extension AppModel {
         coordinator = nil
         loopTask = nil
         cycleTask = nil
+        runningSince = nil
         status = .stopped
     }
 
@@ -491,9 +586,12 @@ private extension AppModel {
                     result: result,
                     state: coordinatorState
                 )
+                await applyQuietStall(result: result)
+                // 폴링 간격이 정확히 일정하면 클릭 박자도 일정해진다.
+                // 평균은 그대로 두고 흩뿌린다.
                 try await clock.sleep(
-                    for: AutomationPollingSchedule.delay(
-                        for: status
+                    for: Self.pollingJitter.applied(
+                        to: AutomationPollingSchedule.delay(for: status)
                     )
                 )
             } catch is CancellationError {

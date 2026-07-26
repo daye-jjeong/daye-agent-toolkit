@@ -64,7 +64,7 @@
           "maxY": 0.95
         }
       },
-      "minimumOCRConfidence": 0.85,
+      "minimumOCRConfidence": 0.45,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
@@ -126,7 +126,7 @@
           "maxY": 1.0
         }
       },
-      "minimumOCRConfidence": 0.85,
+      "minimumOCRConfidence": 0.45,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 1.0
@@ -309,7 +309,7 @@
           "maxY": 0.95
         }
       },
-      "minimumOCRConfidence": 0.45,
+      "minimumOCRConfidence": 0.25,
       "stableObservationCount": 2,
       "postActionDelaySeconds": 0.5,
       "cooldownSeconds": 2.0

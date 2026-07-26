@@ -1499,7 +1499,8 @@ private final class CountingCoordinatorClicker:
 
     func click(
         screenPoint: CGPoint,
-        sourceIdentifier: Int64
+        sourceIdentifier: Int64,
+        hold: Duration
     ) throws {
         lock.withLock {
             count += 1

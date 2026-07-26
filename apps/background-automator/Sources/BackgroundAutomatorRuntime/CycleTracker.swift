@@ -162,10 +162,18 @@ extension Character {
 
 public struct CycleSummary: Codable, Equatable, Sendable {
     public let totalCycles: Int
+    /// 오늘(로컬 달력 기준) 돈 판. 누적만 보면 오늘 얼마나 돌았는지
+    /// 알 수 없고, 파밍은 자정을 넘겨 이어지므로 날짜로 끊는다.
+    public let todayCycles: Int
     public let byDungeon: [String: Int]
 
-    public init(totalCycles: Int, byDungeon: [String: Int]) {
+    public init(
+        totalCycles: Int,
+        todayCycles: Int = 0,
+        byDungeon: [String: Int]
+    ) {
         self.totalCycles = totalCycles
+        self.todayCycles = todayCycles
         self.byDungeon = byDungeon
     }
 }
@@ -203,7 +211,10 @@ public final class CycleLogWriter {
         }
     }
 
-    public func summary() throws -> CycleSummary {
+    public func summary(
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> CycleSummary {
         guard
             let data = try? Data(contentsOf: fileURL),
             !data.isEmpty
@@ -213,7 +224,9 @@ public final class CycleLogWriter {
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
+        let startOfToday = calendar.startOfDay(for: now)
         var totalCycles = 0
+        var todayCycles = 0
         var byDungeon: [String: Int] = [:]
 
         for line in data.split(separator: 0x0A) {
@@ -226,6 +239,9 @@ public final class CycleLogWriter {
                 continue
             }
             totalCycles += 1
+            if record.at >= startOfToday {
+                todayCycles += 1
+            }
             if let dungeon = record.dungeon {
                 byDungeon[dungeon, default: 0] += 1
             }
@@ -233,6 +249,7 @@ public final class CycleLogWriter {
 
         return CycleSummary(
             totalCycles: totalCycles,
+            todayCycles: todayCycles,
             byDungeon: byDungeon
         )
     }

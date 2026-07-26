@@ -194,6 +194,11 @@ public struct ForegroundActionCoordinator: Sendable {
     private let inputMonitor: any UserIdleMonitoring
     private let postActionDelay: Duration
     private let pointSelector: any TargetPointSelecting
+    private let delayJitter: TimingJitter
+
+    /// 사람이 마우스를 누르고 있는 시간은 대체로 50~120ms다. 지터를 얹어
+    /// 60~100ms로 흩어진다. 지금까지는 0ms — 누름과 뗌이 같은 순간이었다.
+    static let clickHold = Duration.milliseconds(80)
 
     public init(
         inputMonitor: any UserIdleMonitoring,
@@ -206,8 +211,10 @@ public struct ForegroundActionCoordinator: Sendable {
         self.inputMonitor = inputMonitor
         self.postActionDelay = postActionDelay
         pointSelector = RandomTargetPointSelector(insetFraction: 0.2)
+        delayJitter = TimingJitter()
     }
 
+    /// 테스트는 결정적이어야 하므로 기본 선택기·지터를 고정값으로 둔다.
     init(
         applications: any ApplicationCoordinating,
         pointer: any PointerControlling,
@@ -215,7 +222,8 @@ public struct ForegroundActionCoordinator: Sendable {
         sleeper: any ActionSleeping,
         inputMonitor: any UserIdleMonitoring,
         postActionDelay: Duration = .milliseconds(500),
-        pointSelector: any TargetPointSelecting = CenterTargetPointSelector()
+        pointSelector: any TargetPointSelecting = CenterTargetPointSelector(),
+        delayJitter: TimingJitter = TimingJitter(spread: 0)
     ) {
         self.applications = applications
         self.pointer = pointer
@@ -224,6 +232,7 @@ public struct ForegroundActionCoordinator: Sendable {
         self.inputMonitor = inputMonitor
         self.postActionDelay = postActionDelay
         self.pointSelector = pointSelector
+        self.delayJitter = delayJitter
     }
 
     public func perform(
@@ -354,7 +363,8 @@ public struct ForegroundActionCoordinator: Sendable {
                 try clicker.click(
                     screenPoint: targetPoint,
                     sourceIdentifier:
-                        AutomatorSyntheticEvent.sourceIdentifier
+                        AutomatorSyntheticEvent.sourceIdentifier,
+                    hold: delayJitter.applied(to: Self.clickHold)
                 )
                 clickCompleted = true
             } catch is CancellationError {
@@ -366,7 +376,9 @@ public struct ForegroundActionCoordinator: Sendable {
             }
 
             do {
-                try await sleeper.sleep(for: postActionDelay)
+                try await sleeper.sleep(
+                    for: delayJitter.applied(to: postActionDelay)
+                )
             } catch is CancellationError {
                 throw ForegroundActionAbort.failure(
                     .cancelledAfterClick

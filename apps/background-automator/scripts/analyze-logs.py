@@ -15,6 +15,7 @@ import argparse
 import json
 import pathlib
 import re
+import statistics
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -182,6 +183,38 @@ def rewrite_cycles(path, cycles):
     print(f"원본 백업: {backup}")
 
 
+def report_daily(cycles):
+    """날짜별 판 수·전투 시간·영혼석. 파밍은 자정을 넘겨 이어지므로
+    누적만 보면 '오늘 얼마나 돌았나'를 알 수 없다."""
+    if not cycles:
+        return
+    by_day = {}
+    for c in cycles:
+        day = kst(c["at"]).date()
+        row = by_day.setdefault(day, {"n": 0, "combat": [], "soul": 0,
+                                      "first": None, "last": None})
+        row["n"] += 1
+        if c.get("combatSeconds"):
+            row["combat"].append(c["combatSeconds"])
+        if any("영혼석" in i for i in c.get("items", [])):
+            row["soul"] += 1
+        at = kst(c["at"])
+        row["first"] = min(row["first"] or at, at)
+        row["last"] = max(row["last"] or at, at)
+
+    print("\n■ 날짜별 기록")
+    print("  날짜          판수   가동      판당    전투    영혼석")
+    for day in sorted(by_day):
+        r = by_day[day]
+        span = (r["last"] - r["first"]).total_seconds()
+        hours = span / 3600
+        per = span / r["n"] if r["n"] else 0
+        combat = statistics.mean(r["combat"]) if r["combat"] else 0
+        rate = r["soul"] / r["n"] * 100 if r["n"] else 0
+        print(f"  {day:%m/%d}  {r['n']:8d}  {hours:5.1f}h"
+              f"  {per:6.0f}초  {combat:5.1f}초  {r['soul']:3d}판 {rate:4.1f}%")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rewrite", action="store_true",
@@ -196,6 +229,7 @@ def main():
     stalls = read_jsonl(directory / "stall-log.jsonl")
 
     report_cycles(cycles)
+    report_daily(cycles)
     report_drops(cycles)
     report_phases(events)
 

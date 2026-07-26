@@ -74,8 +74,17 @@ public enum DungeonNameExtractor {
 
         // 밴드 안에서 가장 위(작은 y)에 있는 텍스트를 던전 이름으로.
         return candidates
-            .min { $0.boundingBox.midY < $1.boundingBox.midY }?
-            .text
+            .min { $0.boundingBox.midY < $1.boundingBox.midY }
+            .map { normalizedName($0.text) }
+    }
+
+    /// OCR은 같은 던전을 매번 조금씩 다르게 읽는다 — 실측 로그에
+    /// '룬다 1층 2구역'·'룬다. 1층 2구역'·"룬다 '1층 2구역*"이 따로
+    /// 쌓여 같은 던전 통계가 셋으로 쪼개졌다. 글자·숫자만 남겨 모은다.
+    static func normalizedName(_ text: String) -> String {
+        String(text.map { $0.isLetter || $0.isNumber ? $0 : " " })
+            .split(separator: " ")
+            .joined(separator: " ")
     }
 
     /// OCR이 라벨에 붙이는 공백·괄호 같은 잡음을 떼고 글자만 남긴다
