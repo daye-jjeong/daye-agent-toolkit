@@ -132,3 +132,13 @@ fi
     "${app_path}"
 
 echo "Built app: ${app_path}"
+echo "Build stamp: ${build_identifier}"
+
+# 배포하고 나서 기록을 잊는 게 실제 실패 모드다. 직전 빌드가 CHANGELOG에
+# 안 적혔으면 한 번만 짚어 준다 — 적히는 순간 조용해진다.
+changelog="${package_dir}/CHANGELOG.md"
+if [[ -n "${last_sha:-}" ]] && ! /usr/bin/grep -q "${last_sha}" "${changelog}"
+then
+    echo "알림: 직전 빌드 ${last_sha}가 CHANGELOG.md에 없다." >&2
+    echo "      바꾼 것·왜·재보니 어땠나를 적어 둬라." >&2
+fi
