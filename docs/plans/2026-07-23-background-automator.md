@@ -492,6 +492,13 @@ Fail conditions:
 
 **HARD GATE:** If any fail condition occurs, stop. Document the exact result in the design, and evaluate a separate VM/session. Do not continue to Task 4.
 
+**Live gate result (2026-07-23): FAILED — STOP AFTER TASK 3.** The intended
+game action occurred once, but the physical pointer moved and the foreground
+app changed from Codex to Mabinogi Mobile. `CGEvent.postToPid` is therefore not
+acceptable for same-session background automation of this Unity game. Do not
+start Task 4; evaluate a separate VM or macOS user session instead. The exact
+measurements are recorded in the design document.
+
 **Step 7: Commit**
 
 ```bash
