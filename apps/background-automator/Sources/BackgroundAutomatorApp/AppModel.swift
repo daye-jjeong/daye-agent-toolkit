@@ -9,11 +9,17 @@ import os
 final class AppModel: ObservableObject {
     @Published var bundleIdentifier: String
     @Published var titleContains: String
-    /// 임무를 그대로 두고 들어가 전리품을 두 배로 받을지(은동전 10개 소모).
+    /// 임무를 그대로 두고 들어가 임무 보상을 받을지(은동전 10개 소모).
     /// 끄면 임무를 해제하고 들어가 은동전을 아낀다.
     @Published var usesSilverCoin: Bool {
         didSet {
             defaults.set(usesSilverCoin, forKey: Self.usesSilverCoinKey)
+        }
+    }
+    /// 공물 던전(페카 고분)에서 같은 선택. 한 판에 공물 1개다.
+    @Published var usesTribute: Bool {
+        didSet {
+            defaults.set(usesTribute, forKey: Self.usesTributeKey)
         }
     }
     @Published private(set) var status: AutomationMenuStatus = .stopped {
@@ -52,6 +58,8 @@ final class AppModel: ObservableObject {
     private let stallImageWriter: StallImageWriter?
     private let retryPolicy = AutomationRetryPolicy()
     private let clock = ContinuousClock()
+    /// 직전에 앱이 누른 입장 방식. 다음 사이클 기록에 한 번 쓰고 비운다.
+    private var lastEntry: DungeonEntry?
     private static let logger = Logger(
         subsystem: "BackgroundAutomator",
         category: "automation"
@@ -111,6 +119,7 @@ final class AppModel: ObservableObject {
             forKey: Self.bundleIdentifierKey
         ) ?? ""
         usesSilverCoin = defaults.bool(forKey: Self.usesSilverCoinKey)
+        usesTribute = defaults.bool(forKey: Self.usesTributeKey)
         titleContains = defaults.string(
             forKey: Self.titleContainsKey
         ) ?? ""
@@ -439,7 +448,8 @@ private extension AppModel {
 
         do {
             let rules = try RuleLoader().loadDefaultRules(
-                usesSilverCoin: usesSilverCoin
+                usesSilverCoin: usesSilverCoin,
+                usesTribute: usesTribute
             )
             let idleMonitor = UserIdleMonitor()
             try idleMonitor.start()
@@ -672,6 +682,11 @@ private extension AppModel {
         guard let activityWriter, let click else {
             return
         }
+        // 입장 버튼을 누른 규칙이 곧 '이 판을 어떻게 들어갔나'다. 입장 규칙이
+        // 아니면 nil이라 컷신 넘기기 같은 클릭이 값을 덮어쓰지 않는다.
+        if let entry = DungeonEntry(ruleID: click.ruleID) {
+            lastEntry = entry
+        }
         try? activityWriter.append(
             ActivityEvent(
                 at: Date(),
@@ -690,7 +705,10 @@ private extension AppModel {
         guard let cycleWriter else {
             return
         }
-        try? cycleWriter.append(record)
+        try? cycleWriter.append(record.entered(lastEntry))
+        // 한 판에 한 번만 쓴다. 앱이 누르지 않은 입장(사용자가 직접 들어간
+        // 경우)까지 직전 값으로 채우면 통계가 조용히 틀어진다.
+        lastEntry = nil
         if let summary = try? cycleWriter.summary() {
             cycleSummary = summary
         }
@@ -723,6 +741,7 @@ private extension AppModel {
     }
 
     static let usesSilverCoinKey = "usesSilverCoin"
+    static let usesTributeKey = "usesTribute"
 
     func saveConfiguration(_ configuration: TargetConfiguration) {
         defaults.set(

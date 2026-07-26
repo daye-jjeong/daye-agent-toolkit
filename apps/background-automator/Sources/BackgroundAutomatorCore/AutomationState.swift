@@ -12,6 +12,8 @@ public enum AutomationScene: String, CaseIterable, Equatable, Sendable {
     case turnOffDoubleLoot
     case deselectDoubleLoot
     case enterWithCoin
+    case deselectTribute
+    case enterWithTribute
     case enterReady
     case running
 

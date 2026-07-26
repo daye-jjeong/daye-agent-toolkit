@@ -1,6 +1,34 @@
 @preconcurrency import CoreGraphics
 import Foundation
 
+/// 이 판에 던전을 어떻게 들어갔나.
+///
+/// 재화를 쓰고 들어간 판인지가 기록에 없어, 드랍률을 비교하려면 전리품 칸
+/// 수로 짐작해야 했다(실측: 재화를 쓰면 3칸 → 24칸). 짐작은 기록이 아니다.
+public enum DungeonEntry: String, Codable, Equatable, Sendable {
+    /// 은동전을 쓰고 임무를 받았다.
+    case coin
+    /// 공물을 쓰고 임무를 받았다.
+    case tribute
+    /// 임무를 해제하고 들어갔다 — 재화를 쓰지 않는다.
+    case free
+
+    /// 입장 버튼을 누른 규칙에서 유도한다. 입장 규칙이 아니면 nil이라,
+    /// 컷신 넘기기 같은 다른 클릭이 기록을 덮어쓰지 않는다.
+    public init?(ruleID: String) {
+        switch ruleID {
+        case "enter_with_coin":
+            self = .coin
+        case "enter_with_tribute":
+            self = .tribute
+        case "enter_ready":
+            self = .free
+        default:
+            return nil
+        }
+    }
+}
+
 /// 던전 1판(사이클)의 결과 기록.
 public struct CycleRecord: Codable, Equatable, Sendable {
     public let at: Date
@@ -13,19 +41,35 @@ public struct CycleRecord: Codable, Equatable, Sendable {
     /// 이 판을 남긴 빌드. 채우는 쪽은 writer라 호출부는 건드리지 않는다.
     /// 스탬프를 찍기 전에 쌓인 기록에는 없으므로 옵셔널이다.
     public let build: String?
+    /// 어떻게 들어갔나. 앱이 입장 버튼을 누르지 않은 판(사용자가 직접 들어간
+    /// 경우)은 알 수 없으므로 옵셔널이다 — 모르는 것을 free로 적지 않는다.
+    public let entry: DungeonEntry?
 
     public init(
         at: Date,
         dungeon: String?,
         combatSeconds: Int?,
         items: [String],
-        build: String? = nil
+        build: String? = nil,
+        entry: DungeonEntry? = nil
     ) {
         self.at = at
         self.dungeon = dungeon
         self.combatSeconds = combatSeconds
         self.items = items
         self.build = build
+        self.entry = entry
+    }
+
+    public func entered(_ entry: DungeonEntry?) -> CycleRecord {
+        CycleRecord(
+            at: at,
+            dungeon: dungeon,
+            combatSeconds: combatSeconds,
+            items: items,
+            build: build,
+            entry: entry
+        )
     }
 
     func stamped(_ build: String?) -> CycleRecord {
@@ -37,7 +81,8 @@ public struct CycleRecord: Codable, Equatable, Sendable {
             dungeon: dungeon,
             combatSeconds: combatSeconds,
             items: items,
-            build: build
+            build: build,
+            entry: entry
         )
     }
 }
@@ -51,6 +96,12 @@ public struct CycleTracker: Sendable {
     /// 결과 화면 시그니처. OCR이 앞에 글머리표를 '•'·'C' 등으로 흘려
     /// 읽으므로 포함 검사로 매칭한다.
     static let markerText = "순수 전투 시간"
+
+    /// 결과 화면을 덮는 확인 다이얼로그. 이 글자가 보이는 프레임은 전리품을
+    /// 모으지 않는다 — 다이얼로그 문구가 수집 구간 한가운데에 떨어져
+    /// 전리품으로 쌓였다(실측: 페카 38판 중 33판). 가려진 화면은 믿지 않고,
+    /// 전리품은 이미 앞 프레임에서 모였다.
+    static let overlayMarkers = ["던전 탐험을 계속하시겠습니까?"]
 
     /// 아이템 그리드가 놓이는 세로 구간(실측 0.55~0.78). 위로는 던전 이름·
     /// 전투 시간 같은 메타 텍스트를, 아래로는 버튼과 안내문(y≥0.82: 나가기·
@@ -113,10 +164,13 @@ public struct CycleTracker: Sendable {
         )
         cycle.combatSeconds = cycle.combatSeconds
             ?? Self.combatSeconds(in: marker.text)
-        for name in Self.itemNames(in: texts, imageSize: imageSize)
-            where cycle.seenItems.insert(name).inserted
-        {
-            cycle.items.append(name)
+        // 던전 이름·전투 시간은 다이얼로그가 덮지 않는 위쪽에 있어 계속 읽는다.
+        if !Self.isCoveredByOverlay(texts) {
+            for name in Self.itemNames(in: texts, imageSize: imageSize)
+                where cycle.seenItems.insert(name).inserted
+            {
+                cycle.items.append(name)
+            }
         }
         pending = cycle
         return nil
@@ -180,7 +234,20 @@ public struct CycleTracker: Sendable {
                 && name.contains(where: \.isHangul)
                 && !isQuantityBadge(name)
         }
-        return joinStackedLabels(labels)
+        // 이어 붙인 뒤에 거른다. 결과 화면이 떠오르는 동안 헤더가 수집 구간을
+        // 지나가면 '페카 고분 심층 1층 2구역' + '• 순수 전투 시간 0:26'이 한
+        // 이름으로 붙는데(실측 3판), 던전 이름 쪽만 보면 전리품과 구분이 안 된다.
+        return joinStackedLabels(labels).filter {
+            !$0.contains(markerText)
+        }
+    }
+
+    static func isCoveredByOverlay(
+        _ texts: [RecognizedTextObservation]
+    ) -> Bool {
+        texts.contains { observation in
+            overlayMarkers.contains { observation.text.contains($0) }
+        }
     }
 
     /// 아이콘 하나 밑에 이름이 두 줄로 쌓이면 OCR이 따로 준다
@@ -308,6 +375,11 @@ public final class CycleLogWriter {
         var totalCycles = 0
         var todayCycles = 0
         var byDungeon: [String: Int] = [:]
+        // 띄어쓰기를 지운 이름 → 처음 읽은 표기. OCR이 같은 던전을 '페카 고분
+        // 심층 1층 2구역'과 '페카고분 심층 1층 2구역'으로 갈라 읽어 통계가
+        // 쪼개졌다(실측 8판 + 27판). 세는 기준만 띄어쓰기를 무시하고, 보여줄
+        // 이름은 처음 읽은 쪽을 쓴다 — 붙여 쓴 표기가 이기면 읽기 나쁘다.
+        var displayNames: [String: String] = [:]
 
         for line in data.split(separator: 0x0A) {
             guard
@@ -323,7 +395,10 @@ public final class CycleLogWriter {
                 todayCycles += 1
             }
             if let dungeon = record.dungeon {
-                byDungeon[dungeon, default: 0] += 1
+                let key = dungeon.filter { !$0.isWhitespace }
+                let name = displayNames[key] ?? dungeon
+                displayNames[key] = name
+                byDungeon[name, default: 0] += 1
             }
         }
 
