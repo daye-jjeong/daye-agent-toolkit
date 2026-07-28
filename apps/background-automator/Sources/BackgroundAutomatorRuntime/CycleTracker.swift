@@ -44,6 +44,10 @@ public struct CycleRecord: Codable, Equatable, Sendable {
     /// 어떻게 들어갔나. 앱이 입장 버튼을 누르지 않은 판(사용자가 직접 들어간
     /// 경우)은 알 수 없으므로 옵셔널이다 — 모르는 것을 free로 적지 않는다.
     public let entry: DungeonEntry?
+    /// 아이콘에 붙은 수량 뱃지. 뱃지가 없는 아이템은 키 자체가 없다 —
+    /// '뱃지 없음 = 1개'가 성립하지 않아서다. 수량을 읽기 전에 쌓인
+    /// 기록에는 통째로 없으므로 옵셔널이다.
+    public let quantities: [String: Int]?
 
     public init(
         at: Date,
@@ -51,7 +55,8 @@ public struct CycleRecord: Codable, Equatable, Sendable {
         combatSeconds: Int?,
         items: [String],
         build: String? = nil,
-        entry: DungeonEntry? = nil
+        entry: DungeonEntry? = nil,
+        quantities: [String: Int]? = nil
     ) {
         self.at = at
         self.dungeon = dungeon
@@ -59,6 +64,7 @@ public struct CycleRecord: Codable, Equatable, Sendable {
         self.items = items
         self.build = build
         self.entry = entry
+        self.quantities = quantities
     }
 
     public func entered(_ entry: DungeonEntry?) -> CycleRecord {
@@ -68,7 +74,8 @@ public struct CycleRecord: Codable, Equatable, Sendable {
             combatSeconds: combatSeconds,
             items: items,
             build: build,
-            entry: entry
+            entry: entry,
+            quantities: quantities
         )
     }
 
@@ -82,7 +89,8 @@ public struct CycleRecord: Codable, Equatable, Sendable {
             combatSeconds: combatSeconds,
             items: items,
             build: build,
-            entry: entry
+            entry: entry,
+            quantities: quantities
         )
     }
 }
@@ -117,6 +125,7 @@ public struct CycleTracker: Sendable {
         var combatSeconds: Int?
         var items: [String]
         var seenItems: Set<String>
+        var quantities: [String: Int]
     }
 
     private var pending: PendingCycle?
@@ -144,7 +153,8 @@ public struct CycleTracker: Sendable {
                     at: $0.appearedAt,
                     dungeon: $0.dungeon,
                     combatSeconds: $0.combatSeconds,
-                    items: $0.items
+                    items: $0.items,
+                    quantities: $0.quantities.isEmpty ? nil : $0.quantities
                 )
             }
         }
@@ -154,7 +164,8 @@ public struct CycleTracker: Sendable {
             dungeon: nil,
             combatSeconds: nil,
             items: [],
-            seenItems: []
+            seenItems: [],
+            quantities: [:]
         )
         // 던전 이름·전투 시간은 연출 때문에 프레임마다 흔들린다.
         // 한 번 제대로 읽은 값을 유지한다.
@@ -170,6 +181,15 @@ public struct CycleTracker: Sendable {
                 where cycle.seenItems.insert(name).inserted
             {
                 cycle.items.append(name)
+            }
+            // 이름이 먼저 잡히고 뱃지가 다음 프레임에 잡히기도 한다. 이름을
+            // 이미 모았다고 건너뛰면 수량만 영영 빠지므로 따로 채운다.
+            // 한 번 읽은 값은 덮지 않는다 — 연출 중 프레임은 못 믿는다.
+            for (name, value) in Self.itemQuantities(
+                in: texts,
+                imageSize: imageSize
+            ) where cycle.quantities[name] == nil {
+                cycle.quantities[name] = value
             }
         }
         pending = cycle
@@ -218,10 +238,103 @@ public struct CycleTracker: Sendable {
         }
     }
 
+    /// 수량에 붙는 자릿수 단위.
+    private static let quantityUnitMultipliers: [Character: Int] = [
+        "천": 1_000,
+        "만": 10_000,
+        "억": 100_000_000,
+    ]
+
+    /// 수량 뱃지를 숫자로. 뱃지가 아니면 nil.
+    ///
+    /// '790.8만'처럼 단위로 줄여 쓰므로 자릿수를 도로 편다. 강화 수치('+1')와
+    /// 확률('%')은 모양이 뱃지와 같지만 개수가 아니라서 뺀다.
+    static func quantityValue(_ text: String) -> Int? {
+        guard isQuantityBadge(text) else {
+            return nil
+        }
+        var digits = text.filter { !$0.isWhitespace }
+        guard !digits.contains("+"), !digits.contains("%") else {
+            return nil
+        }
+        var multiplier = 1
+        if let last = digits.last,
+           let unit = quantityUnitMultipliers[last]
+        {
+            multiplier = unit
+            digits.removeLast()
+        }
+        digits = digits.replacingOccurrences(of: ",", with: "")
+        // 소수점은 단위와 짝이다('1.3만'). 단위 없는 소수는 개수일 수 없다.
+        guard digits.contains(".") else {
+            return Int(digits).map { $0 * multiplier }
+        }
+        guard multiplier > 1, let value = Double(digits) else {
+            return nil
+        }
+        return Int((value * Double(multiplier)).rounded())
+    }
+
+    /// 수량 뱃지가 이름에서 떨어진 거리의 상한(이름 글자 높이의 배수).
+    ///
+    /// 아이콘 한 칸에 숫자가 두 종류 붙는다 — 우하단 수량과, 장비에만 붙는
+    /// 위쪽 전투력이다. 가로로는 둘 다 이름과 완전히 겹쳐 구분이 안 되고,
+    /// 세로 거리만 갈린다(실측: 수량 2.3배 · 전투력 4.5배).
+    static let quantityBadgeMaximumGap = 3.0
+
+    /// 이름 → 수량. 뱃지가 없는 아이템은 아예 빠진다 — '뱃지 없음 = 1개'가
+    /// 성립하지 않기 때문이다(실측: 갱신권·보물 상자엔 숫자가 없다).
+    static func itemQuantities(
+        in texts: [RecognizedTextObservation],
+        imageSize: CGSize
+    ) -> [String: Int] {
+        guard imageSize.height > 0 else {
+            return [:]
+        }
+        let badges = texts.filter { quantityValue($0.text) != nil }
+        guard !badges.isEmpty else {
+            return [:]
+        }
+        var quantities: [String: Int] = [:]
+        for label in namedLabels(in: texts, imageSize: imageSize) {
+            let anchor = label.anchor.boundingBox
+            let limit = anchor.height * quantityBadgeMaximumGap
+            let nearest = badges
+                .filter { badge in
+                    let gap = anchor.midY - badge.boundingBox.midY
+                    return gap > 0
+                        && gap <= limit
+                        && horizontallyOverlap(label.anchor, badge)
+                }
+                .min {
+                    $0.boundingBox.midY > $1.boundingBox.midY
+                }
+            guard let nearest, let value = quantityValue(nearest.text) else {
+                continue
+            }
+            quantities[label.name] = value
+        }
+        return quantities
+    }
+
     static func itemNames(
         in texts: [RecognizedTextObservation],
         imageSize: CGSize
     ) -> [String] {
+        namedLabels(in: texts, imageSize: imageSize).map(\.name)
+    }
+
+    /// 이어 붙인 이름과, 그 이름의 첫 줄 라벨. 수량 뱃지는 첫 줄 위에
+    /// 붙으므로 짝을 지으려면 좌표가 남아 있어야 한다.
+    struct NamedLabel {
+        let name: String
+        let anchor: RecognizedTextObservation
+    }
+
+    static func namedLabels(
+        in texts: [RecognizedTextObservation],
+        imageSize: CGSize
+    ) -> [NamedLabel] {
         guard imageSize.height > 0 else {
             return []
         }
@@ -238,7 +351,7 @@ public struct CycleTracker: Sendable {
         // 지나가면 '페카 고분 심층 1층 2구역' + '• 순수 전투 시간 0:26'이 한
         // 이름으로 붙는데(실측 3판), 던전 이름 쪽만 보면 전리품과 구분이 안 된다.
         return joinStackedLabels(labels).filter {
-            !$0.contains(markerText)
+            !$0.name.contains(markerText)
         }
     }
 
@@ -256,13 +369,13 @@ public struct CycleTracker: Sendable {
     /// 재므로 창 크기가 달라도 같은 기준이 선다.
     static func joinStackedLabels(
         _ labels: [RecognizedTextObservation]
-    ) -> [String] {
+    ) -> [NamedLabel] {
         let sorted = labels.sorted {
             $0.boundingBox.midY < $1.boundingBox.midY
         }
         // 윗줄에 붙여 쓴 라벨. 자기 이름으로 다시 나오면 안 된다.
         var joined = Set<Int>()
-        var names: [String] = []
+        var names: [NamedLabel] = []
         for index in sorted.indices where !joined.contains(index) {
             let top = sorted[index]
             var name = top.text.trimmingCharacters(in: .whitespaces)
@@ -283,7 +396,7 @@ public struct CycleTracker: Sendable {
                 joined.insert(next)
                 break
             }
-            names.append(name)
+            names.append(NamedLabel(name: name, anchor: top))
         }
         return names
     }
