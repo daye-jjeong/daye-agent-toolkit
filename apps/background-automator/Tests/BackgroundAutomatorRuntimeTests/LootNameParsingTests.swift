@@ -27,14 +27,12 @@ func realItemNamesAreNotMistakenForQuantities(name: String) {
 func twoLineItemNamesAreJoinedIntoOne() {
     // 아이콘 하나 밑에 이름이 두 줄로 쌓이면 OCR은 두 덩어리로 준다.
     // 실측(landscape-loot-double-revealed): '세공된 블루' / '스피넬Z'.
-    let size = CGSize(width: 1512, height: 949)
     let names = CycleTracker.itemNames(
         in: [
             lootText("세공된 블루", x: 169, width: 84, y: 540),
             lootText("스피넬Z", x: 182, width: 60, y: 560),
             lootText("골드", x: 433, width: 33, y: 550),
-        ],
-        imageSize: size
+        ] + lootBandAnchors()
     )
     #expect(names == ["세공된 블루 스피넬Z", "골드"])
 }
@@ -42,13 +40,11 @@ func twoLineItemNamesAreJoinedIntoOne() {
 @Test
 func labelsInDifferentRowsAreNeverJoined() {
     // 같은 x라도 줄이 다르면 서로 다른 아이템이다.
-    let size = CGSize(width: 1512, height: 949)
     let names = CycleTracker.itemNames(
         in: [
             lootText("룬의 파편", x: 246, width: 66, y: 540),
             lootText("조각난 루비", x: 246, width: 66, y: 730),
-        ],
-        imageSize: size
+        ] + lootBandAnchors()
     )
     #expect(names == ["룬의 파편", "조각난 루비"])
 }
@@ -66,10 +62,7 @@ func realDoubleLootScreenshotYieldsCleanNames() async throws {
         CGImageSourceCreateImageAtIndex(source, 0, nil)
     )
     let texts = try await VisionTextRecognizer().recognizeText(in: image)
-    let names = CycleTracker.itemNames(
-        in: texts,
-        imageSize: CGSize(width: image.width, height: image.height)
-    )
+    let names = CycleTracker.itemNames(in: texts)
 
     // 붙어야 할 이름이 붙었다.
     #expect(names.contains("세공된 블루 스피넬Z"))

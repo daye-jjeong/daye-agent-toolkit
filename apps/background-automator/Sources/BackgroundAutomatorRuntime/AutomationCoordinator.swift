@@ -112,10 +112,96 @@ public enum AutomationCycleResult: Equatable, Sendable {
     case busy
 }
 
+/// 한 바퀴가 클릭 없이 끝난 이유.
+///
+/// '누를 게 없었다'와 '누를 것을 찾고도 못 눌렀다'는 사용자가 손댈 곳이
+/// 전혀 다른데, 예전엔 둘 다 그냥 아무 일도 안 한 것으로 끝나 구분이 없었다.
+/// 그래서 멈춤 안내가 늘 '누를 버튼을 못 찾았습니다'로 나갔다 — 버튼을
+/// 후보로 잡아 둔 채 서 있을 때조차(2026-07-29 실측).
+public enum NoActionReason: String, Codable, Equatable, Sendable {
+    /// 누를 후보가 아예 없다. 게임이 예상 밖 화면에 있다.
+    case noCandidate
+    /// 화면을 안전하게 판별하지 못했다(지원 밖 비율·금지어·후보 중복).
+    case unsafeFrame
+    /// 장면은 알아봤지만 대응하는 규칙이 없다.
+    case sceneNotActionable
+    /// 장면이 막 바뀌어 잠시 기다리는 중이다. 곧 스스로 풀린다.
+    case sceneSettling
+    /// 후보를 잡아 뒀는데 다음 관찰에서 사라졌다.
+    case candidateVanished
+    /// 클릭 직전 재확인에서 화면이 다른 장면으로 넘어갔다.
+    case sceneChangedBeforeClick
+    /// 후보는 그대로인데 재확인에서 유효하지 않다고 판정됐다.
+    case revalidationFailed
+    /// 재확인에서 다른 규칙의 후보가 올라왔다.
+    case candidateChangedBeforeClick
+    /// 후보의 화면 좌표를 구하지 못했다(창이 화면 밖으로 나갔을 때).
+    case targetOffScreen
+
+    /// 후보를 손에 쥐고도 못 누른 경우인지. 사람이 손댈 곳이 갈린다 —
+    /// 앞쪽은 게임 화면을, 뒤쪽은 앱이 왜 주저했는지를 봐야 한다.
+    public var heldACandidate: Bool {
+        switch self {
+        case .noCandidate, .unsafeFrame, .sceneNotActionable, .sceneSettling:
+            false
+        case .candidateVanished, .sceneChangedBeforeClick,
+             .revalidationFailed, .candidateChangedBeforeClick,
+             .targetOffScreen:
+            true
+        }
+    }
+
+    public var koreanDescription: String {
+        switch self {
+        case .noCandidate:
+            "누를 버튼을 찾지 못했습니다"
+        case .unsafeFrame:
+            "화면을 안전하게 판별하지 못했습니다"
+        case .sceneNotActionable:
+            "이 화면에 맞는 규칙이 없습니다"
+        case .sceneSettling:
+            "화면이 바뀌어 기다리는 중입니다"
+        case .candidateVanished:
+            "버튼을 찾았지만 누르기 직전에 사라졌습니다"
+        case .sceneChangedBeforeClick:
+            "버튼을 찾았지만 누르기 직전에 화면이 바뀌었습니다"
+        case .revalidationFailed:
+            "버튼을 찾았지만 다시 확인할 때 어긋났습니다"
+        case .candidateChangedBeforeClick:
+            "버튼을 찾았지만 다른 버튼으로 바뀌었습니다"
+        case .targetOffScreen:
+            "버튼 위치를 화면 좌표로 옮기지 못했습니다"
+        }
+    }
+}
+
 public enum AutomationCoordinatorError: Error, Equatable, Sendable {
     case invalidIdleThreshold
     case invalidClearTouchDelay
     case invalidEnterReadyCooldown
+}
+
+/// 오래 멈췄을 때 사용자에게 내보내는 안내 문구.
+///
+/// 예전엔 사유와 무관하게 늘 '누를 버튼을 못 찾았습니다'로 나갔다. 버튼을
+/// 후보로 잡아 둔 채 서 있을 때도 같은 문구라, 게임 화면을 아무리 봐도
+/// 멀쩡해서 어디를 손봐야 할지 알 수 없었다(2026-07-29).
+public enum QuietStallMessage {
+    public static func text(
+        seconds: Int,
+        reason: NoActionReason?
+    ) -> String {
+        guard let reason else {
+            return "\(seconds)초 넘게 아무 동작도 하지 못했습니다."
+                + " 게임 화면을 확인하세요."
+        }
+        let tail = reason.heldACandidate
+            // 게임 화면은 멀쩡하다. 앱이 왜 주저했는지를 봐야 한다.
+            ? " 앱 상태를 확인하세요."
+            : " 게임 화면을 확인하세요."
+        return "\(seconds)초 넘게 진행되지 않았습니다"
+            + " — \(reason.koreanDescription)." + tail
+    }
 }
 
 public actor AutomationCoordinator {
@@ -139,6 +225,8 @@ public actor AutomationCoordinator {
     public private(set) var state: AutomationState = .stopped
     public private(set) var lastObservation: ObservationDiagnostics?
     public private(set) var lastClick: ClickRecord?
+    /// 직전 바퀴가 클릭 없이 끝난 이유. 클릭이 나가면 비운다.
+    public private(set) var lastNoActionReason: NoActionReason?
     public private(set) var lastRestorationFailures: [ForegroundRestorationFailure] = []
     private var lastSeenDungeonName: String?
 
@@ -303,11 +391,15 @@ public actor AutomationCoordinator {
             validatedCandidate: validatedCandidate,
             at: now
         ) else {
-            return .noAction
+            // adopt가 막은 경우와 후보가 아예 없는 경우를 가른다. 앞은 앱이
+            // 안전을 위해 물러선 것이고, 뒤는 게임이 예상 밖 화면에 있다.
+            return noAction(
+                validatedCandidate == nil ? .noCandidate : .unsafeFrame
+            )
         }
         updateLastSeenDungeonName(from: frame, scene: scene)
         guard Self.expectedRuleID(for: scene) != nil else {
-            return .noAction
+            return noAction(.sceneNotActionable)
         }
 
         let existingPending = pendingCandidate
@@ -325,20 +417,18 @@ public actor AutomationCoordinator {
                 windowIdentity: frame.window,
                 layout: frame.layout
             ) else {
-                pendingCandidate = nil
-                evaluator.resetForRetry()
-                return .noAction
+                return abortBeforeClick(.revalidationFailed)
             }
         }
 
         guard let pendingCandidate else {
-            return .noAction
+            return noAction(.noCandidate)
         }
         if scene == .clearTouch,
            let sceneFirstRecognizedAt,
            now - sceneFirstRecognizedAt < clearTouchDelay
         {
-            return .noAction
+            return noAction(.sceneSettling)
         }
 
         await statusReporter?(.buttonDetected)
@@ -368,22 +458,33 @@ public actor AutomationCoordinator {
             windowIdentity: freshFrame.window,
             layout: freshFrame.layout
         )
+        // 조건을 하나씩 끊어 본다. 한 덩어리로 묶으면 어디서 떨어졌는지
+        // 알 수 없어, 클릭이 안 나갈 때마다 추측으로 진단하게 된다.
+        guard let freshScene = adopt(
+            frame: freshFrame,
+            validatedCandidate: freshValidatedCandidate,
+            at: freshNow
+        ) else {
+            return abortBeforeClick(.candidateVanished)
+        }
+        guard freshScene == scene else {
+            return abortBeforeClick(.sceneChangedBeforeClick)
+        }
+        guard evaluator.revalidate(
+            pendingCandidate,
+            freshObservation: freshFrame.observation,
+            windowIdentity: freshFrame.window,
+            layout: freshFrame.layout
+        ) else {
+            return abortBeforeClick(.revalidationFailed)
+        }
         guard
-            let freshScene = adopt(
-                frame: freshFrame,
-                validatedCandidate: freshValidatedCandidate,
-                at: freshNow
-            ),
-            freshScene == scene,
-            evaluator.revalidate(
-                pendingCandidate,
-                freshObservation: freshFrame.observation,
-                windowIdentity: freshFrame.window,
-                layout: freshFrame.layout
-            ),
-            let freshTarget =
-                freshFrame.observation.actionCandidates.first,
-            freshTarget.ruleID == pendingCandidate.ruleID,
+            let freshTarget = freshFrame.observation.actionCandidates.first,
+            freshTarget.ruleID == pendingCandidate.ruleID
+        else {
+            return abortBeforeClick(.candidateChangedBeforeClick)
+        }
+        guard
             let imageSize = freshFrame.observation.imageSize,
             let screenTargetBox = Self.screenTargetBox(
                 pixelRect: freshTarget.boundingBox,
@@ -391,9 +492,7 @@ public actor AutomationCoordinator {
                 windowFrame: freshFrame.window.frame
             )
         else {
-            self.pendingCandidate = nil
-            evaluator.resetForRetry()
-            return .noAction
+            return abortBeforeClick(.targetOffScreen)
         }
 
         let targetApplication = ApplicationIdentity(
@@ -413,6 +512,9 @@ public actor AutomationCoordinator {
             try ensureCanContinue(token: cycleToken)
             let clickFinishedAt = await clock.now()
             self.pendingCandidate = nil
+            // 클릭이 나갔으니 못 누른 이유는 지운다. 남겨 두면 다음 멈춤
+            // 때 지난 사유를 지금 원인으로 오독한다.
+            lastNoActionReason = nil
             lastClick = ClickRecord(
                 ruleID: Self.expectedRuleID(for: scene) ?? "",
                 dungeonName: lastSeenDungeonName,
@@ -605,6 +707,22 @@ private extension AutomationCoordinator {
             return nil
         }
         return scene
+    }
+
+    /// 클릭 없이 한 바퀴를 끝낸다. 이유를 남기는 것이 이 함수의 전부다.
+    func noAction(_ reason: NoActionReason) -> AutomationCycleResult {
+        lastNoActionReason = reason
+        return .noAction
+    }
+
+    /// 후보를 쥐고 있다가 클릭 직전에 접는다. 쥔 후보를 놓지 않으면
+    /// 다음 바퀴가 낡은 좌표를 그대로 눌러 엉뚱한 데를 찍는다.
+    func abortBeforeClick(
+        _ reason: NoActionReason
+    ) -> AutomationCycleResult {
+        pendingCandidate = nil
+        evaluator.resetForRetry()
+        return noAction(reason)
     }
 
     func recordUnsafeState(

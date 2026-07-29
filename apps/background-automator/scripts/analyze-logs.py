@@ -143,14 +143,26 @@ def report_drops(cycles):
     if not total:
         return
     counts = Counter()
+    # 수량은 뱃지가 붙는 아이템에만 있다. 뱃지 없는 아이템(갱신권·보물 상자)은
+    # 등장만 세고 개수는 비운다 — '뱃지 없음 = 1개'로 지어내지 않는다.
+    quantity_total, quantity_cycles = Counter(), Counter()
     for cycle in cycles:
         for name in clean_items(cycle.get("items", [])):
             counts[name] += 1
+        for raw, value in (cycle.get("quantities") or {}).items():
+            name = clean_item(raw)
+            if name:
+                quantity_total[name] += value
+                quantity_cycles[name] += 1
     print(f"\n■ 드랍률 ({total}판 기준)")
-    print(f"  {'아이템':<20} {'등장':>5} {'비율':>8}")
-    print(f"  {'-' * 34}")
+    print(f"  {'아이템':<20} {'등장':>5} {'비율':>8} {'개/판':>9} {'수량표본':>7}")
+    print(f"  {'-' * 54}")
     for name, count in counts.most_common(20):
-        print(f"  {name:<20} {count:>5} {count / total * 100:>7.1f}%")
+        seen = quantity_cycles[name]
+        average = f"{quantity_total[name] / seen:,.1f}" if seen else "—"
+        sample = f"{seen}판" if seen else "—"
+        print(f"  {name:<20} {count:>5} {count / total * 100:>7.1f}%"
+              f" {average:>9} {sample:>7}")
 
 
 def report_drops_by_entry(cycles):
