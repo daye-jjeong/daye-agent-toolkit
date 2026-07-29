@@ -44,8 +44,7 @@ func badgeRightAboveTheNameBecomesItsQuantity() {
                 midY: 617,
                 height: 21
             ),
-        ],
-        imageSize: CGSize(width: 1512, height: 949)
+        ] + lootBandAnchors()
     )
 
     #expect(quantities == ["모험가 포인트": 180])
@@ -66,8 +65,7 @@ func equipmentPowerAboveTheIconIsNotAQuantity() {
                 midY: 541,
                 height: 20
             ),
-        ],
-        imageSize: CGSize(width: 1512, height: 949)
+        ] + lootBandAnchors()
     )
 
     #expect(quantities.isEmpty)
@@ -86,8 +84,7 @@ func badgeOfAnotherColumnIsNotBorrowed() {
                 midY: 731,
                 height: 20
             ),
-        ],
-        imageSize: CGSize(width: 1512, height: 949)
+        ] + lootBandAnchors()
     )
 
     #expect(quantities.isEmpty)
@@ -106,8 +103,7 @@ func badgeBelowTheNameIsIgnored() {
                 height: 20
             ),
             quantityText("13", midX: 570.0, width: 24.2, midY: 776, height: 20),
-        ],
-        imageSize: CGSize(width: 1512, height: 949)
+        ] + lootBandAnchors()
     )
 
     #expect(quantities.isEmpty)
@@ -120,8 +116,7 @@ func nameWithoutABadgeGetsNoEntry() {
     let quantities = CycleTracker.itemQuantities(
         in: [
             quantityText("갱신권", midX: 806.5, width: 48.3, midY: 551, height: 20),
-        ],
-        imageSize: CGSize(width: 1512, height: 949)
+        ] + lootBandAnchors()
     )
 
     #expect(quantities.isEmpty)
@@ -142,8 +137,7 @@ func twoLineNameKeepsTheQuantityOfItsFirstLine() {
                 midY: 742,
                 height: 23
             ),
-        ],
-        imageSize: CGSize(width: 1512, height: 949)
+        ] + lootBandAnchors()
     )
 
     #expect(quantities == ["조각난 다이아몬드": 4])
@@ -162,10 +156,7 @@ func realResultScreenYieldsQuantities() async throws {
     let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
     let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
     let texts = try await VisionTextRecognizer().recognizeText(in: image)
-    let quantities = CycleTracker.itemQuantities(
-        in: texts,
-        imageSize: CGSize(width: image.width, height: image.height)
-    )
+    let quantities = CycleTracker.itemQuantities(in: texts)
 
     #expect(quantities["모험가 포인트"] == 180)
     #expect(quantities["마물 퇴치 증표"] == 10)
@@ -184,10 +175,7 @@ func realResultScreenDoesNotMistakePowerForQuantity() async throws {
     let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
     let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
     let texts = try await VisionTextRecognizer().recognizeText(in: image)
-    let quantities = CycleTracker.itemQuantities(
-        in: texts,
-        imageSize: CGSize(width: image.width, height: image.height)
-    )
+    let quantities = CycleTracker.itemQuantities(in: texts)
 
     #expect(!quantities.values.contains(1151))
     #expect(!quantities.values.contains(3860))
@@ -221,7 +209,7 @@ func recordedCycleCarriesQuantities() {
                 midY: 617,
                 height: 21
             ),
-        ],
+        ] + lootBandAnchors(),
         imageSize: size,
         at: Date(timeIntervalSince1970: 1_800_000_000)
     )
@@ -257,7 +245,7 @@ func quantitySeenInALaterFrameStillLands() {
     )
 
     _ = tracker.observe(
-        texts: [marker, name],
+        texts: [marker, name] + lootBandAnchors(),
         imageSize: size,
         at: Date(timeIntervalSince1970: 1_800_000_000)
     )
@@ -266,7 +254,7 @@ func quantitySeenInALaterFrameStillLands() {
             marker,
             quantityText("180", midX: 707.7, width: 44, midY: 573, height: 24),
             name,
-        ],
+        ] + lootBandAnchors(),
         imageSize: size,
         at: Date(timeIntervalSince1970: 1_800_000_002)
     )

@@ -14,6 +14,8 @@ private func resultTexts(
     dungeon: String = "룬다 1층 2구역",
     items: [String] = []
 ) -> [RecognizedTextObservation] {
+    // 결과 화면엔 '발견한 전리품'과 아래 버튼이 늘 함께 있고, 수집 구간을
+    // 그 둘 사이로 잡는다. 실제 화면과 같은 조건을 갖춘다.
     var texts = [
         RecognizedTextObservation(
             text: dungeon,
@@ -25,7 +27,7 @@ private func resultTexts(
             confidence: 1.0,
             boundingBox: CGRect(x: 683, y: 295, width: 140, height: 17)
         ),
-    ]
+    ] + lootBandAnchors()
     for (index, item) in items.enumerated() {
         texts.append(
             RecognizedTextObservation(

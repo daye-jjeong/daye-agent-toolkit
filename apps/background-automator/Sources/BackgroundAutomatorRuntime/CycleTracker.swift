@@ -111,12 +111,37 @@ public struct CycleTracker: Sendable {
     /// 전리품은 이미 앞 프레임에서 모였다.
     static let overlayMarkers = ["던전 탐험을 계속하시겠습니까?"]
 
-    /// 아이템 그리드가 놓이는 세로 구간(실측 0.55~0.78). 위로는 던전 이름·
-    /// 전투 시간 같은 메타 텍스트를, 아래로는 버튼과 안내문(y≥0.82: 나가기·
-    /// 다시 하기·'은동전이 부족해요.')을 잘라낸다. 상한이 없으면 그 UI가
-    /// 전리품 이름으로 섞여 드랍률 집계가 오염된다.
-    static let itemMinimumY = 0.5
-    static let itemMaximumY = 0.80
+    /// 전리품 칸을 위아래로 감싸는 글자. 이 사이가 수집 구간이다.
+    ///
+    /// 예전엔 화면 높이의 0.50~0.80으로 잡았는데, 게임 UI가 창 높이와 무관하게
+    /// 절대 픽셀로 배치돼서 창을 줄이면 그 선이 어긋났다. 실측(2026-07-29):
+    /// 창이 949→877로 줄자 `발견한 전리품`은 382px 자리에 그대로 있는데
+    /// 비율만 0.403→0.434로 밀렸고, 전리품 둘째 줄은 0.770→0.820이 되어
+    /// 상한 밖으로 나갔다. 그 창에서는 아랫줄 8칸이 통째로 안 잡혔다.
+    /// 고정 비율이 다 맞는 창 높이는 899~1096px뿐이었다.
+    ///
+    /// 글자를 기준선으로 삼으면 창이 어떻게 바뀌든 게임이 알아서 그려 준다.
+    static let lootHeaderText = "발견한 전리품"
+    /// 전리품 아래 첫 버튼. 셋은 늘 같은 높이에 함께 뜬다.
+    static let lootFooterTexts = ["나가기", "다시 하기", "다음 구역으로"]
+
+    /// 수집 구간 안에 있어도 전리품이 아닌 안내 문구.
+    ///
+    /// 창이 짧아지면 안내문이 전리품 아랫줄과 같은 높이까지 올라온다
+    /// (실측 877창: 이름 y=0.829, 안내문 y=0.832). 구간을 버튼까지 넓히면
+    /// 이것들이 함께 들어오므로 문구로 건다.
+    /// 아이콘 '위'에 붙는 출처 태그. 전리품 이름은 아이콘 아래에 있다.
+    /// 예전 하한(0.50)이 우연히 이것들을 잘라내고 있었는데, 구간을 헤더까지
+    /// 올리면 함께 들어온다(실측 landscape-loot-double-revealed: y=0.484).
+    static let lootSourceTags = ["좋은 예감", "우연한 만남", "멤버십"]
+
+    static let notLootPhrases = [
+        "상세 정보",
+        "도전해 봐요",
+        "부족해요",
+        // '다음 임무에 사용할 마족 공물이 부족해요.'가 조각나 읽힌다.
+        "사용할",
+    ] + lootSourceTags
 
     /// 결과 화면이 떠 있는 동안 모으는 중간 상태.
     private struct PendingCycle {
@@ -177,7 +202,7 @@ public struct CycleTracker: Sendable {
             ?? Self.combatSeconds(in: marker.text)
         // 던전 이름·전투 시간은 다이얼로그가 덮지 않는 위쪽에 있어 계속 읽는다.
         if !Self.isCoveredByOverlay(texts) {
-            for name in Self.itemNames(in: texts, imageSize: imageSize)
+            for name in Self.itemNames(in: texts)
                 where cycle.seenItems.insert(name).inserted
             {
                 cycle.items.append(name)
@@ -185,10 +210,9 @@ public struct CycleTracker: Sendable {
             // 이름이 먼저 잡히고 뱃지가 다음 프레임에 잡히기도 한다. 이름을
             // 이미 모았다고 건너뛰면 수량만 영영 빠지므로 따로 채운다.
             // 한 번 읽은 값은 덮지 않는다 — 연출 중 프레임은 못 믿는다.
-            for (name, value) in Self.itemQuantities(
-                in: texts,
-                imageSize: imageSize
-            ) where cycle.quantities[name] == nil {
+            for (name, value) in Self.itemQuantities(in: texts)
+                where cycle.quantities[name] == nil
+            {
                 cycle.quantities[name] = value
             }
         }
@@ -285,18 +309,14 @@ public struct CycleTracker: Sendable {
     /// 이름 → 수량. 뱃지가 없는 아이템은 아예 빠진다 — '뱃지 없음 = 1개'가
     /// 성립하지 않기 때문이다(실측: 갱신권·보물 상자엔 숫자가 없다).
     static func itemQuantities(
-        in texts: [RecognizedTextObservation],
-        imageSize: CGSize
+        in texts: [RecognizedTextObservation]
     ) -> [String: Int] {
-        guard imageSize.height > 0 else {
-            return [:]
-        }
         let badges = texts.filter { quantityValue($0.text) != nil }
         guard !badges.isEmpty else {
             return [:]
         }
         var quantities: [String: Int] = [:]
-        for label in namedLabels(in: texts, imageSize: imageSize) {
+        for label in namedLabels(in: texts) {
             let anchor = label.anchor.boundingBox
             let limit = anchor.height * quantityBadgeMaximumGap
             let nearest = badges
@@ -318,10 +338,9 @@ public struct CycleTracker: Sendable {
     }
 
     static func itemNames(
-        in texts: [RecognizedTextObservation],
-        imageSize: CGSize
+        in texts: [RecognizedTextObservation]
     ) -> [String] {
-        namedLabels(in: texts, imageSize: imageSize).map(\.name)
+        namedLabels(in: texts).map(\.name)
     }
 
     /// 이어 붙인 이름과, 그 이름의 첫 줄 라벨. 수량 뱃지는 첫 줄 위에
@@ -331,21 +350,50 @@ public struct CycleTracker: Sendable {
         let anchor: RecognizedTextObservation
     }
 
+    /// 전리품이 놓인 세로 구간(픽셀). 감싸는 글자를 못 찾으면 nil —
+    /// 어림짐작으로 모으면 버튼과 안내문이 전리품으로 섞인다.
+    static func lootBand(
+        in texts: [RecognizedTextObservation]
+    ) -> ClosedRange<Double>? {
+        guard
+            let header = texts.first(where: {
+                $0.text.contains(lootHeaderText)
+            })
+        else {
+            return nil
+        }
+        // 버튼 셋 중 가장 위. 하나만 읽혀도 선이 선다.
+        let footer = texts
+            .filter { observation in
+                lootFooterTexts.contains { observation.text.contains($0) }
+            }
+            .min { $0.boundingBox.minY < $1.boundingBox.minY }
+        let top = header.boundingBox.maxY
+        // 버튼이 아직 안 뜬 프레임이 있다 — 전리품은 다 보이는데 아래가 빈
+        // 상태다(실측 landscape-loot-coin-used). 그때 수집을 접으면 그 판을
+        // 통째로 놓치므로 화면 끝까지 연다. 그 아래에 오는 안내문은 문구로
+        // 거르고 있어서, 열어 둬도 전리품 목록에 섞이지 않는다.
+        let bottom = footer?.boundingBox.minY ?? .infinity
+        guard top < bottom else {
+            return nil
+        }
+        return top ... bottom
+    }
+
     static func namedLabels(
-        in texts: [RecognizedTextObservation],
-        imageSize: CGSize
+        in texts: [RecognizedTextObservation]
     ) -> [NamedLabel] {
-        guard imageSize.height > 0 else {
+        guard let band = lootBand(in: texts) else {
             return []
         }
         let labels = texts.filter { observation in
             let name = observation.text.trimmingCharacters(in: .whitespaces)
-            let y = observation.boundingBox.midY / imageSize.height
-            return (itemMinimumY ... itemMaximumY).contains(y)
+            return band.contains(observation.boundingBox.midY)
                 && !name.isEmpty
                 // 전리품 이름은 한글이다. 'BO'·'BP' 같은 아이콘 오독을 건다.
                 && name.contains(where: \.isHangul)
                 && !isQuantityBadge(name)
+                && !notLootPhrases.contains(where: name.contains)
         }
         // 이어 붙인 뒤에 거른다. 결과 화면이 떠오르는 동안 헤더가 수집 구간을
         // 지나가면 '페카 고분 심층 1층 2구역' + '• 순수 전투 시간 0:26'이 한

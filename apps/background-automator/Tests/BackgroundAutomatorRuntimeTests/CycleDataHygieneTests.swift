@@ -10,15 +10,16 @@ import Testing
 @Test
 func resultHeaderIsNotRecordedAsLoot() {
     // 실측(페카 38판): '페카 고분 심층 1층 2구역 • 순수 전투 시간 0:26'이
-    // 전리품으로 3판 기록됐다. 결과 화면이 떠오르는 동안 헤더가 수집
-    // 구간(0.50~0.80)을 지나가면서 잡힌다.
+    // 전리품으로 3판 기록됐다. 구간을 화면 비율로 잡던 시절, 결과 화면이
+    // 떠오르는 동안 헤더가 그 구간을 지나가면서 잡혔다.
+    // 지금은 '발견한 전리품' 아래부터 모은다. 던전 이름과 전투 시간은 늘
+    // 그 글자보다 위에 있어 구조적으로 들어올 수 없다.
     let names = CycleTracker.itemNames(
         in: [
             hygieneText("페카 고분 심층 1층 2구역", x: 640, width: 230, y: 540),
             hygieneText("• 순수 전투 시간 0:26", x: 690, width: 130, y: 566),
             hygieneText("마물 퇴치 증표", x: 880, width: 90, y: 617),
-        ],
-        imageSize: CGSize(width: 1512, height: 949)
+        ] + lootBandAnchors(headerY: 580)
     )
 
     #expect(names == ["마물 퇴치 증표"])
@@ -36,7 +37,7 @@ func confirmDialogFreezesLootCollectionForThatFrame() {
         texts: [
             hygieneText("순수 전투 시간 0:31", x: 750, width: 130, y: 303),
             hygieneText("마물 퇴치 증표", x: 880, width: 90, y: 617),
-        ],
+        ] + lootBandAnchors(),
         imageSize: size,
         at: Date(timeIntervalSince1970: 1_800_000_000)
     )
@@ -50,7 +51,7 @@ func confirmDialogFreezesLootCollectionForThatFrame() {
                 width: 430,
                 y: 717
             ),
-        ],
+        ] + lootBandAnchors(),
         imageSize: size,
         at: Date(timeIntervalSince1970: 1_800_000_002)
     )
@@ -66,9 +67,10 @@ func confirmDialogFreezesLootCollectionForThatFrame() {
 
 @Test
 func theAnimatingResultHeaderYieldsNoLootOnTheRealFrame() async throws {
-    // 헤더가 수집 구간을 지나간다는 건 추측이었는데, 이 프레임이 증거다 —
-    // 상자가 열리는 중이라 전리품도 버튼도 없고 '룬다 1층 2구역'(y=0.505)과
-    // '순수 전투 시간 0:20'(y=0.544)만 구간 안에 들어와 있다.
+    // 상자가 열리는 중이라 '발견한 전리품'조차 아직 안 떴다. 구간을 여는
+    // 글자가 없으면 아무것도 모으지 않는다 — 어림짐작으로 모으면 그 프레임에
+    // 보이는 '룬다 1층 2구역'과 '순수 전투 시간 0:20'이 전리품이 된다.
+    // (비율로 잡던 시절 실제로 그렇게 기록됐다.)
     let url = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
@@ -79,10 +81,7 @@ func theAnimatingResultHeaderYieldsNoLootOnTheRealFrame() async throws {
     )
     let texts = try await VisionTextRecognizer().recognizeText(in: image)
 
-    let names = CycleTracker.itemNames(
-        in: texts,
-        imageSize: CGSize(width: image.width, height: image.height)
-    )
+    let names = CycleTracker.itemNames(in: texts)
 
     #expect(names.isEmpty)
 }
