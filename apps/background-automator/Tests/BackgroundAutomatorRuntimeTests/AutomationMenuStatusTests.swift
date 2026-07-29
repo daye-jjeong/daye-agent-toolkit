@@ -95,25 +95,23 @@ func pollingScheduleUsesFastAndLongIntervalsWithoutBusySpin() {
 }
 
 @Test
-func retryPolicyRetriesTransientFailuresUpToLimitThenGivesUp() {
-    let policy = AutomationRetryPolicy(maxConsecutiveFailures: 5)
+func retryPolicyBackoffGrowsThenSettles() {
+    // 화면 확인 실패에는 포기가 없다(AppModel이 루프를 벗어나지 않는다).
+    // 예전엔 5회, 총 15초 만에 손을 뗐는데, 맥이 잠들거나 게임이 재시작하면
+    // 몇 분에서 몇 시간이라 그 사이 포기하면 깨어나도 스스로 못 돌아온다.
+    // 실측(2026-07-29): 17:19에 포기한 뒤 3시간을 멈춘 채 있었고, 그때
+    // 접근성은 이미 정상으로 돌아와 있었다.
+    //
+    // 대신 간격만 벌린다 — 짧은 끊김은 촘촘히 따라붙고, 긴 중단에는 조용해진다.
+    // 실패하는 동안은 아무 일도 하지 않아 오래 기다려도 비용이 없다.
+    let policy = AutomationRetryPolicy()
 
-    #expect(policy.shouldRetry(consecutiveFailures: 1))
-    #expect(policy.shouldRetry(consecutiveFailures: 4))
-    #expect(!policy.shouldRetry(consecutiveFailures: 5))
-    #expect(!policy.shouldRetry(consecutiveFailures: 6))
-}
-
-@Test
-func retryPolicyBackoffIsBoundedAndGrows() {
-    let policy = AutomationRetryPolicy(maxConsecutiveFailures: 5)
-
-    let first = policy.backoff(consecutiveFailures: 1)
-    let second = policy.backoff(consecutiveFailures: 3)
-
-    #expect(first >= .seconds(1))
-    #expect(second >= first)
-    #expect(second <= .seconds(10)) // 상한
+    #expect(policy.backoff(consecutiveFailures: 1) == .seconds(1))
+    #expect(policy.backoff(consecutiveFailures: 10) == .seconds(10))
+    #expect(
+        policy.backoff(consecutiveFailures: 10_000)
+            == AutomationRetryPolicy.maximumBackoff
+    )
 }
 
 @Test
