@@ -149,11 +149,20 @@ def report_drops(cycles):
     for cycle in cycles:
         for name in clean_items(cycle.get("items", [])):
             counts[name] += 1
+        # 한 판 안에서 같은 아이템이 여러 라벨로 갈리는 일이 있다(실측 23판 중
+        # 4판: '마물 퇴치 증표'와 '(마물 퇴치 증표'에 각각 10이 붙었다).
+        # 이름을 정리해 합치면서 수량까지 더하면 10개가 20개가 된다.
+        # 판마다 이름당 하나만 남기되 큰 값을 쓴다 — 뱃지를 흘려 읽은 쪽이
+        # 작게 나오므로(0 등) 제대로 읽은 값이 이긴다.
+        per_cycle = {}
         for raw, value in (cycle.get("quantities") or {}).items():
-            name = clean_item(raw)
-            if name:
-                quantity_total[name] += value
-                quantity_cycles[name] += 1
+            # 0은 뱃지를 흘려 읽은 것이다('10'을 '0'으로). 앱은 2026-07-29부터
+            # 안 남기지만 그 전에 쌓인 로그에는 들어 있어, 평균을 끌어내린다.
+            if value > 0 and (name := clean_item(raw)):
+                per_cycle[name] = max(per_cycle.get(name, 0), value)
+        for name, value in per_cycle.items():
+            quantity_total[name] += value
+            quantity_cycles[name] += 1
     print(f"\n■ 드랍률 ({total}판 기준)")
     print(f"  {'아이템':<20} {'등장':>5} {'비율':>8} {'개/판':>9} {'수량표본':>7}")
     print(f"  {'-' * 54}")

@@ -28,6 +28,14 @@ func nonBadgeTextHasNoQuantity(text: String) {
     #expect(CycleTracker.quantityValue(text) == nil)
 }
 
+@Test(arguments: ["0", "00", "0만", "0,000"])
+func zeroIsNotARealQuantity(badge: String) {
+    // 전리품이 나왔는데 0개일 수는 없다. OCR이 뱃지 '10'을 '0'으로 흘려
+    // 읽은 것이다(실측 23판 중 7판: '마물 퇴치 증표'에 0이 붙었는데 실제로는
+    // 10개다). 0을 그대로 적으면 없는 사실을 기록하는 셈이라 버린다.
+    #expect(CycleTracker.quantityValue(badge) == nil)
+}
+
 // MARK: - 뱃지↔이름 짝짓기
 
 @Test

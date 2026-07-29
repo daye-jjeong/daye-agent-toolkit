@@ -291,12 +291,21 @@ public struct CycleTracker: Sendable {
         digits = digits.replacingOccurrences(of: ",", with: "")
         // 소수점은 단위와 짝이다('1.3만'). 단위 없는 소수는 개수일 수 없다.
         guard digits.contains(".") else {
-            return Int(digits).map { $0 * multiplier }
+            return Int(digits)
+                .map { $0 * multiplier }
+                .flatMap(positiveQuantity)
         }
         guard multiplier > 1, let value = Double(digits) else {
             return nil
         }
-        return Int((value * Double(multiplier)).rounded())
+        return positiveQuantity(Int((value * Double(multiplier)).rounded()))
+    }
+
+    /// 0 이하는 수량이 아니다. 전리품이 나왔는데 0개일 수는 없고, OCR이
+    /// 뱃지 '10'을 '0'으로 흘려 읽은 것이다(실측 23판 중 7판). 그대로 적으면
+    /// 없는 사실이 기록에 남는다.
+    private static func positiveQuantity(_ value: Int) -> Int? {
+        value > 0 ? value : nil
     }
 
     /// 수량 뱃지가 이름에서 떨어진 거리의 상한(이름 글자 높이의 배수).
