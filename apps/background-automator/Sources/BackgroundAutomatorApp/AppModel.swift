@@ -631,16 +631,14 @@ private extension AppModel {
                     return
                 }
                 consecutiveFailures += 1
-                // 게임 재시작·창 전환 순간의 일시적 실패는 자동 재시도한다.
-                guard retryPolicy.shouldRetry(
-                    consecutiveFailures: consecutiveFailures
-                ) else {
-                    status = .needsAttention(
-                        "화면 확인에 반복 실패했습니다: "
-                            + error.localizedDescription
-                    )
-                    return
-                }
+                // 포기하지 않는다. 맥이 잠들거나 게임이 재시작하면 몇 시간씩
+                // 실패하는데, 그때 루프를 벗어나면 깨어나도 스스로 못 돌아온다
+                // (실측 2026-07-29: 15초 만에 손을 뗀 뒤 3시간 방치. 그때
+                // 접근성은 이미 정상이었다). 상태로 알리되 계속 두드린다.
+                status = .needsAttention(
+                    "화면 확인에 실패해 다시 시도하는 중입니다: "
+                        + error.localizedDescription
+                )
                 do {
                     try await clock.sleep(
                         for: retryPolicy.backoff(

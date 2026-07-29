@@ -539,6 +539,24 @@ func noCandidateIsRecordedAsSuch() async throws {
 }
 
 @Test
+func seeingAButtonOnceIsNotTheSameAsNoButton() async throws {
+    // 후보는 같은 자리에서 두 번 보여야 잡힌다. 첫 바퀴는 그 준비이므로
+    // '누를 게 없다'가 아니다. 둘을 같은 값으로 적으면, 재확인이 매번
+    // 어긋나 굳은 상태에서도 게임 화면을 보라고 잘못 안내한다
+    // (2026-07-29 실측: 화면은 멀쩡했고 규칙도 정상 판정됐다).
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+    ])
+    await fixture.coordinator.start()
+
+    #expect(try await fixture.coordinator.runCycle() == .noAction)
+    #expect(
+        await fixture.coordinator.lastNoActionReason
+            == .awaitingStableCandidate
+    )
+}
+
+@Test
 func candidateVanishingBeforeTheClickIsRecorded() async throws {
     // 첫 관찰에선 버튼이 보였는데 클릭 직전 재확인에서 사라진 경우.
     let fixture = try CoordinatorFixture(frames: [

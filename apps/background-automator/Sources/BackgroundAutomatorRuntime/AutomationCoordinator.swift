@@ -127,6 +127,10 @@ public enum NoActionReason: String, Codable, Equatable, Sendable {
     case sceneNotActionable
     /// 장면이 막 바뀌어 잠시 기다리는 중이다. 곧 스스로 풀린다.
     case sceneSettling
+    /// 버튼을 봤지만 아직 한 번뿐이라 다음 관찰을 기다린다. 후보는 같은
+    /// 자리에서 두 번 보여야 잡힌다. 한 바퀴 스치는 건 정상이지만, 계속
+    /// 이 상태면 재확인이 매번 어긋난다는 뜻이라 '누를 게 없다'와 전혀 다르다.
+    case awaitingStableCandidate
     /// 후보를 잡아 뒀는데 다음 관찰에서 사라졌다.
     case candidateVanished
     /// 클릭 직전 재확인에서 화면이 다른 장면으로 넘어갔다.
@@ -144,9 +148,9 @@ public enum NoActionReason: String, Codable, Equatable, Sendable {
         switch self {
         case .noCandidate, .unsafeFrame, .sceneNotActionable, .sceneSettling:
             false
-        case .candidateVanished, .sceneChangedBeforeClick,
-             .revalidationFailed, .candidateChangedBeforeClick,
-             .targetOffScreen:
+        case .awaitingStableCandidate, .candidateVanished,
+             .sceneChangedBeforeClick, .revalidationFailed,
+             .candidateChangedBeforeClick, .targetOffScreen:
             true
         }
     }
@@ -161,6 +165,8 @@ public enum NoActionReason: String, Codable, Equatable, Sendable {
             "이 화면에 맞는 규칙이 없습니다"
         case .sceneSettling:
             "화면이 바뀌어 기다리는 중입니다"
+        case .awaitingStableCandidate:
+            "버튼을 봤지만 같은 자리에서 다시 확인되지 않았습니다"
         case .candidateVanished:
             "버튼을 찾았지만 누르기 직전에 사라졌습니다"
         case .sceneChangedBeforeClick:
@@ -422,7 +428,7 @@ public actor AutomationCoordinator {
         }
 
         guard let pendingCandidate else {
-            return noAction(.noCandidate)
+            return noAction(.awaitingStableCandidate)
         }
         if scene == .clearTouch,
            let sceneFirstRecognizedAt,
