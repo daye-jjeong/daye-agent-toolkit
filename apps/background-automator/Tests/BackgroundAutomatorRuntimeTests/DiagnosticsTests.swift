@@ -138,7 +138,12 @@ func observationDiagnosticsMapsFrameTextsCandidatesAndAppearance() throws {
 }
 
 @Test
-func observationDiagnosticsCapsAndTruncatesRecognizedTexts() throws {
+func observationDiagnosticsKeepsEveryRecognizedText() throws {
+    // 예전엔 24개에서 잘랐다. 남길 24개를 OCR이 돌려준 순서로 골라서,
+    // 화면 아래쪽 버튼이 통째로 빠지는 일이 생겼다(2026-07-29 실측:
+    // '다시 하기'가 후보로는 잡혔는데 진단 파일엔 없어서, 버튼을 못 읽은
+    // 것으로 오진했다). 항목 하나가 107바이트라 40개여도 4.2KB고,
+    // 이 파일은 매 관찰마다 덮어쓰므로 쌓이지도 않는다.
     let texts = (0 ..< 40).map { index in
         RecognizedTextObservation(
             text: String(repeating: "가", count: 100),
@@ -169,10 +174,9 @@ func observationDiagnosticsCapsAndTruncatesRecognizedTexts() throws {
 
     let diagnostics = ObservationDiagnostics(frame: frame)
 
-    #expect(
-        diagnostics.recognizedTexts.count
-            == ObservationDiagnostics.maximumTextCount
-    )
+    #expect(diagnostics.recognizedTexts.count == texts.count)
+    // 개당 길이는 계속 자른다. 이건 항목을 지우는 게 아니라 한 항목을
+    // 짧게 만드는 것뿐이라, 무엇이 보였는지는 그대로 남는다.
     #expect(
         diagnostics.recognizedTexts.allSatisfy {
             $0.text.count <= ObservationDiagnostics.maximumTextLength

@@ -49,7 +49,13 @@ public struct DiagnosticsAppearance: Codable, Equatable, Sendable {
 }
 
 public struct ObservationDiagnostics: Codable, Equatable, Sendable {
-    public static let maximumTextCount = 24
+    /// 한 항목의 글자 수 상한. 항목을 통째로 버리지 않고 길이만 줄이므로,
+    /// 무엇이 화면에 있었는지는 그대로 남는다. 개수는 자르지 않는다 —
+    /// 예전엔 24개에서 끊었는데, 남길 24개를 OCR이 돌려준 순서로 골라
+    /// 화면 아래쪽 버튼이 통째로 빠졌다(2026-07-29: '다시 하기'가 후보로는
+    /// 잡혔는데 진단 파일엔 없어 버튼을 못 읽은 것으로 오진했다).
+    /// 항목 하나가 107바이트고 이 파일은 매 관찰마다 덮어써서, 아껴봐야
+    /// 1.7KB다. 진단이 틀리는 값이 그보다 훨씬 비싸다.
     public static let maximumTextLength = 60
 
     public let imageWidth: Double?
@@ -68,7 +74,6 @@ public struct ObservationDiagnostics: Codable, Equatable, Sendable {
         }
         layout = frame.layout.rawValue
         recognizedTexts = frame.observation.recognizedTexts
-            .prefix(Self.maximumTextCount)
             .map { observed in
                 DiagnosticsTextObservation(
                     text: String(
@@ -215,6 +220,9 @@ public struct DiagnosticsSnapshot: Codable, Equatable, Sendable {
         public let lastActionDescription: String?
         public let lastActionAt: Date?
         public let observation: ObservationDiagnostics?
+        /// 직전 바퀴가 클릭 없이 끝난 이유. 멈춘 앱을 밖에서 들여다볼 때
+        /// '누를 게 없었다'와 '찾고도 못 눌렀다'를 가르는 유일한 단서다.
+        public let noActionReason: NoActionReason?
 
         public init(
             schemaVersion: Int,
@@ -224,7 +232,8 @@ public struct DiagnosticsSnapshot: Codable, Equatable, Sendable {
             preflight: PreflightDiagnostics?,
             lastActionDescription: String?,
             lastActionAt: Date?,
-            observation: ObservationDiagnostics?
+            observation: ObservationDiagnostics?,
+            noActionReason: NoActionReason? = nil
         ) {
             self.schemaVersion = schemaVersion
             self.appVersion = appVersion
@@ -234,6 +243,7 @@ public struct DiagnosticsSnapshot: Codable, Equatable, Sendable {
             self.lastActionDescription = lastActionDescription
             self.lastActionAt = lastActionAt
             self.observation = observation
+            self.noActionReason = noActionReason
         }
     }
 

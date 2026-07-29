@@ -474,6 +474,129 @@ func realForegroundPostClickCancellationBlocksAutomaticRetry() async throws {
     #expect(foreground.clicker.clickCount == 1)
 }
 
+// MARK: - 멈춤 안내 문구
+
+@Test
+func stallMessagePointsAtTheGameWhenNothingWasFound() {
+    let text = QuietStallMessage.text(seconds: 150, reason: .noCandidate)
+    #expect(text.contains("150초"))
+    #expect(text.contains("누를 버튼을 찾지 못했습니다"))
+    #expect(text.contains("게임 화면을 확인하세요"))
+}
+
+@Test
+func stallMessagePointsAtTheAppWhenTheButtonWasHeld() {
+    // 버튼을 잡고도 못 누른 경우엔 게임 화면을 봐야 소용이 없다.
+    // 예전 문구('버튼을 못 찾았습니다')가 정확히 반대로 안내했다.
+    let text = QuietStallMessage.text(
+        seconds: 150,
+        reason: .revalidationFailed
+    )
+    #expect(text.contains("버튼을 찾았지만"))
+    #expect(text.contains("앱 상태를 확인하세요"))
+    #expect(!text.contains("게임 화면을 확인하세요"))
+}
+
+@Test(arguments: [
+    NoActionReason.noCandidate,
+    .unsafeFrame,
+    .sceneNotActionable,
+    .sceneSettling,
+])
+func reasonsWithoutACandidatePointAtTheGame(reason: NoActionReason) {
+    #expect(!reason.heldACandidate)
+}
+
+@Test(arguments: [
+    NoActionReason.candidateVanished,
+    .sceneChangedBeforeClick,
+    .revalidationFailed,
+    .candidateChangedBeforeClick,
+    .targetOffScreen,
+])
+func reasonsHoldingACandidatePointAtTheApp(reason: NoActionReason) {
+    #expect(reason.heldACandidate)
+}
+
+// MARK: - 클릭이 안 나간 사유
+
+// 후보를 찾고도 클릭까지 못 간 이유가 어디에도 안 남아, 멈춤을 볼 때마다
+// 추측으로 진단해야 했다(2026-07-29: '다시 하기'를 후보로 잡은 채 150초를
+// 서 있었는데, 안내는 '누를 버튼을 못 찾았습니다'였다). 재확인 게이트가
+// 조건 여섯 개를 한 덩어리로 묶고 있어 어느 조건에서 떨어졌는지도 몰랐다.
+
+@Test
+func noCandidateIsRecordedAsSuch() async throws {
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: nil, sequence: 1),
+    ])
+    await fixture.coordinator.start()
+
+    #expect(try await fixture.coordinator.runCycle() == .noAction)
+    #expect(
+        await fixture.coordinator.lastNoActionReason == .noCandidate
+    )
+}
+
+@Test
+func candidateVanishingBeforeTheClickIsRecorded() async throws {
+    // 첫 관찰에선 버튼이 보였는데 클릭 직전 재확인에서 사라진 경우.
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: nil, sequence: 3),
+    ])
+    await fixture.coordinator.start()
+
+    // 후보는 같은 장면을 연속 두 번 봐야 잡힌다. 첫 바퀴는 그 준비다.
+    _ = try await fixture.coordinator.runCycle()
+    #expect(try await fixture.coordinator.runCycle() == .noAction)
+    #expect(
+        await fixture.coordinator.lastNoActionReason == .candidateVanished
+    )
+}
+
+@Test
+func sceneChangingBeforeTheClickIsRecorded() async throws {
+    // 버튼을 잡아 둔 사이 화면이 다른 장면으로 넘어간 경우.
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: .rewardRetry, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: .clearTouch, sequence: 3),
+    ])
+    await fixture.coordinator.start()
+
+    _ = try await fixture.coordinator.runCycle()
+    #expect(try await fixture.coordinator.runCycle() == .noAction)
+    #expect(
+        await fixture.coordinator.lastNoActionReason
+            == .sceneChangedBeforeClick
+    )
+}
+
+@Test
+func aSuccessfulClickClearsTheReason() async throws {
+    // 사유가 남아 있으면 다음 멈춤 때 지난 사유를 원인으로 오독한다.
+    let fixture = try CoordinatorFixture(frames: [
+        .make(scene: nil, sequence: 1),
+        .make(scene: .rewardRetry, sequence: 2),
+        .make(scene: .rewardRetry, sequence: 3),
+        .make(scene: .rewardRetry, sequence: 4),
+    ])
+    await fixture.coordinator.start()
+
+    _ = try await fixture.coordinator.runCycle()
+    #expect(
+        await fixture.coordinator.lastNoActionReason == .noCandidate
+    )
+
+    _ = try await fixture.coordinator.runCycle()
+    #expect(
+        try await fixture.coordinator.runCycle() == .action(.clicked)
+    )
+    #expect(await fixture.coordinator.lastNoActionReason == nil)
+}
+
 @Test
 func taskCancellationAfterRealClickStillLatchesUncertainOutcome() async throws {
     let observer = FakeAutomationObserver(frames: [

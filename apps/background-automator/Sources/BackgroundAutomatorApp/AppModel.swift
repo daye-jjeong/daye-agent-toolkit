@@ -66,6 +66,8 @@ final class AppModel: ObservableObject {
     )
     private var lastPreflightDiagnostics: PreflightDiagnostics?
     private var lastObservationDiagnostics: ObservationDiagnostics?
+    /// 직전 바퀴가 클릭 없이 끝난 이유. 멈춤 안내와 진단 파일에 함께 싣는다.
+    private var lastNoActionReason: NoActionReason?
 
     private var lifecycleGate = AutomationLifecycleGate()
     private var startPending = false
@@ -317,7 +319,8 @@ private extension AppModel {
             preflight: lastPreflightDiagnostics,
             lastActionDescription: lastActionDescription,
             lastActionAt: lastActionAt,
-            observation: lastObservationDiagnostics
+            observation: lastObservationDiagnostics,
+            noActionReason: lastNoActionReason
         )
         diagnosticsWriter?.write(content: content)
         // status.json은 매 상태 변화마다 덮어써져 멈춘 화면이 곧 사라진다.
@@ -343,7 +346,9 @@ private extension AppModel {
         let elapsed = clock.now - quietClockOrigin
         switch quietDetector.note(didAct: didAct, at: elapsed) {
         case .entered:
-            quietStallGuidance = Self.quietStallMessage
+            quietStallGuidance = Self.quietStallMessage(
+                reason: lastNoActionReason
+            )
             await captureStallImage()
         case .recovered:
             quietStallGuidance = nil
@@ -359,11 +364,13 @@ private extension AppModel {
 
     /// 안내 문구의 초를 감지 임계값에서 그대로 가져와, 둘이 어긋나
     /// 사용자가 엉뚱한 시간을 기다리는 일이 없게 한다.
-    static var quietStallMessage: String {
-        let seconds = QuietStallDetector.defaultThreshold
-            .components.seconds
-        return "\(seconds)초 넘게 누를 버튼을 못 찾았습니다."
-            + " 게임 화면을 확인하세요."
+    static func quietStallMessage(reason: NoActionReason?) -> String {
+        QuietStallMessage.text(
+            seconds: Int(
+                QuietStallDetector.defaultThreshold.components.seconds
+            ),
+            reason: reason
+        )
     }
 
     func captureStallImage() async {
@@ -596,6 +603,7 @@ private extension AppModel {
                 let coordinatorState = await coordinator.state
                 lastObservationDiagnostics =
                     await coordinator.lastObservation
+                lastNoActionReason = await coordinator.lastNoActionReason
                 if case .action(.clicked) = result {
                     recordClick(await coordinator.lastClick)
                 }
