@@ -137,10 +137,24 @@ public struct StableObservationTracker: Sendable {
     /// Values are capture-image pixels, not points or normalized coordinates.
     public let targetRectangleTolerancePixels: Double
 
+    /// 걸쇠가 걸린 버튼이 이만큼 계속 보이면 다시 내보낸다.
+    ///
+    /// 걸쇠는 같은 버튼을 두 번 누르지 않으려는 장치다. 클릭이 먹히면 화면이
+    /// 바뀌므로 정상 흐름에선 곧 풀린다. 문제는 클릭이 게임에 안 들어갔을
+    /// 때다 — 화면이 그대로라 같은 버튼이 계속 보이고, 걸쇠가 영영 안 풀려
+    /// 사람이 손대야만 했다(실측 2026-07-30 12:33, '발견한 전리품').
+    ///
+    /// 관찰 한 바퀴가 인식 시간까지 400~700ms라 20회면 대략 10초다.
+    /// 게임 연출(1~2초)보다 넉넉히 길어 정상 전환을 앞지르지 않으면서,
+    /// 안 먹힌 클릭은 사람 없이 스스로 다시 시도한다.
+    public static let latchRetryObservations = 20
+
     private var previousCandidate: ActionCandidate?
     private var consecutiveObservationCount = 0
     private var lastSeenCaptureIdentity: CaptureIdentity?
     private var latchedCandidate: ActionCandidate?
+    /// 걸쇠가 걸린 뒤 같은 버튼을 몇 번이나 다시 봤나.
+    private var latchedRepeatCount = 0
 
     public init(
         targetRectangleTolerancePixels: Double = 2
@@ -175,11 +189,19 @@ public struct StableObservationTracker: Sendable {
         }
 
         if let latchedCandidate {
-            guard !equivalentTarget(latchedCandidate, candidate) else {
-                resetStreak()
-                return nil
+            if equivalentTarget(latchedCandidate, candidate) {
+                latchedRepeatCount += 1
+                // 같은 버튼이 이만큼 이어지면 클릭이 안 먹힌 것이다.
+                // 계속 참으면 사람이 손대야만 풀린다.
+                guard
+                    latchedRepeatCount >= Self.latchRetryObservations
+                else {
+                    resetStreak()
+                    return nil
+                }
             }
             self.latchedCandidate = nil
+            latchedRepeatCount = 0
             resetStreak()
         }
 
@@ -195,12 +217,14 @@ public struct StableObservationTracker: Sendable {
             return nil
         }
         latchedCandidate = candidate
+        latchedRepeatCount = 0
         resetStreak()
         return candidate
     }
 
     public mutating func resetForRetry() {
         latchedCandidate = nil
+        latchedRepeatCount = 0
         resetStreak()
     }
 
