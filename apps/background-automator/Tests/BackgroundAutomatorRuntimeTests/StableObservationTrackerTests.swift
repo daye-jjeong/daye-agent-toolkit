@@ -252,6 +252,40 @@ func stableCandidateEmitsOnceUntilSceneChangeOrExplicitReset() throws {
 }
 
 @Test
+func theSameButtonIsRetriedWhenTheClickNeverLanded() throws {
+    // 걸쇠는 같은 버튼을 두 번 누르지 않으려는 장치다. 클릭이 먹히면 화면이
+    // 바뀌므로 정상 흐름에선 문제가 없다. 그런데 클릭이 게임에 안 들어가면
+    // 화면이 그대로고, 같은 버튼이 계속 보이니 걸쇠가 영영 안 풀렸다.
+    // 실측(2026-07-30 12:33): '발견한 전리품'을 누른 뒤 화면이 안 바뀌어
+    // 같은 후보를 계속 거부했고, 사람이 손대야만 풀렸다.
+    var tracker = try StableObservationTracker(
+        targetRectangleTolerancePixels: 2
+    )
+    var sequence: UInt64 = 1
+    func observe() -> ActionCandidate? {
+        defer { sequence += 1 }
+        return tracker.record(
+            trackerCandidate(captureSequence: sequence),
+            requiredObservationCount: 1
+        )
+    }
+
+    // 첫 클릭이 나간다.
+    #expect(observe() != nil)
+    // 화면이 안 바뀐 채 같은 버튼이 계속 보인다 — 잠시는 참는다.
+    #expect(observe() == nil)
+    // 충분히 오래 그대로면 클릭이 안 먹힌 것이므로 다시 내보낸다.
+    var retried: ActionCandidate?
+    for _ in 0 ..< StableObservationTracker.latchRetryObservations {
+        if let candidate = observe() {
+            retried = candidate
+            break
+        }
+    }
+    #expect(retried != nil, "같은 화면이 이어지면 언젠가 다시 눌러야 한다")
+}
+
+@Test
 func productionToleranceAbsorbsRewardScreenSlide() throws {
     // 실측(2026-07-24): 보상화면 '다시 하기'는 전리품 연출로 프레임 간
     // 최대 35px(y축) 이동한다. 프로덕션 관용도가 이 이동을 흡수해야
