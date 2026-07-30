@@ -68,6 +68,8 @@ final class AppModel: ObservableObject {
     private var lastObservationDiagnostics: ObservationDiagnostics?
     /// 직전 바퀴가 클릭 없이 끝난 이유. 멈춤 안내와 진단 파일에 함께 싣는다.
     private var lastNoActionReason: NoActionReason?
+    /// 화면이 흐르는지 본다. 클릭이 없어도 화면이 바뀌면 멈춘 게 아니다.
+    private var screenActivity = ScreenActivityTracker()
 
     private var lifecycleGate = AutomationLifecycleGate()
     private var startPending = false
@@ -340,8 +342,16 @@ private extension AppModel {
         // 안 나가는데 침묵 시계만 살아나, 잡으려던 멈춤을 그대로 놓친다.
         // .clickOutcomeUncertain은 클릭이 실제로 나간 뒤 결과만 불확실한
         // 경우라 함께 센다. 빼면 클릭이 나가는데도 침묵으로 오판한다.
+        // 화면이 흐르고 있으면 멈춘 게 아니다. 클릭만 세면 전투가 긴
+        // 던전에서 오탐이 난다(실측: 북쪽 폐허 심층 2층은 전투만 최대
+        // 241초라 임계값 150초를 그냥 넘긴다). 전투 중에는 체력·알림·채팅이
+        // 계속 바뀌고, 진짜로 굳은 화면은 글자가 그대로다.
+        let screenMoved = screenActivity.noteTexts(
+            lastObservationDiagnostics?.recognizedTexts.map(\.text) ?? []
+        )
         let didAct = result == .action(.clicked)
             || result == .action(.clickOutcomeUncertain)
+            || screenMoved
 
         let elapsed = clock.now - quietClockOrigin
         switch quietDetector.note(didAct: didAct, at: elapsed) {
