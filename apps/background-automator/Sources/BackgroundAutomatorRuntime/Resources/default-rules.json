@@ -163,6 +163,39 @@
       "cooldownSeconds": 1.0
     },
     {
+      "id": "quest_clear_confirm",
+      "requiredTexts": [
+        "아이템을 누르면 상세 정보를 볼 수 있습니다",
+        "확인"
+      ],
+      "forbiddenTexts": [
+        "장면 넘기기",
+        "발견한 전리품",
+        "다시 하기"
+      ],
+      "action": {
+        "targetText": "확인"
+      },
+      "regions": {
+        "landscape": {
+          "minX": 0.2,
+          "minY": 0.55,
+          "maxX": 0.8,
+          "maxY": 1.0
+        },
+        "portrait-mobile": {
+          "minX": 0.05,
+          "minY": 0.55,
+          "maxX": 0.95,
+          "maxY": 1.0
+        }
+      },
+      "minimumOCRConfidence": 0.45,
+      "stableObservationCount": 1,
+      "postActionDelaySeconds": 0.5,
+      "cooldownSeconds": 2.0
+    },
+    {
       "id": "turn_off_double_loot",
       "requiredTexts": [
         "도전에 성공하면 임무 전리품이 두 배가 됩니다."
@@ -289,7 +322,9 @@
     {
       "id": "deselect_tribute",
       "requiredTexts": [
-        "선택됨",
+        "선택됨"
+      ],
+      "requiredTextSuffixes": [
         "입장하기"
       ],
       "forbiddenTexts": [
@@ -322,7 +357,9 @@
     {
       "id": "enter_with_tribute",
       "requiredTexts": [
-        "선택됨",
+        "선택됨"
+      ],
+      "requiredTextSuffixes": [
         "입장하기"
       ],
       "forbiddenTexts": [

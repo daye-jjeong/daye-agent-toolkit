@@ -7,6 +7,7 @@ public enum AutomationScene: String, CaseIterable, Equatable, Sendable {
     case sceneSkip
     case rewardRetry
     case continueDialog
+    case questClearConfirm
     case missionSelection
     case deselectChallenge
     case turnOffDoubleLoot

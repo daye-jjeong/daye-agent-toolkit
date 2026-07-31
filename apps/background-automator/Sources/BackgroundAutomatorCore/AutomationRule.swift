@@ -83,6 +83,19 @@ public struct AutomationAppearanceConstraint:
 public struct AutomationRule: Codable, Equatable, Sendable {
     public let id: String
     public let requiredTexts: [String]
+    /// 끝말만 맞으면 화면 판별에 쓰는 글자.
+    ///
+    /// `requiredTexts`는 완전 일치다. 그 엄격함이 비슷한 화면을 헷갈리지
+    /// 않게 막아 주지만, 게임이 버튼 글자 앞에 아이콘을 붙이는 순간
+    /// 깨진다 — 심층 매우 어려움은 공물 2개를 쓰고, 그 개수가 버튼 안에
+    /// 찍혀 '§ 2 ) 입장하기'로 읽힌다(실측 2026-07-31). 개수는 난이도와
+    /// 보유량에 따라 바뀌고 아이콘 오독도 매번 달라서 완전 일치로는
+    /// 붙잡을 수 없다.
+    ///
+    /// 앞에 뭐가 붙든 끝말이 같으면 같은 버튼으로 본다. 액션 쪽
+    /// `targetTextSuffix`와 같은 장치이며, 마찬가지로 규칙이 켜야만 쓴다.
+    /// 없으면(과거 규칙 파일) 완전 일치만 쓴다.
+    public let requiredTextSuffixes: [String]?
     public let forbiddenTexts: [String]
     public let action: AutomationAction
     public let regions: LayoutRegionMap
@@ -95,6 +108,7 @@ public struct AutomationRule: Codable, Equatable, Sendable {
     public init(
         id: String,
         requiredTexts: [String],
+        requiredTextSuffixes: [String]? = nil,
         forbiddenTexts: [String],
         action: AutomationAction,
         regions: LayoutRegionMap,
@@ -106,6 +120,7 @@ public struct AutomationRule: Codable, Equatable, Sendable {
     ) {
         self.id = id
         self.requiredTexts = requiredTexts
+        self.requiredTextSuffixes = requiredTextSuffixes
         self.forbiddenTexts = forbiddenTexts
         self.action = action
         self.regions = regions

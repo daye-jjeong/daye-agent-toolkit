@@ -239,6 +239,17 @@ extension SceneObserver {
             }
             requiredObservations.append(match)
         }
+        // 끝말 일치는 규칙이 켠 글자에만 쓴다(그 외는 위의 완전 일치).
+        for suffix in rule.requiredTextSuffixes ?? [] {
+            let matches = observationsInRegion.filter {
+                Self.semanticText($0.text)
+                    .hasSuffix(Self.semanticText(suffix))
+            }
+            guard matches.count == 1, let match = matches.first else {
+                return nil
+            }
+            requiredObservations.append(match)
+        }
 
         if let targetText = rule.action.targetText {
             // 끝말 일치는 사용자가 켠 규칙에만 쓴다(그 외는 완전 일치).

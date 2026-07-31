@@ -266,6 +266,7 @@ private extension RuleLoader {
                 allowed: [
                     "id",
                     "requiredTexts",
+                    "requiredTextSuffixes",
                     "forbiddenTexts",
                     "action",
                     "regions",
@@ -444,7 +445,9 @@ enum AutomationRuleValidator {
     }
 
     private static func validateTexts(_ rule: AutomationRule) throws {
-        let texts = rule.requiredTexts + rule.forbiddenTexts
+        let texts = rule.requiredTexts
+            + (rule.requiredTextSuffixes ?? [])
+            + rule.forbiddenTexts
         guard texts.allSatisfy({
             !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }) else {

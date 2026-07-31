@@ -576,9 +576,12 @@ extension AutomationCoordinator {
         case .rewardRetry, .missionSelection, .enterReady, .rewardDetail,
              .enterWithCoin, .enterWithTribute:
             true
+        // 퀘스트 보상 화면에 뜨는 굵은 글씨는 퀘스트 이름이지 던전 이름이
+        // 아니다('모험가 길드의 고난도 심층 공략'). 그대로 믿으면 다음
+        // 판이 엉뚱한 이름으로 기록된다.
         case .clearTouch, .continueDialog, .running, .deselectChallenge,
              .deselectCoin, .turnOffDoubleLoot, .sceneSkip, .autoStart,
-             .deselectTribute:
+             .deselectTribute, .questClearConfirm:
             false
         }
     }
@@ -599,6 +602,8 @@ extension AutomationCoordinator {
             "reward_retry"
         case .continueDialog:
             "continue_dialog"
+        case .questClearConfirm:
+            "quest_clear_confirm"
         case .missionSelection:
             "mission_selection"
         case .deselectChallenge:

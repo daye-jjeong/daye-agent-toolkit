@@ -1889,6 +1889,8 @@ private func expectedRuleID(for scene: AutomationScene) -> String? {
         "reward_retry"
     case .continueDialog:
         "continue_dialog"
+    case .questClearConfirm:
+        "quest_clear_confirm"
     case .missionSelection:
         "mission_selection"
     case .deselectChallenge:
@@ -1924,6 +1926,8 @@ private func defaultTexts(for scene: AutomationScene) -> [String] {
         ["다시 하기"]
     case .continueDialog:
         ["계속하기"]
+    case .questClearConfirm:
+        ["아이템을 누르면 상세 정보를 볼 수 있습니다", "확인"]
     case .missionSelection:
         ["도전"]
     case .deselectChallenge:

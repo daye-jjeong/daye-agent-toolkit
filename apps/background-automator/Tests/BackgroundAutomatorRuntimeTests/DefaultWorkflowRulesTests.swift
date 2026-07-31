@@ -15,6 +15,9 @@ func bundledWorkflowContainsOnlyApprovedCanonicalRules() throws {
             "reward_detail",
             "reward_retry",
             "continue_dialog",
+            // 던전을 도는 중에 퀘스트 보상 화면이 끼어들어 화면을 덮는다.
+            // '확인'을 눌러야만 없어진다.
+            "quest_clear_confirm",
             "turn_off_double_loot",
             "deselect_challenge",
             "deselect_coin",
@@ -63,6 +66,9 @@ func everyWorkflowRuleHasBothLayoutsAndSceneSkipGuard(
         // 공물 화면의 '선택됨'·'공물1 입장하기'는 은동전 화면과 같은
         // 수준으로 흐릿하게 읽힌다(실측 픽스처 9종 골든 테스트).
         "deselect_tribute", "enter_with_tribute",
+        // 퀘스트 보상 화면의 '확인'도 장식 글꼴이라 0.50으로 읽힌다.
+        // 대신 신뢰도 1.00인 하단 안내문을 함께 요구해 오탐을 막는다.
+        "quest_clear_confirm",
     ]
     // enter_with_coin만 더 낮다 — 실측 ') 입장하기' cf 0.30.
     // 정확한 하한은 silverCoinEntryKeepsItsMeasuredSafetyBounds가 못박는다.

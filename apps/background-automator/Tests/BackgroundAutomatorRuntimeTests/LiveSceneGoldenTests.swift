@@ -289,6 +289,97 @@ func entryButtonTextDependsOnMissionSelectionNotCoinBalance() async throws {
     )
 }
 
+@Test
+func deepDungeonTributeScreenDoesNotStall() async throws {
+    // 회귀(2026-07-31): 심층 던전은 난이도로 공물 수가 갈린다 —
+    // 어려움 1개, 매우 어려움 2개. 그 개수가 입장 버튼 안에 아이콘과 함께
+    // 찍히고, OCR은 그것까지 한 줄로 읽는다: '§ 2 ) 입장하기'.
+    //
+    // deselect_tribute·enter_with_tribute는 '입장하기'를 requiredTexts로
+    // 요구하는데 이 비교는 완전 일치다. 아이콘이 앞에 붙는 순간 둘 다
+    // 빗나가 후보가 0개가 되고, 사람이 손으로 해제해 줄 때까지 멈춰 있었다.
+    // 실측 결과 다른 조건(구역·금지 글자)은 전부 통과하고 있었다 —
+    // 필수 글자 비교만이 유일한 원인이었다.
+    let observer = SceneObserver()
+
+    let result = try await observer.observe(
+        image: try liveFixtureImage(named: "landscape-deep-tribute-selected"),
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(result.actionCandidates.count == 1)
+    #expect(result.actionCandidates.first?.ruleID == "deselect_tribute")
+    #expect(result.actionCandidates.first?.targetText == "선택됨")
+}
+
+@Test
+func deepDungeonEntersOnceTheTributeIsDeselected() async throws {
+    // 공물을 해제하면 개수 표시가 사라져 버튼이 '입장하기'로 깨끗해진다.
+    // 그때만 입장한다 — 공물은 쓰지 않는 것이 기본이다.
+    let observer = SceneObserver()
+
+    let result = try await observer.observe(
+        image: try liveFixtureImage(named: "landscape-deep-tribute-deselected"),
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(result.actionCandidates.count == 1)
+    #expect(result.actionCandidates.first?.ruleID == "enter_ready")
+    #expect(result.actionCandidates.first?.targetText == "입장하기")
+}
+
+@Test(arguments: [
+    "landscape-deep-confirm-dialog",
+    "landscape-deep-confirm-2",
+])
+func questClearRewardScreenIsConfirmed(fixture: String) async throws {
+    // 실측(2026-07-31): 던전을 도는 중에 퀘스트 보상 화면이 끼어든다.
+    // 화면 전체를 덮고 '확인'을 눌러야만 없어지는데 이를 누르는 규칙이
+    // 없어서, 사람이 손으로 눌러 줄 때까지 자동화가 통째로 멈췄다.
+    //
+    // 제목('퀘스트 클리어!!!')은 장식 글꼴이라 인식이 매번 다르게 깨진다
+    // ('퀘스트 리에!!!', '퀘스트 몰리에!!!'). 반면 하단 안내문은 두 번 다
+    // 신뢰도 1.00으로 똑같이 읽혀 그것을 화면 표지로 쓴다.
+    let observer = SceneObserver()
+
+    let result = try await observer.observe(
+        image: try liveFixtureImage(named: fixture),
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(result.actionCandidates.count == 1)
+    #expect(result.actionCandidates.first?.ruleID == "quest_clear_confirm")
+    #expect(result.actionCandidates.first?.targetText == "확인")
+}
+
+@Test(arguments: [
+    "landscape-retry-menu-10coin",
+    "landscape-tribute-result-deselected",
+    "landscape-tribute-result-revealed",
+])
+func lootScreensAreNotMistakenForTheQuestRewardScreen(
+    fixture: String
+) async throws {
+    // 전리품 화면 아래에도 같은 안내문이 깔린다. 다만 인식이 '볼 수'에서
+    // 끊겨 완전 일치가 안 되는데, 그 끊김에 기대면 OCR이 끝까지 읽는 날
+    // 두 규칙이 함께 후보가 되어 모호성으로 멈춘다. '확인' 버튼 존재와
+    // 전리품 글자 금지로 이중으로 갈라 놓았는지 본다.
+    let observer = SceneObserver()
+
+    let result = try await observer.observe(
+        image: try liveFixtureImage(named: fixture),
+        layout: .landscape,
+        rules: RuleLoader().loadDefaultRules()
+    )
+
+    #expect(!result.actionCandidates.contains {
+        $0.ruleID == "quest_clear_confirm"
+    })
+}
+
 private func liveFixtureImage(named name: String) throws -> CGImage {
     let url = try #require(
         Bundle.module.url(
