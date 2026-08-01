@@ -111,11 +111,32 @@ protocol InputEventTapping: Sendable {
     func stop()
 }
 
+/// 감시를 켜 두려는 의사. 탭이 실제로 살아 있는지와는 별개다.
+///
+/// 사람이 멈춘 것과 시스템이 꺼 버린 것을 가르는 유일한 근거다.
+private final class MonitoringIntent: @unchecked Sendable {
+    private let lock = NSLock()
+    private var wanted = false
+
+    var wantsMonitoring: Bool {
+        lock.withLock { wanted }
+    }
+
+    func markStarted() {
+        lock.withLock { wanted = true }
+    }
+
+    func markStopped() {
+        lock.withLock { wanted = false }
+    }
+}
+
 public final class UserIdleMonitor: UserIdleMonitoring {
     private let clock: ContinuousClock
     private let now: @Sendable () -> ContinuousClock.Instant
     private let stateStore: UserInputStateStore
     private let eventTap: any InputEventTapping
+    private let intent = MonitoringIntent()
 
     public convenience init() {
         let clock = ContinuousClock()
@@ -182,6 +203,7 @@ public final class UserIdleMonitor: UserIdleMonitoring {
     }
 
     public func start() throws {
+        intent.markStarted()
         guard try eventTap.start() else {
             return
         }
@@ -190,7 +212,26 @@ public final class UserIdleMonitor: UserIdleMonitoring {
     }
 
     public func stop() {
+        intent.markStopped()
         eventTap.stop()
+    }
+
+    /// 시스템이 꺼 버린 감시만 되살린다.
+    ///
+    /// macOS는 이벤트 탭 콜백이 늦으면 탭을 스스로 끈다. 그러면
+    /// `waitUntilIdle`이 매번 `notMonitoring`을 던지는데, 재시도 루프는
+    /// 사이클만 다시 돌 뿐 감시를 다시 켜지 않아 사람이 앱을 껐다 켤
+    /// 때까지 굳었다(실측 2026-08-01 07:52~07:59, 6분 46초. 화면도
+    /// 후보도 멀쩡했고 감시만 죽어 있었다).
+    ///
+    /// 사람이 멈춘 감시는 건드리지 않는다 — 그러면 중지가 중지가 아니다.
+    /// 멀쩡할 때도 아무것도 안 한다 — 다시 시작하면 유휴 기준선이 밀려
+    /// 클릭이 그만큼 늦어진다.
+    public func restartIfDisabled() throws {
+        guard intent.wantsMonitoring, !isMonitoring else {
+            return
+        }
+        try start()
     }
 
     public func snapshot() async -> UserInputSnapshot {

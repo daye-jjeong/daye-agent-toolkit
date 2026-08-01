@@ -643,6 +643,66 @@ func tapStaysUnhealthyUntilRecoveryEpochIsCommitted()
     )
 }
 
+@Test
+func aTapKilledByTheSystemIsRevivedOnRetry() throws {
+    // 회귀(2026-08-01 07:52~07:59, 6분 46초 멈춤): macOS는 이벤트 탭
+    // 콜백이 늦으면 탭을 스스로 끈다. 그러면 waitUntilIdle이 매번
+    // notMonitoring을 던지는데, 재시도 루프는 runCycle만 다시 부를 뿐
+    // 감시를 되살리지 않아 사람이 앱을 껐다 켤 때까지 굳었다.
+    // 화면도 후보도 멀쩡했고 감시만 죽어 있었다.
+    let tap = RecordingInputEventTap()
+    let monitor = UserIdleMonitor(
+        initialGeneration: 0,
+        lastInputAt: ContinuousClock().now,
+        eventTap: tap
+    )
+
+    try monitor.start()
+    tap.simulateSystemDisable()
+    #expect(!monitor.isMonitoring)
+
+    try monitor.restartIfDisabled()
+
+    #expect(monitor.isMonitoring)
+    #expect(tap.startCount == 2)
+}
+
+@Test
+func anIntentionallyStoppedMonitorIsNotRevived() throws {
+    // 사람이 멈춘 감시까지 되살리면 중지가 중지가 아니게 된다.
+    let tap = RecordingInputEventTap()
+    let monitor = UserIdleMonitor(
+        initialGeneration: 0,
+        lastInputAt: ContinuousClock().now,
+        eventTap: tap
+    )
+
+    try monitor.start()
+    monitor.stop()
+
+    try monitor.restartIfDisabled()
+
+    #expect(!monitor.isMonitoring)
+    #expect(tap.startCount == 1)
+}
+
+@Test
+func aHealthyMonitorIsLeftAloneByRestart() throws {
+    // 멀쩡한 감시를 다시 시작하면 유휴 기준선이 밀려 클릭이 늦어진다.
+    let tap = RecordingInputEventTap()
+    let monitor = UserIdleMonitor(
+        initialGeneration: 0,
+        lastInputAt: ContinuousClock().now,
+        eventTap: tap
+    )
+
+    try monitor.start()
+    try monitor.restartIfDisabled()
+
+    #expect(monitor.isMonitoring)
+    #expect(tap.startCount == 1)
+}
+
 private enum TestInputEventTapError: Error {
     case permissionDenied
 }
@@ -692,6 +752,11 @@ private final class RecordingInputEventTap:
             storedStopCount += 1
             storedIsRunning = false
         }
+    }
+
+    /// macOS가 탭을 스스로 끈 상황. stop()과 달리 앱은 이 사실을 모른다.
+    func simulateSystemDisable() {
+        lock.withLock { storedIsRunning = false }
     }
 }
 
