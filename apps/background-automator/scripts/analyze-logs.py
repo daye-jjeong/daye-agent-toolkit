@@ -217,6 +217,19 @@ def scene_name(event):
     return RENAMED_SCENES.get(scene, scene)
 
 
+# 상위 구간 안에 이미 포함된 값이다. 합계에 또 더하면 두 번 세게 된다.
+SUBPHASES = {"capture", "reobserveCapture"}
+
+
+def phase_total(phases):
+    return sum(
+        v for k, v in phases.items()
+        if k.endswith("Milliseconds")
+        and k != "totalMilliseconds"
+        and k.replace("Milliseconds", "") not in SUBPHASES
+    )
+
+
 def report_phases(events):
     clicks = [e for e in events if e.get("phases")]
     if not clicks:
@@ -226,14 +239,19 @@ def report_phases(events):
     buckets = defaultdict(list)
     for event in clicks:
         for key, value in event["phases"].items():
-            if key.endswith("Milliseconds") and key != "totalMilliseconds":
-                buckets[key.replace("Milliseconds", "")].append(value)
+            if not key.endswith("Milliseconds") or key == "totalMilliseconds":
+                continue
+            if value is None:
+                continue
+            buckets[key.replace("Milliseconds", "")].append(value)
 
     print(f"\n■ 구간별 소요 (클릭 {len(clicks)}회, 중앙값)")
     labels = {
         "observe": "화면 읽기",
+        "capture": "└ 창 잡기",
         "idleWait": "유휴 대기",
         "reobserve": "재확인",
+        "reobserveCapture": "└ 창 잡기",
         "click": "클릭·복귀",
     }
     rows = []
@@ -242,17 +260,18 @@ def report_phases(events):
         rows.append((values[len(values) // 2], key, values))
     for median, key, values in sorted(rows, reverse=True):
         p95 = values[int(len(values) * 0.95)]
-        print(f"  {labels.get(key, key):<10} {median:>6.0f}ms"
-              f"   (p95 {p95:.0f}ms)")
-    per_click = sum(row[0] for row in rows)
-    print(f"  {'합계':<10} {per_click:>6.0f}ms  클릭 1회")
+        mark = " " if key in SUBPHASES else ""
+        print(f"  {mark}{labels.get(key, key):<10} {median:>6.0f}ms"
+              f"   (p95 {p95:.0f}ms, {len(values)}건)")
+    per_click = sum(
+        row[0] for row in rows if row[1] not in SUBPHASES
+    )
+    print(f"  {'합계':<10} {per_click:>6.0f}ms  클릭 1회"
+          "   (└ 항목은 상위 구간에 이미 포함)")
 
     by_scene = defaultdict(list)
     for event in clicks:
-        by_scene[scene_name(event)].append(
-            sum(v for k, v in event["phases"].items()
-                if k.endswith("Milliseconds") and k != "totalMilliseconds")
-        )
+        by_scene[scene_name(event)].append(phase_total(event["phases"]))
     print("\n  씬별 클릭 소요(중앙값):")
     for scene, values in sorted(
         by_scene.items(), key=lambda kv: -sorted(kv[1])[len(kv[1]) // 2]
@@ -370,8 +389,7 @@ def report_builds(cycles, events, builds):
         if not event.get("phases"):
             continue
         app_ms[event.get("build") or UNSTAMPED].append(
-            sum(v for k, v in event["phases"].items()
-                if k.endswith("Milliseconds") and k != "totalMilliseconds")
+            phase_total(event["phases"])
         )
 
     print("\n■ 빌드별 비교")

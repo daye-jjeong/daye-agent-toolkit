@@ -102,10 +102,16 @@ public enum DungeonNameExtractor {
 public struct ClickPhaseTimings: Codable, Equatable, Sendable {
     /// 화면을 잡아 글자를 읽기까지.
     public let observeMilliseconds: Int
+    /// 그중 창을 잡는 데만 든 시간. 나머지가 글자 인식이다.
+    ///
+    /// 옵셔널인 이유는 이 값이 없는 과거 기록이 남아 있어서다.
+    public let captureMilliseconds: Int?
     /// 사용자가 손을 뗄 때까지 기다린 시간.
     public let idleWaitMilliseconds: Int
     /// 누르기 직전 화면을 다시 확인하는 데 든 시간.
     public let reobserveMilliseconds: Int
+    /// 그중 창을 잡는 데만 든 시간.
+    public let reobserveCaptureMilliseconds: Int?
     /// 게임을 앞으로 올리고 눌렀다가 원래 앱으로 돌아오기까지.
     public let clickMilliseconds: Int
 
@@ -118,13 +124,18 @@ public struct ClickPhaseTimings: Codable, Equatable, Sendable {
 
     public init(
         observe: Duration,
+        capture: Duration? = nil,
         idleWait: Duration,
         reobserve: Duration,
+        reobserveCapture: Duration? = nil,
         click: Duration
     ) {
         observeMilliseconds = Self.milliseconds(observe)
+        captureMilliseconds = capture.map(Self.milliseconds)
         idleWaitMilliseconds = Self.milliseconds(idleWait)
         reobserveMilliseconds = Self.milliseconds(reobserve)
+        reobserveCaptureMilliseconds =
+            reobserveCapture.map(Self.milliseconds)
         clickMilliseconds = Self.milliseconds(click)
     }
 

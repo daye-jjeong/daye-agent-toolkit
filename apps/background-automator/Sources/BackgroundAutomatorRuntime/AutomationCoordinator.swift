@@ -6,15 +6,23 @@ public struct AutomationScreenFrame: Sendable {
     public let observation: SceneObservation
     public let window: WindowCandidate
     public let layout: LayoutProfile
+    /// 창을 잡는 데 든 시간. 글자를 읽는 시간은 뺀 값이다.
+    ///
+    /// 관찰 한 번이 통째로 3~6초씩 걸리는데(실측 2026-08-01, 심층 매우
+    /// 어려움) 창 캡처와 글자 인식이 한 덩어리라 어디가 느린지 못 갈랐다.
+    /// 둘을 나눠 재야 고칠 자리를 짚는다.
+    public let captureDuration: Duration
 
     public init(
         observation: SceneObservation,
         window: WindowCandidate,
-        layout: LayoutProfile
+        layout: LayoutProfile,
+        captureDuration: Duration = .zero
     ) {
         self.observation = observation
         self.window = window
         self.layout = layout
+        self.captureDuration = captureDuration
     }
 }
 
@@ -44,10 +52,13 @@ public struct CapturedWindowSceneObserver: AutomationScreenObserving {
     }
 
     public func observe() async throws -> AutomationScreenFrame {
+        let clock = ContinuousClock()
+        let captureStartedAt = clock.now
         let capture = try await captureService.captureWindow(
             bundleIdentifier: bundleIdentifier,
             titleContains: titleContains
         )
+        let captureDuration = captureStartedAt.duration(to: clock.now)
         let layout = LayoutClassifier.classify(
             imageSize: CGSize(
                 width: capture.image.width,
@@ -62,7 +73,8 @@ public struct CapturedWindowSceneObserver: AutomationScreenObserving {
         return AutomationScreenFrame(
             observation: observation,
             window: capture.candidate,
-            layout: layout
+            layout: layout,
+            captureDuration: captureDuration
         )
     }
 }
@@ -526,8 +538,10 @@ public actor AutomationCoordinator {
                 dungeonName: lastSeenDungeonName,
                 phases: ClickPhaseTimings(
                     observe: observeDuration,
+                    capture: frame.captureDuration,
                     idleWait: idleWaitDuration,
                     reobserve: reobserveDuration,
+                    reobserveCapture: freshFrame.captureDuration,
                     click: clickFinishedAt - clickStartedAt
                 )
             )
