@@ -30,6 +30,40 @@ func concurrentRecognitionsAllFinishWithoutStarvingTheThreadPool() async throws 
     #expect(finished == 12)
 }
 
+@Test(.timeLimit(.minutes(1)))
+func unrelatedWorkKeepsRunningWhileRecognitionsPileUp() async throws {
+    // 앞 테스트는 인식끼리만 본다. 진짜 위험은 인식이 협동 스레드풀을
+    // 붙잡아 '관계없는 다른 일'까지 굶기는 것이다 — 그게 2026-07-25에
+    // 자동화를 통째로 멈출 뻔한 모양이었다.
+    //
+    // 인식을 잔뜩 띄운 채로 짧은 잠을 반복한다. 스레드풀이 살아 있으면
+    // 잠이 계속 깨고, 굶으면 여기서 멈춘다.
+    let recognizer = VisionTextRecognizer()
+    let image = try blankRecognizerImage(width: 800, height: 600)
+
+    async let recognitions: Int = withThrowingTaskGroup(
+        of: Int.self
+    ) { group in
+        for _ in 0 ..< 12 {
+            group.addTask {
+                _ = try await recognizer.recognizeText(in: image)
+                return 1
+            }
+        }
+        return try await group.reduce(0, +)
+    }
+
+    var ticks = 0
+    while ticks < 20 {
+        try await Task.sleep(for: .milliseconds(10))
+        ticks += 1
+    }
+
+    let finished = try await recognitions
+    #expect(ticks == 20)
+    #expect(finished == 12)
+}
+
 private func blankRecognizerImage(
     width: Int,
     height: Int

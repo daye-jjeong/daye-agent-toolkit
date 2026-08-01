@@ -12,10 +12,24 @@ public struct VisionTextRecognizer: TextRecognizing, Sendable {
     /// 협동 스레드풀(코어 수만큼만 있다) 스레드를 통째로 점유한다. 앱은 클릭
     /// 루프와 사이클 관찰 루프가 각각 화면을 읽어 인식이 늘 겹치므로, 그대로
     /// 두면 풀이 고갈돼 자동화가 통째로 멈춘다. 전용 큐로 넘겨 격리한다.
+    ///
+    /// 그 큐를 한 줄로 세운다. 겹쳐 돌리면 각자 느려지기만 한다 — 실측
+    /// 2026-08-01, 같은 그림 한 장 기준:
+    ///
+    ///     1개  652ms   1.5건/초
+    ///     2개 1991ms   1.0건/초
+    ///     3개 3468ms   0.9건/초
+    ///
+    /// Vision이 쓰는 가속기가 하나뿐이라 나눠 써도 총량이 안 늘고, 오히려
+    /// 처리량이 떨어진다. 줄을 세우면 가장 늦게 끝나는 것끼리 비교해도
+    /// 순차가 빠르다(3개: 1956ms 대 3468ms).
+    ///
+    /// 줄을 서도 데드락은 돌아오지 않는다. 기다리는 쪽은 continuation에서
+    /// 잠들 뿐 협동 스레드풀 스레드를 잡고 있지 않다 — 2026-07-25에 문제가
+    /// 된 것은 스레드를 '점유한 채' 블로킹한 것이었다.
     private static let queue = DispatchQueue(
         label: "BackgroundAutomator.VisionTextRecognizer",
-        qos: .userInitiated,
-        attributes: .concurrent
+        qos: .userInitiated
     )
 
     public func recognizeText(
