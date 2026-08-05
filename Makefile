@@ -6,6 +6,7 @@
 
 REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 RULES_DIR := $(HOME)/.claude/rules
+COMMANDS_DIR := $(HOME)/.claude/commands
 SKILLS_CC := $(HOME)/.claude/skills
 SKILLS_CODEX := $(HOME)/.codex/skills
 STANDALONE_SKILLS := mabinogi-mml
@@ -19,7 +20,7 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: _register-plugins _symlink-rules _symlink-skills ## Install plugins + rules + skills
+install: _register-plugins _symlink-rules _symlink-commands _symlink-skills ## Install plugins + rules + commands + skills
 	@echo ""
 	@echo "Done. Run 'make status' to verify."
 
@@ -41,6 +42,24 @@ _symlink-rules:
 		elif [ -e "$$dest" ]; then echo "  ! SKIPPED $$name (exists, not symlink)"; continue; \
 		fi; \
 		ln -s "$(REPO_DIR)/$$rule_file" "$$dest"; \
+		echo "  + $$name"; \
+	done
+
+_symlink-commands:
+	@echo "=== Symlink commands ==="
+	@mkdir -p $(COMMANDS_DIR)
+	@for dest in $(COMMANDS_DIR)/*.md; do \
+		if [ -L "$$dest" ] && [ ! -e "$$dest" ]; then \
+			rm "$$dest"; echo "  - $$(basename $$dest) (dangling)"; \
+		fi; \
+	done
+	@for cmd_file in $$(find commands -name '*.md' 2>/dev/null); do \
+		name=$$(basename $$cmd_file); \
+		dest="$(COMMANDS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then rm "$$dest"; \
+		elif [ -e "$$dest" ]; then echo "  ! SKIPPED $$name (exists, not symlink)"; continue; \
+		fi; \
+		ln -s "$(REPO_DIR)/$$cmd_file" "$$dest"; \
 		echo "  + $$name"; \
 	done
 
@@ -66,6 +85,12 @@ clean: ## Remove plugins + rules
 		dest="$(RULES_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then rm "$$dest"; echo "  - removed $$name"; fi; \
 	done
+	@echo "=== Remove command symlinks ==="
+	@for cmd_file in $$(find commands -name '*.md' 2>/dev/null); do \
+		name=$$(basename $$cmd_file); \
+		dest="$(COMMANDS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then rm "$$dest"; echo "  - removed $$name"; fi; \
+	done
 	@echo "=== Remove standalone skill symlinks ==="
 	@for tgt in "$(SKILLS_CC)" "$(SKILLS_CODEX)"; do \
 		for s in $(STANDALONE_SKILLS); do \
@@ -82,6 +107,14 @@ status: ## Show installation status
 		name=$$(basename $$rule_file); \
 		dest="$(RULES_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then echo "  + $$name"; \
+		else echo "  x $$name (not installed)"; fi; \
+	done
+	@echo "=== Commands ==="
+	@for cmd_file in $$(find commands -name '*.md' 2>/dev/null); do \
+		name=$$(basename $$cmd_file); \
+		dest="$(COMMANDS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then echo "  + $$name"; \
+		elif [ -e "$$dest" ]; then echo "  x $$name — CONFLICT, not symlink"; \
 		else echo "  x $$name (not installed)"; fi; \
 	done
 	@echo "=== Standalone skills ==="
