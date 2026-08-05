@@ -48,7 +48,8 @@ frontmatter(`name`/`description`)는 CC·Codex 공통. `make install`이 `~/.cla
 - stdlib만 사용 (외부 패키지 금지)
 - bash 또는 python3
 - 개별 스킬은 자체 `scripts/`를 SKILL.md에서 참조
-- 훅(`plugins/*/hooks/*.sh`): 입력은 **stdin JSON + jq** (`INPUT=$(cat); echo "$INPUT" | jq -r '.tool_name'`). `$CLAUDE_TOOL_*` env는 CC가 안 채워 no-op. 레퍼런스: `plan-review-gate.sh`. grep은 macOS BSD 호환 `[[:space:]]` (`\s`/`\b` 금지)
+- 훅(`plugins/*/hooks/*.sh`): 입력은 **stdin JSON + jq** (`INPUT=$(cat); echo "$INPUT" | jq -r '.tool_name'`). `$CLAUDE_TOOL_*` env는 CC가 안 채워 no-op — 이걸 읽는 훅은 아무것도 안 하고 조용히 통과한다. grep은 macOS BSD 호환 `[[:space:]]` (`\s`/`\b` 금지)
+- 차단은 `PreToolUse` + `exit 2`만 가능. `PostToolUse`나 `exit 0` 훅은 텍스트만 흘리는 리마인더라, 같은 내용이 룰에 있으면 중복이다
 - **LLM subprocess 금지**: 스크립트에서 `claude -p` 등 LLM CLI를 호출하지 마라. 스크립트는 데이터 수집·가공만 하고, LLM이 할 일은 SKILL.md에 적어 세션이 직접 수행한다. CC 안에서는 nested session 에러가 나고 OpenClaw엔 claude CLI가 없다. 예외: 훅 스크립트(`session_logger.py`)는 세션 밖에서 돌아 허용
 
 ## 스킬 자동 개선
