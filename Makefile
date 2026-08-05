@@ -29,6 +29,11 @@ _register-plugins:
 _symlink-rules:
 	@echo "=== Symlink rules ==="
 	@mkdir -p $(RULES_DIR)
+	@for dest in $(RULES_DIR)/*.md; do \
+		if [ -L "$$dest" ] && [ ! -e "$$dest" ]; then \
+			rm "$$dest"; echo "  - $$(basename $$dest) (dangling)"; \
+		fi; \
+	done
 	@for rule_file in $$(find rules -name '*.md' 2>/dev/null); do \
 		name=$$(basename $$rule_file); \
 		dest="$(RULES_DIR)/$$name"; \
