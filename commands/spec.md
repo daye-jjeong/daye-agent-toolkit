@@ -8,9 +8,9 @@ allowed-tools: Bash, Read, Glob, Grep, Write, Edit, Skill
 
 - 브랜치: !`git branch --show-current`
 - 최근 커밋: !`git log --oneline -8`
-- 기존 스펙: !`ls -t docs/specs/*.md 2>/dev/null | head -5 || echo "(없음)"`
-- 기존 ADR: !`ls docs/adr/*.md 2>/dev/null | head -8 || echo "(없음)"`
-- 구조 문서: !`for f in ARCHITECTURE.md CONTEXT.md CONTEXT-MAP.md; do test -f $f && echo "  $f"; done; true`
+- 기존 스펙: !`find docs/specs -name '*.md' 2>/dev/null | sort -r | head -5 | grep . || echo "(없음)"`
+- 기존 ADR: !`find docs/adr -name '*.md' 2>/dev/null | sort | head -8 | grep . || echo "(없음)"`
+- 구조 문서: !`for f in ARCHITECTURE.md CONTEXT.md CONTEXT-MAP.md; do test -f "$f" && echo "$f"; done | grep . || echo "(없음)"`
 
 ## 주제
 
