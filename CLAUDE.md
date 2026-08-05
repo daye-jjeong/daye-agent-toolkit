@@ -47,7 +47,7 @@ frontmatter(`name`/`description`)는 CC·Codex 공통. `make install`이 `~/.cla
 | 필드 | 설명 |
 |------|------|
 | `user-invocable` | `false`면 슬래시 커맨드 비노출 (내부 스킬) |
-| `disable-model-invocation` | `true`면 모델 프롬프트에서 제외 (cron/수동 전용) |
+| `disable-model-invocation` | `true`면 모델 프롬프트에서 제외 + **`Skill` 도구 호출도 차단**. 슬래시로만 부를 수 있다 — 다른 스킬·커맨드가 이걸 호출하도록 설계하면 그 지점에서 멈춘다 (2026-08 실측) |
 
 ## scripts/ 규칙
 

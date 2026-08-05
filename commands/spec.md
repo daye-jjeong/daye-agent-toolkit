@@ -30,9 +30,11 @@ $ARGUMENTS
 
 ## 2. 인터뷰
 
-`grill-with-docs` 스킬을 호출해 인터뷰를 진행한다(`Skill` 도구). 그 스킬이 질문 방식과 ADR·용어집 관리를 맡는다.
+`mattpocock-skills:grilling`과 `mattpocock-skills:domain-modeling`을 함께 호출한다(`Skill` 도구). 앞이 질문 방식을, 뒤가 ADR·용어집 관리를 맡는다.
 
-호출이 안 되면 사용자에게 `/grill-with-docs`를 먼저 실행하라고 안내하고 여기서 멈춘다. 인터뷰 없이 다음 단계로 넘어가지 마라.
+> `grill-with-docs`를 부르지 마라. 저 둘을 부르라는 두 줄짜리 래퍼인데 `disable-model-invocation: true`라 `Skill` 도구 호출까지 막힌다. 래퍼를 건너뛰고 알맹이 둘을 직접 부른다.
+
+호출이 실패하면(플러그인 미설치 등) 아래 네 질문만으로 직접 인터뷰한다. 스킬이 없다고 인터뷰를 건너뛰고 다음 단계로 가지는 마라.
 
 인터뷰가 어떻게 흘러가든 **아래 넷은 반드시 답을 받아야 한다.** 스킬이 안 물었으면 직접 묻는다.
 
