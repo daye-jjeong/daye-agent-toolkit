@@ -11,17 +11,17 @@ correction-memory 로그를 스캔하여 반복되는 위반 패턴을 찾고, �
 
 ### 1. 수집
 
-다음 3개 소스를 모두 스캔:
+프로젝트별 `.claude/rules/correction-*.md`와 전역 `~/.claude/rules/`를 모두 읽는다.
 
-- **Layer 1 (Rules):** `~/.claude/rules/correction-*.md` — 프로젝트별 `.claude/rules/correction-*.md`도 포함
-- **Layer 2 (Register):** auto memory `corrections/*.md` (토픽별 교정 이력)
-- **Layer 3 (Log):** auto memory `corrections/log/*.md` (날짜별 타임라인)
+> 예전에는 auto memory의 Register·Log 계층도 스캔했다. 두 계층은 미기록으로 폐기됐다 — `correction-memory` 스킬 참조.
 
 ### 2. 감지
 
-토픽별로 Layer 2 엔트리 수를 카운트한다. `- [YYYY-MM-DD]` 형식 라인 1개 = 1회.
+규칙을 겨냥 대상(파일 경로, 명령어, 코드 패턴, 절차)으로 묶는다.
 
-**훅 전환 후보 기준:** 같은 토픽 3회 이상.
+**훅 전환 후보 기준:** 같은 대상을 겨냥한 규칙이 3개 이상이거나, 규칙이 이미 있는데도 같은 위반이 재발한 경우.
+
+재발은 파일 개수로 안 잡힌다. 사용자가 "이거 규칙에 있는데 또 그러네"라고 하면 그 자리에서 후보로 올린다.
 
 ### 3. 분류
 

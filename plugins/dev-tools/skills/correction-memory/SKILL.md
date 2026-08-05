@@ -1,79 +1,74 @@
 ---
 name: correction-memory
-description: 교정 기억 — 실수를 3계층으로 기록하여 반복 방지
-argument-hint: "save" 또는 "search <키워드>" 또는 "review" 또는 "stats"
+description: 교정 기억 — 사용자 교정을 프로젝트 규칙으로 저장하고, 쌓인 규칙을 검색·리뷰한다
+argument-hint: "save" 또는 "search <키워드>" 또는 "review"
 ---
 
 # Correction Memory
 
-교정 사항을 3계층(Rules → Register → Log)에 동시 저장하여,
-같은 실수를 반복하지 않게 한다. Boris Cherny의 "Compounding Engineering" 패턴 기반.
+같은 실수를 반복하지 않도록 교정을 프로젝트 규칙으로 남긴다.
 
-## 모드 판단
+저장 위치는 한 곳이다 — `{project}/.claude/rules/correction-{YYYYMMDD}-{HHmm}-{slug}.md`.
+git-tracked라 팀이 공유하고, CC가 매 세션 자동 로드한다.
 
-$ARGUMENTS를 파싱하여 모드 결정:
+> 원래 3계층(Rules / auto memory Register / auto memory Log)이었다. 2026-08 실측에서 Register는 4개월, Log는 4.5개월간 기록이 없었고 살아남은 건 Rules 하나였다. 나머지 둘은 폐기했다.
 
-| 키워드 | 모드 | 설명 |
-|--------|------|------|
-| `save`, `기억해`, `저장` | **저장** | 교정 사항을 3계층에 동시 저장 |
-| `search`, `검색`, `찾아` | **검색** | 키워드로 교정 이력 검색 |
-| `review`, `정리`, `리뷰` | **리뷰** | 현재 규칙 전체 리뷰 + 중복/모순 제거 |
-| `stats`, `통계` | **통계** | 주제별 빈도, 최근 추세 |
+## 모드
 
-키워드 없으면 `save` 모드로 동작.
+| 키워드 | 모드 |
+|--------|------|
+| `save`, `기억해`, `저장` (기본) | 교정 저장 |
+| `search`, `검색`, `찾아` | 기존 규칙 검색 |
+| `review`, `정리`, `리뷰` | 전체 리뷰 — 중복·모순·사문화 정리 |
 
-## 3계층 아키텍처
+## 저장 (save)
 
-| 계층 | 경로 | 공유 | 용도 |
-|------|------|------|------|
-| **Rules** | `{project}/.claude/rules/correction-{slug}.md` | git (팀) | Claude에게 적용할 행동 규칙 (파일 1개 = 규칙 1개) |
-| **Register** | auto memory `corrections/{topic}.md` | 로컬 (나만) | 주제별 교정 이력 + 사유 |
-| **Log** | auto memory `corrections/log/YYYY-MM-DD.md` | 로컬 (나만) | 교정 발생 타임라인 |
+### 1. 저장 가치 판단
 
-> auto memory 경로: `~/.claude/projects/{project-hash}/memory/corrections/`
+[write-gate.md](references/write-gate.md)의 기준을 적용한다. 통과 못 하면 저장하지 않는다.
 
-## 모드별 상세
+### 2. 원인까지 거슬러 올라가기
 
-### 저장 (save)
+**증상이 아니라 원인을 적는다.** 사고의 마지막 표면만 금지하면 같은 원인이 다른 형태로 다시 나온다.
 
-교정 전파 프로토콜: [correction-propagation.md](references/correction-propagation.md)
+- ✕ "운영자가 채우는 컬럼에 시스템 값을 쓰지 마라" — 그 컬럼만 피하면 통과한다
+- ○ "요청하지 않은 예외 처리를 임의로 추가하지 마라. 범위 밖 입력을 만나면 묻고 멈춘다" — 컬럼에 값이 들어간 건 이것의 결과였다
 
-### 검색 (search)
+사용자에게 "무엇이 문제였나"를 한 번 확인하고 적어라. 눈에 보인 증상만으로 원인을 추정하지 마라 — 틀린 원인을 적으면 규칙이 다음번을 못 막는다.
 
-1. $ARGUMENTS에서 키워드 추출
-2. Layer 1 (Rules) 검색 → 현재 적용 중인 관련 규칙
-3. Layer 2 (Register) 검색 → 주제별 교정 이력
-4. 결과를 구조적으로 보여주기
+### 3. 중복 확인
 
-### 리뷰 (review)
+저장 전에 세 곳을 본다: 기존 `.claude/rules/correction-*.md`, 프로젝트 `CLAUDE.md`, 전역 `~/.claude/rules/`.
+같은 내용이 있으면 새 파일을 만들지 말고 그 파일을 고친다.
 
-자동 트리거: save 시 규칙이 50개 이상이면 review 제안.
-수동 트리거: `/correction-memory review`
+### 4. 파일 작성
 
-1. `.claude/rules/correction-*.md` 파일들 전체 읽기
-2. **중복 판단**: 같은 대상에 대해 같은 방향의 규칙 → 하나로 병합
-3. **모순 판단**: 같은 대상에 대해 반대 방향의 규칙 → 사용자에게 어느 것을 유지할지 질문
-4. 더 이상 유효하지 않은 규칙 제거 제안
-5. 사용자 승인 후 → 오래된 개별 파일 삭제, 정리된 파일로 교체
-6. Layer 2 (Register)에도 병합/삭제 이력 반영
+- 파일 1개 = 규칙 1개. slug는 소문자 하이픈 2~4단어
+- 본문: 하지 말 것 / 대신 할 것 / **Why**(사고 경위 1~2줄)
+- Why 없이 금지만 적지 마라 — 다음 세션이 예외 상황을 판단할 수 없다
+- 언어는 프로젝트의 다른 규칙에 맞춘다
 
-### 통계 (stats)
+### 5. 스코프
 
-1. Layer 3 (Log) 전체 파싱
-2. 주제별 교정 빈도 집계
-3. 최근 7일/30일 추세
-4. 가장 많이 교정되는 토픽 → "집중 개선 필요" 안내
+| 성격 | 저장 위치 |
+|------|-----------|
+| 이 프로젝트의 교정 (기본) | `.claude/rules/correction-*.md` |
+| 모든 프로젝트에 해당 | 전역 `rules/global/`에 넣을지 사용자에게 제안 |
+| 프로젝트 컨벤션·아키텍처 규약 | correction이 아니라 `CLAUDE.md` 본문 |
 
-## 자동 트리거
+마지막 줄이 흔히 헷갈린다. "이 레포에서는 X를 이렇게 한다"는 교정이 아니라 규약이다.
 
-교정 감지 → 자동 저장은 `rules/correction/correction-protocol.md`가 담당.
-`make install` 시 `~/.claude/rules/`에 자동 symlink되어 매 세션 자동 로드된다.
-스킬의 search/review/stats 모드는 수동 호출용.
+## 검색 (search)
 
-## Write Gate
+`.claude/rules/correction-*.md`를 키워드로 훑고, 걸린 규칙을 근거(Why)와 함께 보여준다.
 
-저장 가치 판단 기준: [write-gate.md](references/write-gate.md)
+## 리뷰 (review)
 
-## Register 토픽
+1. `.claude/rules/correction-*.md` 전체 읽기
+2. **중복** — 같은 대상·같은 방향 → 하나로 병합
+3. **모순** — 같은 대상·반대 방향 → 어느 쪽을 남길지 사용자에게 질문
+4. **사문화** — 가리키는 코드·스킬·워크플로우가 사라진 규칙 → 삭제. 실제로 그 대상이 아직 있는지 확인하고 판정한다
+5. **증상형** — 원인이 아니라 표면만 금지한 규칙 → 원인으로 다시 쓸지 사용자와 정한다
+6. 사용자 승인 후 삭제·병합
 
-초기 토픽 분류: [register-topics.md](references/register-topics.md)
+리뷰는 규칙이 20개를 넘거나, 같은 실수가 규칙이 있는데도 재발했을 때 돌린다.

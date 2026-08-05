@@ -49,13 +49,14 @@ frontmatter(`name`/`description`)는 CC·Codex 공통. `make install`이 `~/.cla
 - bash 또는 python3
 - 개별 스킬은 자체 `scripts/`를 SKILL.md에서 참조
 - 훅(`plugins/*/hooks/*.sh`): 입력은 **stdin JSON + jq** (`INPUT=$(cat); echo "$INPUT" | jq -r '.tool_name'`). `$CLAUDE_TOOL_*` env는 CC가 안 채워 no-op. 레퍼런스: `plan-review-gate.sh`. grep은 macOS BSD 호환 `[[:space:]]` (`\s`/`\b` 금지)
+- **LLM subprocess 금지**: 스크립트에서 `claude -p` 등 LLM CLI를 호출하지 마라. 스크립트는 데이터 수집·가공만 하고, LLM이 할 일은 SKILL.md에 적어 세션이 직접 수행한다. CC 안에서는 nested session 에러가 나고 OpenClaw엔 claude CLI가 없다. 예외: 훅 스크립트(`session_logger.py`)는 세션 밖에서 돌아 허용
 
 ## 스킬 자동 개선
 
 대화 중 스킬에 개선할 만한 부분이 보이면 사용자에게 한 번 물어보고, 동의하면 알아서 업데이트한다. 작은 개선(SKILL.md 섹션 추가, 규칙 한 줄 추가 등)은 별도 todo로 쌓지 말고 즉시 처리.
 
 - 코드 변경은 worktree에서
-- feedback memory와 SKILL.md 둘 다 반영 — memory는 즉시 효과, SKILL.md는 타 세션/에이전트까지 적용
+- 세션 중엔 feedback memory로 즉시 반영하되, SKILL.md에 옮겨 적은 뒤엔 그 memory를 지운다(중복 로드)
 - 머지 후 보고
 
 ## 방침
