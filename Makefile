@@ -7,6 +7,7 @@
 REPO_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 RULES_DIR := $(HOME)/.claude/rules
 COMMANDS_DIR := $(HOME)/.claude/commands
+HOOKS_DIR := $(HOME)/.claude/hooks
 SKILLS_CC := $(HOME)/.claude/skills
 SKILLS_CODEX := $(HOME)/.codex/skills
 STANDALONE_SKILLS := mabinogi-mml
@@ -20,7 +21,7 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: _register-plugins _symlink-rules _symlink-commands _symlink-skills ## Install plugins + rules + commands + skills
+install: _register-plugins _symlink-rules _symlink-commands _symlink-hooks _symlink-skills ## Install plugins + rules + commands + hooks + skills
 	@echo ""
 	@echo "Done. Run 'make status' to verify."
 
@@ -63,6 +64,24 @@ _symlink-commands:
 		echo "  + $$name"; \
 	done
 
+_symlink-hooks:
+	@echo "=== Symlink hooks ==="
+	@mkdir -p $(HOOKS_DIR)
+	@for dest in $(HOOKS_DIR)/*; do \
+		if [ -L "$$dest" ] && [ ! -e "$$dest" ]; then \
+			rm "$$dest"; echo "  - $$(basename $$dest) (dangling)"; \
+		fi; \
+	done
+	@for hook_file in $$(find hooks -type f 2>/dev/null); do \
+		name=$$(basename $$hook_file); \
+		dest="$(HOOKS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then rm "$$dest"; \
+		elif [ -e "$$dest" ]; then echo "  ! SKIPPED $$name (exists, not symlink)"; continue; \
+		fi; \
+		ln -s "$(REPO_DIR)/$$hook_file" "$$dest"; \
+		echo "  + $$name"; \
+	done
+
 _symlink-skills:
 	@echo "=== Symlink standalone skills (CC + Codex) ==="
 	@for tgt in "$(SKILLS_CC)" "$(SKILLS_CODEX)"; do \
@@ -91,6 +110,12 @@ clean: ## Remove plugins + rules
 		dest="$(COMMANDS_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then rm "$$dest"; echo "  - removed $$name"; fi; \
 	done
+	@echo "=== Remove hook symlinks ==="
+	@for hook_file in $$(find hooks -type f 2>/dev/null); do \
+		name=$$(basename $$hook_file); \
+		dest="$(HOOKS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then rm "$$dest"; echo "  - removed $$name"; fi; \
+	done
 	@echo "=== Remove standalone skill symlinks ==="
 	@for tgt in "$(SKILLS_CC)" "$(SKILLS_CODEX)"; do \
 		for s in $(STANDALONE_SKILLS); do \
@@ -113,6 +138,14 @@ status: ## Show installation status
 	@for cmd_file in $$(find commands -name '*.md' 2>/dev/null); do \
 		name=$$(basename $$cmd_file); \
 		dest="$(COMMANDS_DIR)/$$name"; \
+		if [ -L "$$dest" ]; then echo "  + $$name"; \
+		elif [ -e "$$dest" ]; then echo "  x $$name — CONFLICT, not symlink"; \
+		else echo "  x $$name (not installed)"; fi; \
+	done
+	@echo "=== Hooks ==="
+	@for hook_file in $$(find hooks -type f 2>/dev/null); do \
+		name=$$(basename $$hook_file); \
+		dest="$(HOOKS_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then echo "  + $$name"; \
 		elif [ -e "$$dest" ]; then echo "  x $$name — CONFLICT, not symlink"; \
 		else echo "  x $$name (not installed)"; fi; \

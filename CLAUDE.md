@@ -4,7 +4,7 @@
 
 ## 접근 방식
 
-`make install` → 스킬 심링크(CC + Codex) + 로컬 마켓플레이스 등록 + 규칙·커맨드 심링크
+`make install` → 스킬 심링크(CC + Codex) + 로컬 마켓플레이스 등록 + 규칙·커맨드·훅 심링크
 
 `make install`은 **메인 레포 루트에서** 실행한다. worktree에서 실행하면 worktree 제거 후 `~/.claude/skills/`·`~/.codex/skills/` 심링크가 dangling 된다(머지 후 메인에서 재실행 필요).
 
@@ -29,6 +29,12 @@
 `commands/*.md`는 슬래시 커맨드. `make install`이 `~/.claude/commands/`에 심링크한다(룰과 같은 방식).
 
 **플러그인(`plugins/*/commands/`)에 넣지 마라.** 플러그인은 `~/.claude/plugins/cache/<플러그인>/<버전>/`으로 **복사**되는데, 이 캐시가 원본을 따라오지 않는다. 2026-08 실측에서 캐시가 두 달 낡아 `life-management`의 커맨드 4개(`/todo-list`·`/morning`·`/evening`·`/capacity`)가 캐시에 아예 없었다. 심링크는 원본을 가리켜 즉시 반영된다.
+
+## 훅
+
+`hooks/`는 전역 훅(`~/.claude/settings.json`에 직접 등록되는 것). `make install`이 `~/.claude/hooks/`에 심링크한다.
+
+플러그인 훅(`plugins/*/hooks/`)과 갈린다 — 플러그인 쪽은 캐시를 거쳐 원본을 안 따라오고(커맨드와 같은 문제), 등록도 플러그인 `hooks.json`이 한다. **전역에서 항상 돌아야 하는 훅은 `hooks/`에 둔다.**
 
 ## 스킬 포맷
 
