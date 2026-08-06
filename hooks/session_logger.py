@@ -17,10 +17,16 @@ import subprocess
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from _common import WORK_TAGS, send_telegram
+# 이 파일은 ~/.claude/hooks/ 에 심링크되어 레포 밖에서 호출된다.
+# resolve()가 심링크를 따라가므로 parents[1]은 항상 레포 루트다.
+# (플러그인 캐시에 복사되면 레포 루트의 mcp/ 를 못 찾아 죽었다 — 그래서 hooks/ 로 옮겼다)
+_REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_REPO / "mcp" / "life-dashboard"))
+sys.path.insert(
+    0, str(_REPO / "plugins" / "dev-tools" / "skills" / "work-digest" / "scripts")
+)
 
-_MCP_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent.parent / "mcp" / "life-dashboard"
-sys.path.insert(0, str(_MCP_DIR))
+from _common import WORK_TAGS, send_telegram
 from activity_writer import record_sessions
 
 KST = timezone(timedelta(hours=9))
