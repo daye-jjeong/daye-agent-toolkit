@@ -30,6 +30,12 @@
 
 **플러그인(`plugins/*/commands/`)에 넣지 마라.** 플러그인은 `~/.claude/plugins/cache/<플러그인>/<버전>/`으로 **복사**되는데, 이 캐시가 원본을 따라오지 않는다. 2026-08 실측에서 캐시가 두 달 낡아 `life-management`의 커맨드 4개(`/todo-list`·`/morning`·`/evening`·`/capacity`)가 캐시에 아예 없었다. 심링크는 원본을 가리켜 즉시 반영된다.
 
+## life-dashboard DB
+
+진짜 DB는 **`~/life-dashboard/data.db`**다(`mcp/life-dashboard/db.py`의 `DB_PATH`). 2026-08 기준 16MB, 세션 3,653건.
+
+레포 안 `mcp/life-dashboard/data.db`는 **0바이트 잔재**이고 git에도 없다. 아무도 안 읽는다 — 이걸 보고 "DB가 비었다"고 판단하지 마라(실제로 그런 오진이 있었다).
+
 ## 훅
 
 `hooks/`는 전역 훅(`~/.claude/settings.json`에 직접 등록되는 것). `make install`이 `~/.claude/hooks/`에 심링크한다.
