@@ -85,7 +85,7 @@ _symlink-hooks:
 			rm "$$dest"; echo "  - $$(basename $$dest) (dangling)"; \
 		fi; \
 	done
-	@for hook_file in $$(find hooks -type f 2>/dev/null); do \
+	@for hook_file in $$(find hooks -type f -not -path '*/__pycache__/*' 2>/dev/null); do \
 		name=$$(basename $$hook_file); \
 		dest="$(HOOKS_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then rm "$$dest"; \
@@ -124,7 +124,7 @@ clean: ## Remove plugins + rules
 		if [ -L "$$dest" ]; then rm "$$dest"; echo "  - removed $$name"; fi; \
 	done
 	@echo "=== Remove hook symlinks ==="
-	@for hook_file in $$(find hooks -type f 2>/dev/null); do \
+	@for hook_file in $$(find hooks -type f -not -path '*/__pycache__/*' 2>/dev/null); do \
 		name=$$(basename $$hook_file); \
 		dest="$(HOOKS_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then rm "$$dest"; echo "  - removed $$name"; fi; \
@@ -164,7 +164,7 @@ status: ## Show installation status
 		else echo "  x $$name (not installed)"; fi; \
 	done
 	@echo "=== Hooks ==="
-	@for hook_file in $$(find hooks -type f 2>/dev/null); do \
+	@for hook_file in $$(find hooks -type f -not -path '*/__pycache__/*' 2>/dev/null); do \
 		name=$$(basename $$hook_file); \
 		dest="$(HOOKS_DIR)/$$name"; \
 		if [ -L "$$dest" ]; then echo "  + $$name"; \
