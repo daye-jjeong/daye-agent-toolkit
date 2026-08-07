@@ -11,16 +11,6 @@
         ]
       }
     ],
-    "PreCompact": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/save-compact-state.sh"
-          }
-        ]
-      }
-    ],
     "Notification": [
       {
         "hooks": [

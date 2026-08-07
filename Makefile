@@ -13,6 +13,7 @@ SKILLS_CODEX := $(HOME)/.codex/skills
 STANDALONE_SKILLS := mabinogi-mml
 MARKETPLACE_KEY := daye-agent-toolkit
 PLUGINS := media-fetch,life-management,finance,dev-tools
+PLUGIN_CACHE := $(HOME)/.claude/plugins/cache/$(MARKETPLACE_KEY)
 MANAGE := python3 $(REPO_DIR)/scripts/manage_plugins.py
 
 .PHONY: install clean status help
@@ -21,12 +22,24 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: _register-plugins _symlink-rules _symlink-commands _symlink-hooks _symlink-skills ## Install plugins + rules + commands + hooks + skills
+install: _register-plugins _purge-plugin-cache _symlink-rules _symlink-commands _symlink-hooks _symlink-skills ## Install plugins + rules + commands + hooks + skills
 	@echo ""
 	@echo "Done. Run 'make status' to verify."
 
 _register-plugins:
 	@$(MANAGE) register $(MARKETPLACE_KEY) $(PLUGINS) $(REPO_DIR)
+
+# 플러그인 캐시는 원본의 복사본이고 원본을 따라오지 않는다(2026-08 실측: 4개월 낡음).
+# 마켓플레이스가 source=directory 라 캐시가 없으면 CC가 레포 원본을 직접 읽는다.
+# 그러니 만들지 않는 게 답이다 — 재생성되면 다음 make install 이 다시 지운다.
+_purge-plugin-cache:
+	@echo "=== Purge plugin cache ==="
+	@if [ -d "$(PLUGIN_CACHE)" ]; then \
+		rm -rf "$(PLUGIN_CACHE)"; \
+		echo "  - removed $(PLUGIN_CACHE)"; \
+	else \
+		echo "  = no cache (CC reads repo directly)"; \
+	fi
 
 _symlink-rules:
 	@echo "=== Symlink rules ==="
@@ -126,6 +139,14 @@ clean: ## Remove plugins + rules
 
 status: ## Show installation status
 	@$(MANAGE) status $(MARKETPLACE_KEY) $(PLUGINS)
+	@echo ""
+	@echo "=== Plugin cache ==="
+	@if [ -d "$(PLUGIN_CACHE)" ]; then \
+		echo "  x cache exists — stale copy shadows the repo. Run 'make install'"; \
+		ls "$(PLUGIN_CACHE)" | sed 's/^/    /'; \
+	else \
+		echo "  + none (CC reads repo directly)"; \
+	fi
 	@echo ""
 	@echo "=== Rules ==="
 	@for rule_file in $$(find rules -name '*.md' 2>/dev/null); do \
