@@ -7,6 +7,7 @@
 
 import os
 import sqlite3
+import time
 
 DEFAULT_DB = os.path.expanduser("~/.mabi-equipment-cost/data.db")
 
@@ -41,10 +42,17 @@ CREATE TABLE IF NOT EXISTS recipe_fetched (
     PRIMARY KEY (item_id, path)
 );
 
--- 내가 이미 가진 재료. 화면에서 통째로 갈아끼운다.
-CREATE TABLE IF NOT EXISTS inventory (
-    kind_id     INTEGER PRIMARY KEY,
-    qty         INTEGER NOT NULL
+-- 보유 재료는 여기 없다. 방문자의 브라우저 쿠키에 산다(inventory.py).
+-- 서버에 두면 여러 사람이 한 서버를 쓸 때 전원이 한 재고를 공유한다.
+
+-- 마지막으로 시세를 받아온 시각. 한 행만 유지한다.
+-- price_history로는 알 수 없다 — 같은 스냅샷은 중복 저장을 건너뛰므로,
+-- 원본이 새 값을 안 주는 동안에는 아무리 받아도 흔적이 안 남는다.
+CREATE TABLE IF NOT EXISTS collect_log (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    fetched_at  TEXT NOT NULL,
+    as_of       TEXT,
+    count       INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS price_history (
@@ -191,21 +199,23 @@ class Store:
             return [r["id"] for r in c.execute(q + " ORDER BY id", args)]
 
     # --- 보유 재료 -----------------------------------------------------------
+    #
+    # 재고 자체는 저장하지 않는다 — 브라우저 쿠키에 산다(inventory.py).
+    # 여기 있는 건 "무엇을 입력받을 수 있나"라는 목록뿐이고, 그건 모두에게 같다.
 
-    def save_inventory(self, owned):
-        """통째로 갈아끼운다. 병합하면 화면에서 지운 줄을 지울 방법이 없다."""
-        with self._conn() as c:
-            c.execute("DELETE FROM inventory")
-            c.executemany(
-                "INSERT INTO inventory (kind_id, qty) VALUES (?,?)", list(owned.items())
-            )
+    def take_legacy_inventory(self):
+        """재고를 서버에 두던 시절의 값을 꺼내고 테이블을 지운다.
 
-    def inventory(self):
+        한 번만 넘기면 되므로 꺼내는 즉시 없앤다 — 남겨 두면 다음 방문자가
+        남의 재고를 물려받는다.
+        """
         with self._conn() as c:
-            return {
-                r["kind_id"]: r["qty"]
-                for r in c.execute("SELECT kind_id, qty FROM inventory")
-            }
+            try:
+                rows = list(c.execute("SELECT kind_id, qty FROM inventory"))
+            except sqlite3.OperationalError:  # 이미 넘겼거나 처음부터 없었다
+                return {}
+            c.execute("DROP TABLE inventory")
+        return {r["kind_id"]: r["qty"] for r in rows if r["qty"] > 0}
 
     def material_index(self):
         """재료 이름 -> kind_id. 거래 불가 재료는 뺀다 — 보유를 적을 이유가 없다.
@@ -262,9 +272,58 @@ class Store:
                 for r in rows
             }
 
+    # --- 배포 -----------------------------------------------------------------
+
+    def export_seed(self, target):
+        """레시피·아이템만 담은 DB를 만든다. 시세 이력은 뺀다.
+
+        배포 이미지에 넣을 씨앗이다. 레시피는 상세 API 쿼터 때문에 새 환경에서
+        다시 받기 어렵다 — 76종을 39 + 37로 나눠 받는 데 몇 시간이 걸렸다.
+        시세는 쿼터가 없어 서버가 뜨고 3분 안에 채워지므로 들고 갈 이유가 없다.
+
+        재고 테이블이 남아 있어도 따라가지 않는다 — 실리면 방문자 전원이
+        그 재고를 물려받는다.
+        """
+        seed = Store(target)
+        seed.init()
+        c = seed._conn()
+        try:
+            c.execute("ATTACH DATABASE ? AS src", (self.path,))
+            with c:  # 트랜잭션만 연다 — 열린 채로는 DETACH가 안 된다
+                for table in ("items", "recipe_materials", "recipe_fetched"):
+                    c.execute(f"DELETE FROM {table}")
+                    c.execute(f"INSERT INTO {table} SELECT * FROM src.{table}")
+            c.execute("DETACH DATABASE src")
+        finally:
+            c.close()
+        return target
+
     def latest_as_of(self):
         with self._conn() as c:
             return c.execute("SELECT MAX(as_of) FROM price_history").fetchone()[0]
+
+    def mark_collected(self, as_of=None, count=0, at=None):
+        """시세를 받아온 사실을 남긴다. 마지막 한 번만 유지한다.
+
+        원본이 같은 스냅샷을 계속 줘도 여기는 갱신된다 — 그래야 "수집기가
+        멈췄나"와 "원본이 늦나"를 화면에서 가를 수 있다.
+        """
+        stamp = at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO collect_log (id, fetched_at, as_of, count)"
+                " VALUES (1,?,?,?)",
+                (stamp, as_of, count),
+            )
+        return stamp
+
+    def last_collected(self):
+        """{fetched_at, as_of, count} 또는 아직 한 번도 안 받았으면 None."""
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT fetched_at, as_of, count FROM collect_log WHERE id=1"
+            ).fetchone()
+        return dict(row) if row else None
 
     def price_history_count(self, kind_id):
         with self._conn() as c:

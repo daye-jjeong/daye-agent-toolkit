@@ -1,4 +1,4 @@
-"""새로고침 진행 상태.
+"""수집 상태 둘 — 버튼이 부른 수집과, 서버가 주기로 도는 수집.
 
 페이지가 진행바를 그리려면 지금 몇 건까지 받았는지 알아야 한다. 총 건수는
 받아 보기 전에는 모르므로, 직전 수집 건수를 추정치로 쓰고 넘으면 100%에서
@@ -59,3 +59,34 @@ class RefreshState:
                 "as_of": self._as_of,
                 "error": self._error,
             }
+
+
+class CollectorStatus:
+    """공개판 주기 수집기의 마지막 시도.
+
+    방문자는 서버 콘솔을 못 본다. 실패를 콘솔에만 적으면 화면은 낡은 값을
+    아무 말 없이 계속 보여주고, 신선도 띠가 임계를 넘는 15분 뒤에야 "낡았다"고
+    할 뿐 이유는 끝까지 안 나온다.
+
+    연속 실패 횟수를 함께 센다 — 한 번 튄 건지 계속 못 받고 있는 건지가
+    다르고, 방문자가 기다릴지 말지가 거기서 갈린다.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._error = None
+        self._failures = 0
+
+    def ok(self):
+        with self._lock:
+            self._error = None
+            self._failures = 0
+
+    def failed(self, message):
+        with self._lock:
+            self._error = str(message)
+            self._failures += 1
+
+    def snapshot(self):
+        with self._lock:
+            return {"error": self._error, "failures": self._failures}

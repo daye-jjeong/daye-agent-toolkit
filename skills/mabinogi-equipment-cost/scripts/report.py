@@ -92,10 +92,16 @@ def build_report(
     threshold_sec=DEFAULT_STALE_SEC,
     sort=DEFAULT_SORT,
     desc=None,
+    owned=None,
 ):
+    """저장소의 시세·레시피 + **호출자가 준 재고**로 표를 만든다.
+
+    재고를 저장소에서 읽지 않는 이유는 방문자마다 다르기 때문이다.
+    서버에 두면 여러 사람이 한 서버를 쓸 때 전원이 한 재고를 공유한다.
+    """
     items = [i for i in store.items() if i["tier"] in EQUIPMENT_TIERS]
     prices = store.latest_prices()
-    owned = store.inventory()
+    owned = owned or {}
     partners = echo_partners(items)
 
     # 행은 해연만이다. 잔영은 "잔영을 N개 사거나 만드는 길"로 이 표에 들어간다.
@@ -126,10 +132,18 @@ def build_report(
         rows[-1]["echo_name"] = mate["name"] if mate else None
 
     as_of = store.latest_as_of()
+    last = store.last_collected()
     return {
         "as_of": as_of,
         "freshness": (
-            freshness(as_of, now=now, threshold_sec=threshold_sec) if as_of else None
+            freshness(
+                as_of,
+                fetched_at=last["fetched_at"] if last else None,
+                now=now,
+                threshold_sec=threshold_sec,
+            )
+            if as_of
+            else None
         ),
         "echo_multiplier": echo_multiplier,
         "sort": sort,

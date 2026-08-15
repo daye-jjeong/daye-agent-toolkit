@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""로컬 비교 페이지.
+"""비교 페이지 서버.
 
-    python3 serve.py [포트] [DB경로] [신선도임계초]
+    python3 serve.py [포트] [DB경로] [신선도임계초] [--public]
+
+`--public`은 여러 사람이 쓰는 배포판이다 — `0.0.0.0`에 바인딩하고,
+새로고침 버튼을 끄고, 서버가 직접 주기 수집을 돈다. 버튼을 남겨 두면
+방문자마다 원본 API를 때려 서버 IP 하나로 요청이 몰린다.
 
 원가는 전부 `최저가 × 수량`이라 하한선이다. 페이지가 그 사실을 숨기지 않는다.
 """
@@ -10,14 +14,19 @@ import html
 import json
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from collect import collect_prices
+from collect import DEFAULT_INTERVAL, collect_prices
 from classify import group_materials
 from cost import DEFAULT_ECHO_MULTIPLIER, DEFAULT_STALE_SEC
-from inventory import parse_inventory_form
-from refresh import RefreshState
+from inventory import (
+    inventory_cookie_header,
+    parse_inventory_form,
+    read_inventory_cookie,
+)
+from refresh import CollectorStatus, RefreshState
 from report import build_report
 from store import DEFAULT_DB, Store
 
@@ -178,6 +187,20 @@ RELOAD_JS = """
         show('시작하지 못했다: ' + e, 0, true);
         btn.disabled = false;
       });
+  });
+})();
+
+// 시각은 UTC로 내려온다. 보는 사람의 시간대로 바꾼다.
+(function () {
+  document.querySelectorAll('time[datetime]').forEach(function (t) {
+    var d = new Date(t.dateTime);
+    if (isNaN(d)) return;
+    var hm = d.toLocaleTimeString([], {
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    t.textContent = t.hasAttribute('data-day')
+      ? d.toLocaleDateString([], { month: '2-digit', day: '2-digit' }) + ' ' + hm
+      : hm;
   });
 })();
 
@@ -412,26 +435,111 @@ def _inventory_form(materials, owned, rejected=0):
     )
 
 
+# 공개판은 서버가 주기로 받으므로 임계도 그 주기를 따라간다.
+PUBLIC_STALE_SEC = DEFAULT_INTERVAL * 5
+
+RELOAD_UI = (
+    '<button id="reload" type="button">새로고침</button>'
+    '<span id="prog"><span id="track"><span id="fill"></span></span>'
+    '<span id="ptext"></span></span>'
+)
+
+
+def _collector_bar(collector):
+    """주기 수집이 실패하고 있으면 그 사실과 이유를 띄운다.
+
+    방문자는 서버 콘솔을 못 본다. 아무 말 없이 낡은 값을 보여 주면 그게
+    최신인 줄 안다.
+    """
+    if not collector or not collector.get("error"):
+        return ""
+    streak = collector.get("failures", 1)
+    return (
+        '<div class="bar stale">시세 수집 실패'
+        f"{f' ({streak}번 연속)' if streak > 1 else ''} —"
+        f" {html.escape(str(collector['error']))}."
+        f" {DEFAULT_INTERVAL // 60}분 뒤 다시 시도한다</div>"
+    )
+
+
+def _clock(ts, age_sec=None):
+    """시각 한 칸. UTC로 적고 브라우저가 로컬 시각으로 바꾼다.
+
+    원본이 주는 값은 UTC다. `07:36`이라고만 쓰면 한국에서 보는 사람은 9시간
+    어긋난 걸 모른다. JS가 안 돌면 `07:36 UTC`가 그대로 남는다.
+    하루가 넘었으면 날짜를 붙인다.
+    """
+    text = str(ts)
+    parts = text.replace("Z", "").split("T")
+    if len(parts) != 2 or len(parts[1]) < 5:
+        return html.escape(text)  # 모양이 다르면 원문 그대로 — 지어내지 않는다
+    day, hhmm = parts[0], parts[1][:5]
+    over_a_day = age_sec is not None and age_sec >= 86400
+    label = f"{day[5:]} {hhmm}" if over_a_day else hhmm
+    return (
+        f'<time datetime="{html.escape(text)}"{" data-day" if over_a_day else ""}>'
+        f"{html.escape(label)} UTC</time>"
+    )
+
+
+def _ago(sec):
+    """ "3분 전". 큰 값은 시간·일로 접는다 — "1500분 전"은 눈으로 못 읽는다."""
+    minutes = sec // 60
+    if minutes < 120:
+        return f"{minutes}분 전"
+    if minutes < 2880:
+        return f"{minutes // 60}시간 전"
+    return f"{minutes // 1440}일 전"
+
+
+def _freshness_message(f, public):
+    """띠에 쓸 문장. 두 시계 중 무엇을 말할지가 여기서 갈린다.
+
+    경고는 "우리가 마지막으로 받은 게 언제인가"로 낸다. 원본 스냅샷 시각은
+    여기서 답이 아니다 — 원본이 늦는 건 우리가 못 고치고 방문자도 할 게 없다.
+    """
+    if f["stale"]:
+        # 공개판에서는 방문자가 수집기를 손댈 수 없다. 할 수 없는 일을 시키지 않는다.
+        why = "자동 갱신이 멈춘 것 같다" if public else "수집기가 멈췄는지 확인할 것"
+        limit = f"임계 {f['threshold_sec'] // 60}분을 넘었다"
+        if f.get("fetch_age_sec") is None:  # 수집 시각을 기록하기 전에 쌓인 DB
+            return (
+                f"시세 기준 {_clock(f['as_of'], f['age_sec'])}"
+                f" · {_ago(f['age_sec'])} — {limit}. {why}"
+            )
+        return (
+            f"마지막 수집 {_clock(f['fetched_at'], f['fetch_age_sec'])}"
+            f" · {_ago(f['fetch_age_sec'])} — {limit}. {why}"
+        )
+
+    out = f"시세 기준 {_clock(f['as_of'], f['age_sec'])} · {_ago(f['age_sec'])}"
+    if f.get("source_lagging"):
+        out += " · 원본이 그 뒤로 새 값을 안 준다"
+    if f.get("fetch_age_sec") is not None:
+        out += f" · {_clock(f['fetched_at'], f['fetch_age_sec'])}에 받음"
+    return out
+
+
 def render_html(
-    rep, show_recipe=False, show_echo_craft=False, materials=(), owned=None, rejected=0
+    rep,
+    show_recipe=False,
+    show_echo_craft=False,
+    materials=(),
+    owned=None,
+    rejected=0,
+    public=False,
+    collector=None,
 ):
     inv_form = _inventory_form(materials, owned or {}, rejected)
     f = rep["freshness"]
     if f is None:
         bar = '<div class="bar stale">시세를 아직 한 번도 받지 못했다</div>'
     else:
-        mins = f["age_sec"] // 60
         cls = "bar stale" if f["stale"] else "bar"
-        msg = f"시세 기준 {html.escape(str(f['as_of']))} · {mins}분 전" + (
-            f" — 임계 {f['threshold_sec'] // 60}분을 넘었다. 수집기가 멈췄는지 확인할 것"
-            if f["stale"]
-            else ""
-        )
+        msg = _freshness_message(f, public)
         bar = (
             f'<div class="{cls}"><span>{msg}</span>'
-            '<button id="reload" type="button">새로고침</button>'
-            '<span id="prog"><span id="track"><span id="fill"></span></span>'
-            '<span id="ptext"></span></span>'
+            f"{'' if public else RELOAD_UI}"
             '<form method="get" style="margin-left:auto">'
             f'<input type="hidden" name="recipe" value="{1 if show_recipe else 0}">'
             f'<label>잔영 배수 <input type="number" name="echo" min="1" max="99"'
@@ -553,7 +661,7 @@ def render_html(
 <li>무기는 <b>다른 잔영 10개 + 내 무기 1개</b>를 까면 해연 1개</li>
 <li>재료비는 <b>최저가 × 수량</b>이라 하한선 — 실제로는 이보다 비싸다</li>
 </ul>
-{bar}{pend}
+{bar}{_collector_bar(collector)}{pend}
 {inv_form}
 {toggles}
 <div class="wrap"><table><thead><tr>
@@ -587,10 +695,12 @@ def start_refresh(state, db_path):
     return True
 
 
-def make_handler(db_path, threshold_sec, state):
+def make_handler(db_path, threshold_sec, state, public=False, collector=None):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if urlparse(self.path).path == "/refresh/status":
+                if public:
+                    return self.send_error(404)
                 return self._json(state.snapshot())
 
             q = parse_qs(urlparse(self.path).query)
@@ -601,21 +711,31 @@ def make_handler(db_path, threshold_sec, state):
             sort = q.get("sort", ["saving"])[0]
             desc_raw = q.get("desc", [None])[0]
             desc = None if desc_raw is None else desc_raw not in ("0", "false", "no")
+
+            # 재고는 이 방문자의 쿠키에서만 온다. 서버는 아무것도 기억하지 않는다.
+            store = Store(db_path)
+            materials = store.material_index()
+            owned = read_inventory_cookie(
+                self.headers.get("Cookie"), set(materials.values())
+            )
+
+            # 재고를 서버에 두던 시절의 값이 남아 있으면 이 브라우저로 한 번 넘긴다.
+            # 공개판에서는 하지 않는다 — 첫 방문자가 남의 재고를 가져가 버린다.
+            handoff = store.take_legacy_inventory() if not owned and not public else {}
+            owned = owned or handoff
+
             rep = build_report(
-                Store(db_path),
+                store,
                 echo_multiplier=echo,
                 threshold_sec=threshold_sec,
                 sort=sort,
                 desc=desc,
+                owned=owned,
             )
 
             def flag(name):
                 return q.get(name, ["0"])[0] not in ("0", "false", "no")
 
-            show_recipe = flag("recipe")
-            show_echo_craft = flag("echo_craft")
-
-            store = Store(db_path)
             try:
                 rejected = int(q.get("rejected", ["0"])[0])
             except ValueError:
@@ -623,15 +743,19 @@ def make_handler(db_path, threshold_sec, state):
 
             page = render_html(
                 rep,
-                show_recipe=show_recipe,
-                show_echo_craft=show_echo_craft,
-                materials=sorted(store.material_index().items()),
-                owned=store.inventory(),
+                show_recipe=flag("recipe"),
+                show_echo_craft=flag("echo_craft"),
+                materials=sorted(materials.items()),
+                owned=owned,
                 rejected=rejected,
+                public=public,
+                collector=collector.snapshot() if collector else None,
             ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(page)))
+            if handoff:
+                self.send_header("Set-Cookie", inventory_cookie_header(handoff))
             self.end_headers()
             self.wfile.write(page)
 
@@ -645,18 +769,22 @@ def make_handler(db_path, threshold_sec, state):
 
         def do_POST(self):
             if urlparse(self.path).path == "/refresh":
+                # 공개판에서는 방문자마다 원본 API를 때리면 서버 IP 하나로 몰린다.
+                # 수집은 서버가 주기로 한 번만 한다.
+                if public:
+                    return self.send_error(404)
                 started = start_refresh(state, db_path)
                 return self._json({"started": started, **state.snapshot()})
 
             length = int(self.headers.get("Content-Length", 0))
             form = parse_qs(self.rfile.read(length).decode("utf-8"))
-            store = Store(db_path)
             owned, rejected = parse_inventory_form(
-                form, set(store.material_index().values())
+                form, set(Store(db_path).material_index().values())
             )
-            store.save_inventory(owned)
             self.send_response(303)
             self.send_header("Location", f"/?rejected={len(rejected)}")
+            # 재고는 이 브라우저에만 남는다. 서버는 다음 요청에서 쿠키로 되받는다.
+            self.send_header("Set-Cookie", inventory_cookie_header(owned))
             self.send_header("Content-Length", "0")  # 없으면 클라이언트가 끊긴다
             self.end_headers()
 
@@ -666,15 +794,65 @@ def make_handler(db_path, threshold_sec, state):
     return Handler
 
 
+def collect_once(store, status):
+    """시세 한 번. 실패해도 예외를 올리지 않고 status에 적는다.
+
+    콘솔 로그만 남기면 방문자는 못 본다 — 페이지 상단 띠가 이 status를 읽는다.
+    """
+    stamp = time.strftime("%H:%M:%S")
+    try:
+        n, as_of = collect_prices(store)
+        status.ok()
+        print(f"[{stamp}] 시세 {n}건 (기준 {as_of})", flush=True)
+        return True
+    except Exception as e:  # 네트워크·차단 등 — 조용히 삼키지 않는다
+        status.failed(f"{type(e).__name__}: {e}")
+        print(f"[{stamp}] 수집 실패: {type(e).__name__}: {e}", flush=True)
+        return False
+
+
+def price_loop(db_path, interval, status):
+    """공개판의 시세 갱신. 방문자 대신 서버가 주기로 받는다.
+
+    한 번 실패해도 멈추지 않는다 — 네트워크가 잠깐 끊겼다고 서버가 죽으면
+    페이지 전체가 사라진다. 실패는 화면 상단 띠로 올라간다.
+    """
+    store = Store(db_path)
+    while True:
+        collect_once(store, status)
+        time.sleep(interval)
+
+
 def main(argv):
-    port = int(argv[1]) if len(argv) > 1 else 8765
-    db = argv[2] if len(argv) > 2 else DEFAULT_DB
-    threshold = int(argv[3]) if len(argv) > 3 else DEFAULT_STALE_SEC
+    public = "--public" in argv
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    port = int(args[0]) if args else 8765
+    db = args[1] if len(args) > 1 else DEFAULT_DB
+    # 공개판은 3분마다 받으므로 임계도 따라 내려온다. 30분이면 열 번 연속
+    # 실패해야 경고가 뜬다 — 멈춘 걸 화면으로 알아채는 게 임계의 목적이다.
+    fallback = PUBLIC_STALE_SEC if public else DEFAULT_STALE_SEC
+    threshold = int(args[2]) if len(args) > 2 else fallback
     Store(db).init()
-    print(f"http://localhost:{port}  (DB {db}, 신선도 임계 {threshold // 60}분)")
-    handler = make_handler(db, threshold, RefreshState())
+
+    host = "0.0.0.0" if public else "127.0.0.1"
+    collector = CollectorStatus() if public else None
+    if public:
+        threading.Thread(
+            target=price_loop, args=(db, DEFAULT_INTERVAL, collector), daemon=True
+        ).start()
+        print(
+            f"공개판 :{port} — 새로고침 버튼 없음,"
+            f" 시세는 서버가 {DEFAULT_INTERVAL // 60}분마다 받는다"
+            f" (DB {db}, 신선도 임계 {threshold // 60}분)"
+        )
+    else:
+        print(f"http://localhost:{port}  (DB {db}, 신선도 임계 {threshold // 60}분)")
+
+    handler = make_handler(
+        db, threshold, RefreshState(), public=public, collector=collector
+    )
     # 수집이 도는 동안에도 진행 상태를 물어볼 수 있어야 한다
-    ThreadingHTTPServer(("127.0.0.1", port), handler).serve_forever()
+    ThreadingHTTPServer((host, port), handler).serve_forever()
 
 
 if __name__ == "__main__":

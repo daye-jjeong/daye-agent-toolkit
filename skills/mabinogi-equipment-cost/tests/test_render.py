@@ -550,3 +550,81 @@ def test_clearing_does_not_submit_on_its_own():
     btn = re.search(r'<button id="clear-inv"[^>]*>', html_).group()
     assert 'type="button"' in btn      # submit이 아니다
     assert "clear-inv" in html_.split("<script>")[1]   # JS가 칸만 채운다
+
+
+# --- 수집 실패는 화면까지 올라온다 ----------------------------------------------
+#
+# 공개판 방문자는 서버 콘솔을 못 본다. 신선도 띠는 임계(15분)를 넘어야 뜨고,
+# 떠도 "낡았다"만 말한다 — 왜인지가 빠지면 고칠 수가 없다.
+
+
+def test_collector_failure_shows_the_reason():
+    html_ = render_html(
+        _rep(), public=True, collector={"error": "URLError: timed out", "failures": 3}
+    )
+    assert "URLError: timed out" in html_
+    assert "3번" in html_
+
+
+def test_healthy_collector_says_nothing():
+    html_ = render_html(_rep(), public=True, collector={"error": None, "failures": 0})
+    assert "수집 실패" not in html_
+
+
+def test_no_collector_status_says_nothing():
+    """로컬판에는 주기 수집기가 없다."""
+    assert "수집 실패" not in render_html(_rep())
+
+
+# --- 원본이 늦는 것과 우리가 멈춘 것을 화면에서 가른다 --------------------------
+
+
+def _fresh(**over):
+    f = {
+        "as_of": "2026-08-15T07:35:00Z",
+        "age_sec": 180,
+        "fetched_at": "2026-08-15T07:36:00Z",
+        "fetch_age_sec": 120,
+        "stale": False,
+        "source_lagging": False,
+        "threshold_sec": 900,
+    }
+    f.update(over)
+    return _rep(freshness=f)
+
+
+def test_normal_bar_shows_when_we_fetched_it():
+    html_ = render_html(_fresh())
+    assert "07:36 UTC</time>에 받음" in html_
+    assert "stale" not in html_.split("<body>")[1].split("</div>")[0]
+
+
+def test_lagging_source_is_stated_not_warned():
+    """원본이 새 값을 안 주는 건 우리 잘못이 아니다 — 노란 경고를 띄우지 않는다."""
+    html_ = render_html(
+        _fresh(as_of="2026-08-15T07:14:00Z", age_sec=1440, source_lagging=True)
+    )
+    assert "원본이 그 뒤로 새 값을 안 준다" in html_
+    assert "07:36 UTC</time>에 받음" in html_
+    bar = html_.split('<div class="bar')[1]
+    assert not bar.startswith(" stale")
+
+
+def test_a_stopped_collector_warns_with_the_fetch_time():
+    """경고는 받은 시각을 말한다 — 원본 시각은 여기서 답이 아니다."""
+    html_ = render_html(
+        _fresh(fetched_at="2026-08-15T07:10:00Z", fetch_age_sec=1680, stale=True)
+    )
+    assert "마지막 수집" in html_
+    assert "07:10" in html_
+    assert "수집기가 멈췄는지 확인할 것" in html_
+    assert 'class="bar stale"' in html_
+
+
+def test_old_databases_without_a_fetch_time_still_render():
+    """수집 시각을 기록하기 전에 쌓인 DB."""
+    html_ = render_html(
+        _fresh(fetched_at=None, fetch_age_sec=None, age_sec=4380, stale=True)
+    )
+    assert "에 받음" not in html_
+    assert 'class="bar stale"' in html_

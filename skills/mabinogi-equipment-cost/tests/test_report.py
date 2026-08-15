@@ -206,7 +206,7 @@ def test_only_haeyeon_becomes_a_row(db):
 
 def test_row_carries_both_echo_paths(db):
     row = build_report(db, now="2026-08-14T16:20:00Z", echo_multiplier=10)["rows"][0]
-    assert row["echo_buy"]["total"] == 1270 * 10        # 잔영 시세 × 10
+    assert row["echo_buy"]["total"] == 1270 * 10  # 잔영 시세 × 10
     assert row["echo_craft"]["total"] == 103 * 10 * 10  # 잔영 제작비(1,030) × 10
     assert row["echo_name"] == "잔영의 커브드 하프ZZ"
 
@@ -227,21 +227,54 @@ def test_verdict_weighs_all_four(db):
     assert row["cheapest"]["price"] == 8240
 
 
+def test_inventory_comes_from_the_caller_not_the_store(db):
+    """재고는 방문자마다 다르다. 저장소에서 읽으면 전원이 한 재고를 공유한다."""
+    plain = build_report(db, now="2026-08-14T16:20:00Z")
+    assert plain["has_inventory"] is False
+    assert plain["rows"][0]["normal"]["out_of_pocket"] == 103 * 80
+
+    mine = build_report(db, now="2026-08-14T16:20:00Z", owned={100: 30})
+    assert mine["has_inventory"] is True
+    assert mine["rows"][0]["normal"]["out_of_pocket"] == 103 * 50
+    assert mine["rows"][0]["normal"]["total"] == 103 * 80  # 판정은 전체 시세 그대로
+
+
+def test_one_visitors_inventory_does_not_leak_into_anothers(db):
+    a = build_report(db, now="2026-08-14T16:20:00Z", owned={100: 80})
+    b = build_report(db, now="2026-08-14T16:20:00Z", owned={})
+    assert a["rows"][0]["normal"]["out_of_pocket"] == 0
+    assert b["rows"][0]["normal"]["out_of_pocket"] == 103 * 80
+
+
 def test_partnerless_haeyeon_still_gets_a_row(db):
     """짝이 되는 잔영이 없으면 잔영 두 길만 빈다 — 행과 나머지 값은 살아 있다."""
     db.save_items(
         [
-            {"id": 8, "name": "해연의 짝없는 검ZZ", "kind_id": 8, "tier": "해연",
-             "base_name": "짝없는 검ZZ", "category": "Weapon", "can_trade": True}
+            {
+                "id": 8,
+                "name": "해연의 짝없는 검ZZ",
+                "kind_id": 8,
+                "tier": "해연",
+                "base_name": "짝없는 검ZZ",
+                "category": "Weapon",
+                "can_trade": True,
+            }
         ]
     )
     db.save_prices(
-        [{"kind_id": 8, "name": "해연의 짝없는 검ZZ", "min_price": 500,
-          "total_count": 3}],
+        [
+            {
+                "kind_id": 8,
+                "name": "해연의 짝없는 검ZZ",
+                "min_price": 500,
+                "total_count": 3,
+            }
+        ],
         as_of=AS_OF,
     )
     row = next(
-        r for r in build_report(db, now="2026-08-14T16:20:00Z")["rows"]
+        r
+        for r in build_report(db, now="2026-08-14T16:20:00Z")["rows"]
         if r["item_id"] == 8
     )
     assert row["market"]["price"] == 500

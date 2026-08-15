@@ -286,17 +286,39 @@ def _parse(ts):
     return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
 
 
-def freshness(as_of, now=None, threshold_sec=DEFAULT_STALE_SEC):
-    """시세 기준 시각의 신선도.
+def freshness(as_of, fetched_at=None, now=None, threshold_sec=DEFAULT_STALE_SEC):
+    """시세가 얼마나 낡았나 — 시계 둘을 따로 잰다.
 
-    수집기가 죽어도 페이지는 멀쩡한 숫자를 계속 보여준다.
-    보는 순간 낡았다는 게 눈에 들어와야 한다.
+    `as_of`는 원본이 스냅샷을 찍은 시각이고, `fetched_at`은 우리가 마지막으로
+    받아온 시각이다. 둘은 다른 질문에 답한다.
+
+    - 수집기가 살아 있나 → `fetched_at`. 낡으면 우리 잘못이라 경고한다(`stale`)
+    - 원본이 새 값을 주고 있나 → `as_of`. 우리가 어쩔 수 없다(`source_lagging`)
+
+    한 값으로 뭉치면 멀쩡한 수집기가 멈춘 것처럼 보인다. 실측에서 원본 기준
+    시각이 07:14에서 07:35까지 21분간 안 바뀌었고, 그 사이 수집기는 3분마다
+    일곱 번 받았다 — 매번 원본이 "최신은 07:14"라고 답했을 뿐이다.
+
+    `fetched_at`을 모르면(그걸 기록하기 전에 쌓인 DB) 예전처럼 `as_of`로
+    판정한다.
     """
     now_dt = datetime.now(timezone.utc) if now is None else _parse(now)
-    age = int((now_dt - _parse(as_of)).total_seconds())
+    source_age = int((now_dt - _parse(as_of)).total_seconds())
+    fetch_age = (
+        None
+        if fetched_at is None
+        else int((now_dt - _parse(fetched_at)).total_seconds())
+    )
+    stale = (source_age if fetch_age is None else fetch_age) > threshold_sec
     return {
         "as_of": as_of,
-        "age_sec": age,
-        "stale": age > threshold_sec,
+        "age_sec": source_age,
+        "fetched_at": fetched_at,
+        "fetch_age_sec": fetch_age,
+        "stale": stale,
+        # 경고가 이미 떠 있으면 같은 말을 두 번 하지 않는다
+        "source_lagging": (
+            fetch_age is not None and not stale and source_age > threshold_sec
+        ),
         "threshold_sec": threshold_sec,
     }

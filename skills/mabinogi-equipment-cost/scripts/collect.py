@@ -4,11 +4,13 @@
     python3 collect.py items      아이템 목록 (1회면 충분)
     python3 collect.py prices     시세 1회
     python3 collect.py recipes    레시피 — 쿼터에 걸리면 멈추고 받은 만큼 유지
-    python3 collect.py loop       시세를 주기(기본 600초)로 갱신
+    python3 collect.py loop       시세를 주기(기본 180초)로 갱신
+    python3 collect.py seed       배포용 씨앗 DB (레시피·아이템만)
 
 시세 API는 쿼터가 없고 상세 API에만 걸린다. 그래서 둘의 주기가 다르다.
 """
 
+import os
 import sys
 import time
 
@@ -18,7 +20,9 @@ import normalize
 from store import DEFAULT_DB, Store
 
 TIERS = ("해연", "잔영")
-DEFAULT_INTERVAL = 600
+# 3분. 실측에서 원본 기준 시각이 1분 만에도 바뀌었다 — 10분이면 그 사이를 흘린다.
+# 시세 API는 쿼터가 없고 1,226건에 1.7초라 이 정도는 부담이 아니다.
+DEFAULT_INTERVAL = 180
 
 
 def collect_items(store):
@@ -39,10 +43,11 @@ def collect_prices(store, on_page=None):
     rows = api.fetch_prices(on_page=on_page)
     prices = normalize.normalize_prices(rows)
     as_of = max((p["as_of"] for p in prices.values() if p["as_of"]), default=None)
-    store.save_prices(
-        [{"kind_id": k, **v} for k, v in prices.items()],
-        as_of=as_of or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    )
+    stamp = as_of or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    store.save_prices([{"kind_id": k, **v} for k, v in prices.items()], as_of=stamp)
+    # 받아온 사실을 따로 남긴다. 원본이 같은 스냅샷을 계속 줘도 이건 갱신된다 —
+    # 그래야 "수집기가 멈췄나"와 "원본이 늦나"를 화면에서 가를 수 있다.
+    store.mark_collected(as_of=stamp, count=len(prices))
     return len(prices), as_of
 
 
@@ -129,6 +134,11 @@ def main(argv):
         filled = collect_materials(store)
         if filled:
             print(f"재료 {filled}종의 거래 가능 여부를 채웠다")
+    elif cmd == "seed":
+        target = argv[3] if len(argv) > 3 else "seed.db"
+        store.export_seed(target)
+        kb = os.path.getsize(target) // 1024
+        print(f"씨앗 {target} ({kb}KB) — 레시피·아이템만. 시세는 배포처가 직접 받는다")
     elif cmd == "loop":
         interval = int(argv[3]) if len(argv) > 3 else DEFAULT_INTERVAL
         while True:

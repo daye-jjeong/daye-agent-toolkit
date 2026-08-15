@@ -9,5 +9,6 @@ __pycache__/
 .worktrees/
 codex/work-digest/session_logger_state.json
 mcp/life-dashboard/data.db*
+skills/mabinogi-equipment-cost/deploy/seed.db
 .pytest_cache/
 .ruff_cache/

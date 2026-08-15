@@ -147,19 +147,76 @@ def test_stale_snapshot_is_flagged():
     assert bad["age_sec"] == 4380
 
 
+# --- 원본이 늦는 것과 우리가 멈춘 것은 다르다 ----------------------------------
+#
+# 실측: 원본 기준 시각이 07:14에서 07:35까지 21분간 안 바뀌었다. 그 사이
+# 수집기는 3분마다 일곱 번 받았고 매번 원본이 "최신은 07:14"라고 답했다.
+
+
+def test_lagging_source_is_not_our_failure():
+    """받은 지 2분밖에 안 됐으면 경고하지 않는다 — 우리 쪽은 멀쩡하다."""
+    f = freshness(
+        "2026-08-15T07:14:00Z",
+        fetched_at="2026-08-15T07:36:00Z",
+        now="2026-08-15T07:38:00Z",
+        threshold_sec=900,
+    )
+    assert f["stale"] is False  # 노란 경고를 띄우지 않는다
+    assert f["source_lagging"] is True  # 대신 원본이 늦는다고 말한다
+    assert f["age_sec"] == 1440  # 원본 스냅샷은 24분 전
+    assert f["fetch_age_sec"] == 120  # 우리가 받은 건 2분 전
+
+
+def test_a_stopped_collector_is_flagged():
+    """받은 지 오래면 그게 경고다 — 원본 시각이 아니라."""
+    f = freshness(
+        "2026-08-15T07:14:00Z",
+        fetched_at="2026-08-15T07:10:00Z",
+        now="2026-08-15T07:38:00Z",
+        threshold_sec=900,
+    )
+    assert f["stale"] is True
+    assert f["source_lagging"] is False  # 경고와 겹쳐 두 번 말하지 않는다
+    assert f["fetch_age_sec"] == 1680
+
+
+def test_fresh_on_both_clocks_says_nothing():
+    f = freshness(
+        "2026-08-15T07:35:00Z",
+        fetched_at="2026-08-15T07:36:00Z",
+        now="2026-08-15T07:38:00Z",
+        threshold_sec=900,
+    )
+    assert f["stale"] is False
+    assert f["source_lagging"] is False
+
+
+def test_without_a_collection_time_it_judges_by_the_source():
+    """수집 시각을 기록하기 전에 쌓인 DB도 그대로 읽힌다."""
+    f = freshness("2026-08-15T07:14:00Z", now="2026-08-15T07:38:00Z", threshold_sec=900)
+    assert f["stale"] is True
+    assert f["fetch_age_sec"] is None
+    assert f["source_lagging"] is False
+
+
 # --- 판정: 해연 1개를 얻는 네 가지 길 -----------------------------------------
 
 ECHO = dict(echo_kind_id=fx.JANYEONG_KIND, echo_normal=fx.JANYEONG_HARP_NORMAL)
 
 
 def test_four_paths_are_priced_side_by_side():
-    row = build_row(**BASE, prices=fx.PRICES, recipe=fx.HAEYEON_HARP_WITH_RECIPE,
-                    echo_multiplier=10, **ECHO)
-    assert row["market"]["price"] == 23174          # 해연 구매
-    assert row["normal"]["total"] == 15165          # 해연 제작
-    assert row["echo_buy"]["total"] == 12700        # 잔영 10개 구매
-    assert row["echo_craft"]["total"] == 25930      # 잔영 10개 제작
-    assert row["recipe"]["total"] == 8322           # 레시피 제작(조건부, 후보 아님)
+    row = build_row(
+        **BASE,
+        prices=fx.PRICES,
+        recipe=fx.HAEYEON_HARP_WITH_RECIPE,
+        echo_multiplier=10,
+        **ECHO,
+    )
+    assert row["market"]["price"] == 23174  # 해연 구매
+    assert row["normal"]["total"] == 15165  # 해연 제작
+    assert row["echo_buy"]["total"] == 12700  # 잔영 10개 구매
+    assert row["echo_craft"]["total"] == 25930  # 잔영 10개 제작
+    assert row["recipe"]["total"] == 8322  # 레시피 제작(조건부, 후보 아님)
 
 
 def test_cheapest_of_the_four_wins():
@@ -179,8 +236,13 @@ def test_janyeong_craft_is_dearer_than_buying_it():
 
 def test_recipe_path_never_wins_the_verdict():
     """레시피 제작은 조건부라 판정 후보가 아니다 — 가장 싼 값인데도."""
-    row = build_row(**BASE, prices=fx.PRICES, recipe=fx.HAEYEON_HARP_WITH_RECIPE,
-                    echo_multiplier=10, **ECHO)
+    row = build_row(
+        **BASE,
+        prices=fx.PRICES,
+        recipe=fx.HAEYEON_HARP_WITH_RECIPE,
+        echo_multiplier=10,
+        **ECHO,
+    )
     assert row["recipe"]["total"] < row["cheapest"]["price"]
     assert row["verdict"] != "recipe"
 
@@ -225,11 +287,12 @@ def test_no_verdict_when_nothing_is_computable():
 
 # --- 보유 재료: 전체 시세와 실지출을 나란히 ------------------------------------
 
+
 def test_owning_material_lowers_out_of_pocket_only():
     """보유분은 실지출에서만 빠진다. 전체 시세는 그대로다 — 그 재료도 팔 수 있다."""
     owned = {281479538461834: 80}  # 망령의 영혼석 80개 = 필요량 전부
     row = build_row(**BASE, prices=fx.PRICES, owned=owned)
-    assert row["normal"]["total"] == fx.NORMAL_TOTAL          # 15,165 불변
+    assert row["normal"]["total"] == fx.NORMAL_TOTAL  # 15,165 불변
     assert row["normal"]["out_of_pocket"] == fx.NORMAL_TOTAL - 8240
 
 
@@ -256,7 +319,7 @@ def test_holdings_open_a_cheaper_path():
     plain = build_row(**BASE, prices=fx.PRICES, echo_multiplier=10, **ECHO)
     held = build_row(**BASE, prices=fx.PRICES, echo_multiplier=10, owned=owned, **ECHO)
     assert plain["verdict"] == "echo_buy"
-    assert held["verdict"] == "craft_oop"      # 재료가 다 있으면 만드는 게 공짜에 가깝다
+    assert held["verdict"] == "craft_oop"  # 재료가 다 있으면 만드는 게 공짜에 가깝다
     assert held["cheapest"]["price"] == 0
 
 
@@ -323,9 +386,10 @@ def test_untradable_material_is_not_a_shortage_warning():
 
 # --- 실 제작도 판정 후보 -------------------------------------------------------
 
+
 def test_out_of_pocket_craft_can_win():
     """재고를 넣었으면 그 값으로도 겨룬다 — 실제로 나가는 돈이 그거다."""
-    owned = {281479538461834: 80}      # 망령의 영혼석 전부 보유 → 실지출 6,925
+    owned = {281479538461834: 80}  # 망령의 영혼석 전부 보유 → 실지출 6,925
     row = build_row(**BASE, prices=fx.PRICES, echo_multiplier=10, owned=owned, **ECHO)
     assert row["verdict"] == "craft_oop"
     assert row["cheapest"]["price"] == fx.NORMAL_TOTAL - 8240
@@ -333,7 +397,7 @@ def test_out_of_pocket_craft_can_win():
 
 
 def test_echo_still_wins_when_it_is_cheaper_than_out_of_pocket():
-    owned = {281479782081111: 5}        # 특급 목재만 조금 → 실지출 14,435
+    owned = {281479782081111: 5}  # 특급 목재만 조금 → 실지출 14,435
     row = build_row(**BASE, prices=fx.PRICES, echo_multiplier=10, owned=owned, **ECHO)
     assert row["verdict"] == "echo_buy"  # 12,700 < 14,435
 
