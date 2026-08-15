@@ -788,8 +788,17 @@ def make_handler(db_path, threshold_sec, state, public=False, collector=None):
             self.send_header("Content-Length", "0")  # 없으면 클라이언트가 끊긴다
             self.end_headers()
 
-        def log_message(self, *a):
-            pass
+        def log_message(self, fmt, *args):
+            """공개판만 요청을 남긴다 — 몇 번 열렸는지 세려면 필요하다.
+
+            로컬은 볼 사람이 하나라 콘솔만 시끄럽다.
+
+            남는 주소는 늘 `127.0.0.1`이다. 터널 뒤라 서버가 보는 게 그것뿐이고,
+            진짜 방문자 IP는 `CF-Connecting-IP` 헤더에 있다 — 읽지 않는다.
+            그래서 이 로그로는 누가 왔는지 알 수 없다.
+            """
+            if public:
+                super().log_message(fmt, *args)
 
     return Handler
 

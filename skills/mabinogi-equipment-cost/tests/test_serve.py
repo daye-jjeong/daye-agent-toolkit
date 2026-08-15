@@ -225,3 +225,39 @@ def test_a_recovered_collector_stops_warning(db_path):
         assert "시세 수집 실패" not in page
     finally:
         httpd.shutdown()
+
+
+# --- 접속 기록 -----------------------------------------------------------------
+
+
+def test_public_server_records_requests(db_path, capfd):
+    """몇 번 열렸는지 세려면 요청이 로그에 남아야 한다."""
+    httpd, client = _start(db_path, public=True)
+    try:
+        client("GET", "/")
+    finally:
+        httpd.shutdown()
+    assert "GET /" in capfd.readouterr().err
+
+
+def test_local_server_stays_quiet(db_path, capfd):
+    """로컬에서는 콘솔이 시끄럽다 — 볼 사람이 나 하나다."""
+    httpd, client = _start(db_path)
+    try:
+        client("GET", "/")
+    finally:
+        httpd.shutdown()
+    assert "GET /" not in capfd.readouterr().err
+
+
+def test_the_real_visitor_ip_is_not_recorded(db_path, capfd):
+    """터널 뒤라 client_address는 127.0.0.1이다. CF-Connecting-IP는 읽지 않는다."""
+    httpd, client = _start(db_path, public=True)
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
+        conn.request("GET", "/", None, {"CF-Connecting-IP": "203.0.113.42"})
+        conn.getresponse().read()
+        conn.close()
+    finally:
+        httpd.shutdown()
+    assert "203.0.113.42" not in capfd.readouterr().err
