@@ -628,3 +628,10 @@ def test_old_databases_without_a_fetch_time_still_render():
     )
     assert "에 받음" not in html_
     assert 'class="bar stale"' in html_
+
+
+def test_intro_explains_what_the_minus_number_is_measured_against():
+    """"−6,861"만 있으면 뭐 대비인지 알 수 없다 — 실제로 그 질문이 나왔다."""
+    html_ = render_html(_rep())
+    intro = html_.split('<ul class="intro">')[1].split("</ul>")[0]
+    assert "해연 구매가" in intro

@@ -660,6 +660,7 @@ def render_html(
 <li><b>해연 1개 = 잔영 11개</b>를 감정</li>
 <li>무기는 <b>다른 잔영 10개 + 내 무기 1개</b>를 까면 해연 1개</li>
 <li>재료비는 <b>최저가 × 수량</b>이라 하한선 — 실제로는 이보다 비싸다</li>
+<li>가장 싼 길의 <b>−금액</b>은 <b>해연 구매가</b>보다 얼마나 아끼는지</li>
 </ul>
 {bar}{_collector_bar(collector)}{pend}
 {inv_form}
