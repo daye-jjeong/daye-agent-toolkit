@@ -1,0 +1,102 @@
+{
+ "id": 16055,
+ "item_type": "equipment",
+ "market_kind_id": null,
+ "name": "해연의 커브드 하프ZZ",
+ "category": "Weapon",
+ "can_trade": true,
+ "attributes": {
+  "crafting": {
+   "made_by": [
+    {
+     "skillLevel": 19,
+     "ingredients": [
+      {
+       "name": "특급 목재",
+       "count": 5,
+       "itemType": "consumable",
+       "itemId": 9421
+      },
+      {
+       "name": "백금강괴",
+       "count": 5,
+       "itemType": "consumable",
+       "itemId": 9395
+      },
+      {
+       "name": "허상의 마력석",
+       "count": 15,
+       "itemType": "consumable",
+       "itemId": 9285
+      },
+      {
+       "name": "망령의 영혼석",
+       "count": 80,
+       "itemType": "consumable",
+       "itemId": 9283
+      },
+      {
+       "name": "야생의 영혼석",
+       "count": 75,
+       "itemType": "consumable",
+       "itemId": 9279
+      },
+      {
+       "name": "파동의 영혼석",
+       "count": 90,
+       "itemType": "consumable",
+       "itemId": 9282
+      }
+     ]
+    },
+    {
+     "skillLevel": 19,
+     "ingredients": [
+      {
+       "name": "레시피: 해연의 커브드 하프ZZ",
+       "count": 1,
+       "itemType": "consumable",
+       "itemId": 10075
+      },
+      {
+       "name": "특급 목재",
+       "count": 5,
+       "itemType": "consumable",
+       "itemId": 9421
+      },
+      {
+       "name": "백금강괴",
+       "count": 5,
+       "itemType": "consumable",
+       "itemId": 9395
+      },
+      {
+       "name": "허상의 마력석",
+       "count": 8,
+       "itemType": "consumable",
+       "itemId": 9285
+      },
+      {
+       "name": "망령의 영혼석",
+       "count": 40,
+       "itemType": "consumable",
+       "itemId": 9283
+      },
+      {
+       "name": "야생의 영혼석",
+       "count": 38,
+       "itemType": "consumable",
+       "itemId": 9279
+      },
+      {
+       "name": "파동의 영혼석",
+       "count": 45,
+       "itemType": "consumable",
+       "itemId": 9282
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
