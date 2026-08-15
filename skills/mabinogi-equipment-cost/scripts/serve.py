@@ -482,6 +482,26 @@ def _clock(ts, age_sec=None):
     )
 
 
+LOG_FIELD_LIMIT = 200
+
+
+def log_safe(text, limit=LOG_FIELD_LIMIT):
+    """방문자가 보낸 값을 로그 한 줄에 넣을 수 있게 다듬는다.
+
+    셋을 처리한다.
+
+    - HTTP 헤더는 latin-1로 디코딩돼 들어온다. UTF-8을 보낸 클라이언트의 값은
+      되돌려 읽어야 글자가 안 깨진다
+    - 제어문자를 지운다. 안 그러면 방문자가 User-Agent로 가짜 로그 줄을 만든다
+    - 길이를 자른다. 5,000자짜리 User-Agent로 로그를 부풀리는 걸 막는다
+    """
+    try:
+        text = text.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass  # 원래 UTF-8이 아니었다 — 있는 그대로 쓴다
+    return "".join(c for c in text if c.isprintable())[:limit] or "-"
+
+
 def _ago(sec):
     """ "3분 전". 큰 값은 시간·일로 접는다 — "1500분 전"은 눈으로 못 읽는다."""
     minutes = sec // 60
@@ -789,17 +809,32 @@ def make_handler(db_path, threshold_sec, state, public=False, collector=None):
             self.send_header("Content-Length", "0")  # 없으면 클라이언트가 끊긴다
             self.end_headers()
 
-        def log_message(self, fmt, *args):
-            """공개판만 요청을 남긴다 — 몇 번 열렸는지 세려면 필요하다.
+        def address_string(self):
+            """방문자 주소. 터널 뒤라 소켓에는 늘 `127.0.0.1`만 보인다.
 
-            로컬은 볼 사람이 하나라 콘솔만 시끄럽다.
-
-            남는 주소는 늘 `127.0.0.1`이다. 터널 뒤라 서버가 보는 게 그것뿐이고,
-            진짜 방문자 IP는 `CF-Connecting-IP` 헤더에 있다 — 읽지 않는다.
-            그래서 이 로그로는 누가 왔는지 알 수 없다.
+            진짜 IP는 Cloudflare가 `CF-Connecting-IP`에 넣어 준다. 터널 없이
+            띄우면 그 헤더가 없으므로 소켓 주소로 떨어진다.
             """
-            if public:
-                super().log_message(fmt, *args)
+            headers = getattr(self, "headers", None)
+            forwarded = headers.get("CF-Connecting-IP") if headers else None
+            # 이 헤더는 방문자가 아니라 Cloudflare가 넣는다. 그래도 다듬는다 —
+            # 터널 없이 띄우면 아무나 위조할 수 있다.
+            return log_safe(forwarded, 45) if forwarded else self.client_address[0]
+
+        def log_message(self, fmt, *args):
+            """공개판만 요청을 남긴다. 로컬은 볼 사람이 하나라 콘솔만 시끄럽다.
+
+            User-Agent를 함께 적는다 — 이게 없으면 링크 미리보기 봇이 한꺼번에
+            긁은 것과 사람이 여럿 들어온 것을 가를 수 없다.
+            """
+            if not public:
+                return
+            headers = getattr(self, "headers", None)
+            agent = log_safe((headers.get("User-Agent") if headers else None) or "-")
+            sys.stderr.write(
+                f"{self.address_string()} [{self.log_date_time_string()}] "
+                f'{log_safe(fmt % args, 300)} "{agent}"\n'
+            )
 
     return Handler
 

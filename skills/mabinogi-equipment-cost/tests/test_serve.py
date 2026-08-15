@@ -250,14 +250,72 @@ def test_local_server_stays_quiet(db_path, capfd):
     assert "GET /" not in capfd.readouterr().err
 
 
-def test_the_real_visitor_ip_is_not_recorded(db_path, capfd):
-    """터널 뒤라 client_address는 127.0.0.1이다. CF-Connecting-IP는 읽지 않는다."""
+def _visit(httpd, headers):
+    conn = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
+    conn.request("GET", "/", None, headers)
+    conn.getresponse().read()
+    conn.close()
+
+
+def test_the_real_visitor_ip_is_recorded(db_path, capfd):
+    """터널 뒤라 client_address는 늘 127.0.0.1이다 — 진짜 IP는 이 헤더에 있다."""
     httpd, client = _start(db_path, public=True)
     try:
-        conn = http.client.HTTPConnection("127.0.0.1", httpd.server_port, timeout=5)
-        conn.request("GET", "/", None, {"CF-Connecting-IP": "203.0.113.42"})
-        conn.getresponse().read()
-        conn.close()
+        _visit(httpd, {"CF-Connecting-IP": "203.0.113.42"})
     finally:
         httpd.shutdown()
-    assert "203.0.113.42" not in capfd.readouterr().err
+    assert "203.0.113.42" in capfd.readouterr().err
+
+
+def test_the_user_agent_is_recorded(db_path, capfd):
+    """링크 미리보기 봇과 사람을 가르려면 이게 있어야 한다."""
+    httpd, client = _start(db_path, public=True)
+    try:
+        _visit(httpd, {"User-Agent": "TelegramBot (like TwitterBot)"})
+    finally:
+        httpd.shutdown()
+    assert "TelegramBot" in capfd.readouterr().err
+
+
+def test_without_the_header_it_falls_back_to_the_socket_address(db_path, capfd):
+    """터널 없이 로컬에서 --public으로 띄운 경우."""
+    httpd, client = _start(db_path, public=True)
+    try:
+        _visit(httpd, {})
+    finally:
+        httpd.shutdown()
+    assert "127.0.0.1" in capfd.readouterr().err
+
+
+def test_a_utf8_user_agent_stays_readable(db_path, capfd):
+    """헤더는 latin-1로 디코딩돼 들어온다 — 되돌려 읽지 않으면 깨진다."""
+    httpd, client = _start(db_path, public=True)
+    try:
+        # curl이 하듯 UTF-8 바이트로 보낸다 — http.client는 str을 latin-1로 인코딩한다
+        _visit(httpd, {"User-Agent": "확인용-curl".encode("utf-8")})
+    finally:
+        httpd.shutdown()
+    assert "확인용-curl" in capfd.readouterr().err
+
+
+def test_a_crafted_user_agent_cannot_forge_a_log_line(db_path, capfd):
+    """방문자가 준 값이 로그 형식을 깨면 기록을 믿을 수 없다."""
+    httpd, client = _start(db_path, public=True)
+    try:
+        _visit(httpd, {"User-Agent": "ok\x00\x1b[31m fake"})
+    finally:
+        httpd.shutdown()
+    logged = [ln for ln in capfd.readouterr().err.splitlines() if "GET /" in ln]
+    assert len(logged) == 1
+    assert "\x00" not in logged[0] and "\x1b" not in logged[0]
+
+
+def test_an_absurdly_long_user_agent_is_cut(db_path, capfd):
+    """로그를 부풀리는 걸 막는다."""
+    httpd, client = _start(db_path, public=True)
+    try:
+        _visit(httpd, {"User-Agent": "A" * 5000})
+    finally:
+        httpd.shutdown()
+    line = next(ln for ln in capfd.readouterr().err.splitlines() if "GET /" in ln)
+    assert len(line) < 400
