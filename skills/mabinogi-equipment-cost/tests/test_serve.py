@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 import pytest
 from inventory import COOKIE_NAME
-from refresh import RefreshState
+from refresh import CollectorStatus, RefreshState
 from serve import make_handler
 from store import Store
 
@@ -319,3 +319,37 @@ def test_an_absurdly_long_user_agent_is_cut(db_path, capfd):
         httpd.shutdown()
     line = next(ln for ln in capfd.readouterr().err.splitlines() if "GET /" in ln)
     assert len(line) < 400
+
+
+# --- 공개판은 일봉도 스스로 받는다 ----------------------------------------------
+
+
+def test_the_loop_fetches_candles_once_a_day(db_path, monkeypatch):
+    """일봉은 하루 한 번이면 충분하다 — 3분마다 받으면 같은 값을 18번씩 긁는다."""
+    import serve
+
+    ticks = {"prices": 0, "candles": 0}
+    monkeypatch.setattr(serve, "collect_prices", lambda s, on_page=None: (1, "x"))
+    monkeypatch.setattr(serve, "collect_candles",
+                        lambda s: ticks.__setitem__("candles", ticks["candles"] + 1))
+
+    store = Store(db_path)
+    status = CollectorStatus()
+    per_day = serve.candle_ticks(interval=180)
+    assert per_day == 480
+
+    for tick in range(per_day + 2):
+        serve.collect_once(store, status, tick=tick, candle_every=per_day)
+    assert ticks["candles"] == 2  # 첫 바퀴 + 하루 뒤
+
+
+def test_a_candle_failure_does_not_stop_the_price_loop(db_path, monkeypatch):
+    """일봉은 곁다리다. 그것 때문에 시세가 멈추면 안 된다."""
+    import serve
+
+    monkeypatch.setattr(serve, "collect_prices", lambda s, on_page=None: (7, "x"))
+    monkeypatch.setattr(serve, "collect_candles",
+                        lambda s: (_ for _ in ()).throw(OSError("끊김")))
+    status = CollectorStatus()
+    assert serve.collect_once(Store(db_path), status, tick=0, candle_every=480) is True
+    assert status.snapshot()["error"] is None  # 시세는 성공했다

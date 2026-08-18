@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS collect_log (
 );
 
 CREATE TABLE IF NOT EXISTS price_history (
-    kind_id     INTEGER NOT NULL,
+    kind_id     INTEGER NOT NULL,   -- 실제로는 codex_item_id (재료 매칭 키)
+    -- 거래소가 쓰는 진짜 kind_id. 캔들 API가 이걸 요구한다 —
+    -- codex_item_id를 넘기면 404다(실측).
+    market_kind_id INTEGER,
     name        TEXT,
     min_price   INTEGER,
     total_count INTEGER,
@@ -64,6 +67,17 @@ CREATE TABLE IF NOT EXISTS price_history (
     PRIMARY KEY (kind_id, as_of)
 );
 CREATE INDEX IF NOT EXISTS ix_price_asof ON price_history(as_of);
+
+-- 원본이 주는 일·주·월봉. 우리가 3분마다 쌓는 이력과 별개다 —
+-- 이쪽은 두 달치가 이미 있고, 하루 한 번만 받으면 된다.
+CREATE TABLE IF NOT EXISTS price_candles (
+    market_kind_id INTEGER NOT NULL,
+    interval       TEXT NOT NULL,      -- day | week | month
+    time           TEXT NOT NULL,
+    open  INTEGER, high INTEGER, low INTEGER, close INTEGER,
+    count_close    INTEGER,
+    PRIMARY KEY (market_kind_id, interval, time)
+);
 """
 
 
@@ -79,9 +93,17 @@ class Store:
         c.row_factory = sqlite3.Row
         return c
 
+    # 나중에 더한 칸들. CREATE TABLE IF NOT EXISTS는 이미 있는 테이블을
+    # 건드리지 않으므로, 돌고 있던 DB에는 여기서 따로 붙인다.
+    MIGRATIONS = [("price_history", "market_kind_id", "INTEGER")]
+
     def init(self):
         with self._conn() as c:
             c.executescript(SCHEMA)
+            for table, column, kind in self.MIGRATIONS:
+                have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+                if column not in have:
+                    c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
     # --- 아이템 -------------------------------------------------------------
 
@@ -241,10 +263,12 @@ class Store:
         with self._conn() as c:
             c.executemany(
                 "INSERT OR IGNORE INTO price_history"
-                " (kind_id, name, min_price, total_count, as_of) VALUES (?,?,?,?,?)",
+                " (kind_id, market_kind_id, name, min_price, total_count, as_of)"
+                " VALUES (?,?,?,?,?,?)",
                 [
                     (
                         r["kind_id"],
+                        r.get("market_kind_id"),
                         r.get("name"),
                         r.get("min_price"),
                         r.get("total_count"),
@@ -268,6 +292,7 @@ class Store:
                     "min_price": r["min_price"],
                     "total_count": r["total_count"],
                     "as_of": r["as_of"],
+                    "market_kind_id": r["market_kind_id"],
                 }
                 for r in rows
             }
@@ -324,6 +349,45 @@ class Store:
                 "SELECT fetched_at, as_of, count FROM collect_log WHERE id=1"
             ).fetchone()
         return dict(row) if row else None
+
+    # --- 캔들 -----------------------------------------------------------------
+
+    def save_candles(self, market_kind_id, interval, candles):
+        """원본 일·주·월봉을 넣는다. 같은 시각은 덮어쓴다.
+
+        오늘 캔들은 장중에 계속 움직이므로 REPLACE여야 한다 — IGNORE로 두면
+        그날 첫 값에 붙박인다.
+        """
+        with self._conn() as c:
+            c.executemany(
+                "INSERT OR REPLACE INTO price_candles"
+                " (market_kind_id, interval, time, open, high, low, close, count_close)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                [
+                    (
+                        market_kind_id,
+                        interval,
+                        k["time"],
+                        k.get("open"),
+                        k.get("high"),
+                        k.get("low"),
+                        k.get("close"),
+                        k.get("count_close"),
+                    )
+                    for k in candles
+                ],
+            )
+
+    def candles(self, market_kind_id, interval="day", limit=None):
+        """시각 오름차순. 최근 N개만 필요하면 limit."""
+        q = (
+            "SELECT time, open, high, low, close, count_close FROM price_candles"
+            " WHERE market_kind_id=? AND interval=? ORDER BY time"
+        )
+        args = [market_kind_id, interval]
+        with self._conn() as c:
+            rows = [dict(r) for r in c.execute(q, args)]
+        return rows[-limit:] if limit else rows
 
     def price_history_count(self, kind_id):
         with self._conn() as c:

@@ -206,3 +206,53 @@ def test_retry_after_is_parsed_from_throttle_body():
     assert api.parse_retry_after(body) == 578
     assert api.parse_retry_after({"detail": "Expected available in 5 seconds."}) == 5
     assert api.parse_retry_after("nope") is None
+
+
+# --- 캔들 수집 -----------------------------------------------------------------
+
+
+def test_candles_are_collected_for_tradable_materials(monkeypatch, tmp_path):
+    """재료 18종만 받는다. 해연 38종까지 받으면 요청이 세 배가 된다."""
+    s = Store(str(tmp_path / "c.db"))
+    s.init()
+    s.save_recipe(
+        1, "normal",
+        [{"kind_id": 9283, "name": "망령의 영혼석", "qty": 80, "can_trade": True}],
+    )
+    s.save_prices(
+        [{"kind_id": 9283, "market_kind_id": 281479538461834, "name": "망령의 영혼석",
+          "min_price": 100, "total_count": 5210}],
+        as_of="2026-08-16T04:56:00Z",
+    )
+
+    asked = []
+
+    def fake(market_kind_id, interval="day"):
+        asked.append((market_kind_id, interval))
+        return [{"time": "2026-08-15T21:00:00Z", "open": 92, "high": 104,
+                 "low": 80, "close": 95, "count_close": 5265}]
+
+    monkeypatch.setattr(collect.api, "fetch_candles", fake)
+    n = collect.collect_candles(s, sleep=0)
+
+    assert asked == [(281479538461834, "day")]
+    assert n == 1
+    assert s.candles(281479538461834, "day")[-1]["close"] == 95
+
+
+def test_a_material_without_a_market_kind_id_is_skipped(monkeypatch, tmp_path):
+    """시세를 아직 못 받았거나 옛 스키마로 쌓인 재료 — 404를 부르지 않는다."""
+    s = Store(str(tmp_path / "c2.db"))
+    s.init()
+    s.save_recipe(
+        1, "normal",
+        [{"kind_id": 9283, "name": "망령의 영혼석", "qty": 80, "can_trade": True}],
+    )
+    s.save_prices(
+        [{"kind_id": 9283, "name": "망령의 영혼석", "min_price": 100, "total_count": 5}],
+        as_of="2026-08-16T04:56:00Z",
+    )
+    monkeypatch.setattr(
+        collect.api, "fetch_candles",
+        lambda *a, **k: pytest.fail("market_kind_id가 없으면 부르면 안 된다"))
+    assert collect.collect_candles(s, sleep=0) == 0

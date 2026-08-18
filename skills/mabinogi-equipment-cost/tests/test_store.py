@@ -175,3 +175,87 @@ def test_recipe_keeps_untradable_flag(db):
         ],
     )
     assert db.recipe(10)["recipe"][0]["can_trade"] is False
+
+
+# --- 캔들 (원본이 주는 일봉) ----------------------------------------------------
+
+
+def test_prices_carry_the_market_kind_id(db):
+    db.save_prices(
+        [{"kind_id": 9283, "market_kind_id": 281479538461834, "name": "망령의 영혼석",
+          "min_price": 100, "total_count": 5210}],
+        as_of="2026-08-16T04:56:00Z",
+    )
+    assert db.latest_prices()[9283]["market_kind_id"] == 281479538461834
+
+
+def test_old_rows_without_a_market_kind_id_still_read(db):
+    """이 컬럼이 생기기 전에 쌓인 이력."""
+    db.save_prices(
+        [{"kind_id": 1, "name": "x", "min_price": 5, "total_count": 1}],
+        as_of="2026-08-16T04:56:00Z",
+    )
+    assert db.latest_prices()[1]["market_kind_id"] is None
+
+
+CANDLES = [
+    {"time": "2026-08-14T21:00:00Z", "open": 74, "high": 104, "low": 74, "close": 92,
+     "count_close": 3403},
+    {"time": "2026-08-15T21:00:00Z", "open": 92, "high": 104, "low": 80, "close": 95,
+     "count_close": 5265},
+]
+
+
+def test_candle_roundtrip(db):
+    db.save_candles(281479538461834, "day", CANDLES)
+    got = db.candles(281479538461834, "day")
+    assert [c["close"] for c in got] == [92, 95]
+    assert got[-1]["low"] == 80 and got[-1]["high"] == 104
+
+
+def test_refetching_the_same_day_updates_it(db):
+    """장중에 다시 받으면 그날 캔들이 갱신돼야 한다 — 두 줄로 늘면 안 된다."""
+    db.save_candles(281479538461834, "day", CANDLES)
+    db.save_candles(281479538461834, "day", [{**CANDLES[-1], "close": 99, "high": 110}])
+    got = db.candles(281479538461834, "day")
+    assert len(got) == 2
+    assert got[-1]["close"] == 99 and got[-1]["high"] == 110
+
+
+def test_candles_are_kept_apart_by_interval_and_item(db):
+    db.save_candles(1, "day", CANDLES)
+    db.save_candles(1, "week", CANDLES[:1])
+    db.save_candles(2, "day", CANDLES[:1])
+    assert len(db.candles(1, "day")) == 2
+    assert len(db.candles(1, "week")) == 1
+    assert db.candles(999, "day") == []
+
+
+def test_candles_come_back_in_time_order(db):
+    db.save_candles(1, "day", list(reversed(CANDLES)))
+    assert [c["time"] for c in db.candles(1, "day")] == [c["time"] for c in CANDLES]
+
+
+def test_an_old_database_gains_the_new_column(tmp_path):
+    """CREATE TABLE IF NOT EXISTS는 이미 있는 테이블을 바꾸지 않는다.
+
+    실제로 돌고 있는 DB가 이 컬럼 없이 만들어져 있다.
+    """
+    path = str(tmp_path / "old.db")
+    with sqlite3.connect(path) as c:
+        c.execute(
+            "CREATE TABLE price_history (kind_id INTEGER NOT NULL, name TEXT,"
+            " min_price INTEGER, total_count INTEGER, as_of TEXT NOT NULL,"
+            " PRIMARY KEY (kind_id, as_of))"
+        )
+        c.execute("INSERT INTO price_history VALUES (1, '특급 목재', 146, 10, 'x')")
+
+    s = Store(path)
+    s.init()
+    s.save_prices(
+        [{"kind_id": 2, "market_kind_id": 999, "name": "새 재료",
+          "min_price": 5, "total_count": 1}],
+        as_of="2026-08-16T04:56:00Z",
+    )
+    assert s.latest_prices()[2]["market_kind_id"] == 999
+    assert s.latest_prices()[1]["market_kind_id"] is None  # 옛 행은 비어 있다

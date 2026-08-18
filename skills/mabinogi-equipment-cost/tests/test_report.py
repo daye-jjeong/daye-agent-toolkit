@@ -281,3 +281,45 @@ def test_partnerless_haeyeon_still_gets_a_row(db):
     assert row["echo_buy"]["status"] == "no_counterpart"
     assert row["echo_craft"]["status"] == "no_counterpart"
     assert row["echo_name"] is None
+
+
+# --- 재료 단가표 ---------------------------------------------------------------
+
+
+def test_material_prices_ride_along_with_the_report(db):
+    """재고 입력칸 옆에 세울 단가표. 재료마다 현재가와 추세가 붙는다."""
+    db.save_candles(
+        555, "day",
+        [{"time": f"2026-08-{d:02d}T21:00:00Z", "low": 90, "high": 120, "close": 100}
+         for d in range(1, 15)],
+    )
+    db.save_prices(
+        [{"kind_id": 100, "market_kind_id": 555, "name": "망령의 영혼석",
+          "min_price": 118, "total_count": 1548}],
+        as_of="2026-08-14T16:18:00Z",   # fixture보다 뒤 — 같은 시각이면 무시된다
+    )
+    rep = build_report(db, now="2026-08-14T16:20:00Z", owned={100: 30})
+    mat = next(m for m in rep["materials"] if m["kind_id"] == 100)
+
+    assert mat["name"] == "망령의 영혼석"
+    assert mat["price"] == 118
+    assert mat["owned"] == 30
+    assert mat["value"] == 118 * 30              # 내 재고가 얼마어치인가
+    assert mat["trend"]["verdict"] == "expensive"  # 90~120에서 118이면 비싼 편
+
+
+def test_materials_without_candles_still_list(db):
+    """캔들을 아직 안 받았어도 단가는 보여야 한다."""
+    rep = build_report(db, now="2026-08-14T16:20:00Z")
+    mat = next(m for m in rep["materials"] if m["kind_id"] == 100)
+    assert mat["price"] == 103
+    assert mat["trend"] is None
+
+
+def test_inventory_value_is_summed(db):
+    rep = build_report(db, now="2026-08-14T16:20:00Z", owned={100: 30})
+    assert rep["inventory_value"] == 103 * 30
+
+
+def test_no_inventory_means_no_value(db):
+    assert build_report(db, now="2026-08-14T16:20:00Z")["inventory_value"] == 0

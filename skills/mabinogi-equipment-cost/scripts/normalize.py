@@ -58,6 +58,8 @@ def normalize_prices(rows):
                 "min_price": price,
                 "total_count": count,
                 "as_of": r.get("last_version"),
+                # 캔들 API가 요구하는 진짜 kind_id. codex_item_id로는 404가 난다.
+                "market_kind_id": r.get("kind_id"),
             }
             continue
         # 매물이 있는 줄이 없는 줄을 이긴다. 둘 다 있으면 싼 쪽.
@@ -69,6 +71,8 @@ def normalize_prices(rows):
                 "min_price": price,
                 "total_count": count,
                 "as_of": r.get("last_version"),
+                # 캔들 API가 요구하는 진짜 kind_id. codex_item_id로는 404가 난다.
+                "market_kind_id": r.get("kind_id"),
             }
     return out
 

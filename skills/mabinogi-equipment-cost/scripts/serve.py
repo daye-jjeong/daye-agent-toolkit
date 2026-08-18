@@ -18,7 +18,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from collect import DEFAULT_INTERVAL, collect_prices
+from collect import DEFAULT_INTERVAL, collect_candles, collect_prices
 from classify import group_materials
 from cost import DEFAULT_ECHO_MULTIPLIER, DEFAULT_STALE_SEC
 from inventory import (
@@ -112,10 +112,20 @@ details.inv summary { font-weight:600; }
 .matgroup { margin:12px 0; }
 .matgroup h4 { margin:0 0 6px; font-size:12px; color:var(--dim);
   font-weight:600; letter-spacing:.02em; }
-.matgrid { display:grid; gap:8px 14px;
-  grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); }
-.matinput { display:flex; justify-content:space-between; align-items:center;
-  gap:8px; font-size:13px; }
+.matgrid { display:grid; gap:10px 16px;
+  grid-template-columns:repeat(auto-fill,minmax(232px,1fr)); }
+.matinput { display:grid; grid-template-columns:1fr 76px; align-items:center;
+  gap:4px 8px; font-size:13px; }
+.mtrend { grid-column:1 / -1; display:flex; align-items:center; gap:6px;
+  font-size:11px; color:var(--dim); white-space:nowrap; }
+.mtrend b { color:var(--fg); font-weight:600; font-size:12px; }
+.mtrend svg { display:block; flex:none; }
+.spark { color:var(--dim); }
+.spark.up { color:var(--bad); }
+.spark.down { color:var(--good); }
+.invval { margin:12px 0 0; padding-top:10px; border-top:1px solid var(--line);
+  font-size:12px; color:var(--dim); }
+.invval b { color:var(--fg); }
 .matinput input { width:82px; padding:3px 6px; background:var(--bg);
   color:var(--fg); border:1px solid var(--line); border-radius:4px;
   text-align:right; }
@@ -395,7 +405,56 @@ def _verdict_cell(row, multiplier):
     return f'<span class="craft">{label} −{_n(gap)}</span>'
 
 
-def _inventory_form(materials, owned, rejected=0):
+VERDICT_LABELS = {
+    "cheap": ("싼 편", "oop"),
+    "expensive": ("비싼 편", "flag"),
+    "flat": ("고정", "na"),
+    "middle": ("", ""),
+}
+
+
+def _sparkline(closes, width=72, height=18):
+    """종가 몇 개를 선 하나로. 라이브러리 없이 polyline 하나면 된다.
+
+    눈금도 축도 없다 — 여기서 답할 건 "오르는 중인가"뿐이고, 정확한 값은
+    옆에 숫자로 있다.
+    """
+    if len(closes) < 2:
+        return ""
+    low, high = min(closes), max(closes)
+    span = (high - low) or 1
+    step = width / (len(closes) - 1)
+    pts = " ".join(
+        f"{i * step:.1f},{height - 1 - (v - low) / span * (height - 2):.1f}"
+        for i, v in enumerate(closes)
+    )
+    # 오르는 중이면 붉게 — 사는 쪽에서는 오르는 게 나쁜 소식이다.
+    way = "up" if closes[-1] > closes[0] else "down" if closes[-1] < closes[0] else ""
+    return (
+        f'<svg class="spark {way}" width="{width}" height="{height}"'
+        f' viewBox="0 0 {width} {height}" aria-hidden="true">'
+        f'<polyline points="{pts}" fill="none" stroke="currentColor"'
+        ' stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>'
+    )
+
+
+def _material_trend_row(detail):
+    """입력칸 아래 한 줄 — 현재 단가, 14일 선, 오늘 범위, 지금 사도 되는지."""
+    if not detail or detail.get("price") is None:
+        return ""
+    bits = [f"<b>{_n(detail['price'])}</b>"]
+    t = detail.get("trend")
+    if t:
+        bits.append(_sparkline(t["closes"]))
+        if t["today_low"] is not None and t["today_high"] is not None:
+            bits.append(f"오늘 {_n(t['today_low'])}~{_n(t['today_high'])}")
+        label, cls = VERDICT_LABELS.get(t["verdict"], ("", ""))
+        if label:
+            bits.append(f'<span class="{cls}">{label}</span>')
+    return '<span class="mtrend">' + " ".join(bits) + "</span>"
+
+
+def _inventory_form(materials, owned, rejected=0, details=None, inventory_value=0):
     """가진 재료를 재료별 칸으로 받는다.
 
     거래 가능한 재료만 세운다(실측 18종). 적어 두면 제작 칸에 실지출이 함께
@@ -411,9 +470,10 @@ def _inventory_form(materials, owned, rejected=0):
         f'<div class="matgroup"><h4>{html.escape(g["label"])}</h4>'
         '<div class="matgrid">'
         + "".join(
-            f'<label class="matinput">{html.escape(name)}'
+            f'<label class="matinput"><span>{html.escape(name)}</span>'
             f'<input type="number" name="qty_{kind_id}" min="0" step="1"'
-            f' value="{owned.get(kind_id, 0)}"></label>'
+            f' value="{owned.get(kind_id, 0)}">'
+            f"{_material_trend_row((details or {}).get(kind_id))}</label>"
             for name, kind_id in g["items"]
         )
         + "</div></div>"
@@ -421,6 +481,12 @@ def _inventory_form(materials, owned, rejected=0):
     )
     held = sum(1 for _, k in materials if owned.get(k))
     summary = f"가진 재료 ({held}종 입력됨)" if held else "가진 재료"
+    value_line = (
+        f'<p class="invval">내 재고 가치 <b>{_n(inventory_value)}</b>'
+        " · 최저가 기준 · 재료를 그냥 팔 때 받는 하한선</p>"
+        if inventory_value
+        else ""
+    )
     return (
         # 늘 접힌 채로 연다. 열 체크박스를 눌러 페이지가 갱신될 때마다 펼쳐지면
         # 표가 아래로 밀려 눌린 곳을 다시 찾아야 한다.
@@ -428,6 +494,7 @@ def _inventory_form(materials, owned, rejected=0):
         f"<summary>{summary}</summary>"
         f'{warn}<form method="post" action="/inventory">'
         f"{cells}"
+        f"{value_line}"
         '<p><button type="submit">저장</button> '
         '<button id="clear-inv" type="button">모두 비우기</button>'
         ' <span class="na">비우기는 칸만 0으로 채운다 — 저장을 눌러야 반영된다</span></p>'
@@ -550,7 +617,13 @@ def render_html(
     public=False,
     collector=None,
 ):
-    inv_form = _inventory_form(materials, owned or {}, rejected)
+    inv_form = _inventory_form(
+        materials,
+        owned or {},
+        rejected,
+        details={m["kind_id"]: m for m in rep.get("materials", [])},
+        inventory_value=rep.get("inventory_value", 0),
+    )
     f = rep["freshness"]
     if f is None:
         bar = '<div class="bar stale">시세를 아직 한 번도 받지 못했다</div>'
@@ -839,21 +912,37 @@ def make_handler(db_path, threshold_sec, state, public=False, collector=None):
     return Handler
 
 
-def collect_once(store, status):
+def candle_ticks(interval=DEFAULT_INTERVAL):
+    """시세를 몇 번 받을 때마다 일봉을 한 번 받을지. 하루에 한 번."""
+    return max(1, 86400 // interval)
+
+
+def collect_once(store, status, tick=None, candle_every=None):
     """시세 한 번. 실패해도 예외를 올리지 않고 status에 적는다.
 
     콘솔 로그만 남기면 방문자는 못 본다 — 페이지 상단 띠가 이 status를 읽는다.
+
+    tick/candle_every를 주면 하루에 한 번 일봉도 받는다. 일봉은 하루 한 칸씩만
+    늘어나므로 3분마다 받으면 같은 값을 18종씩 480번 긁는 꼴이다.
     """
     stamp = time.strftime("%H:%M:%S")
     try:
         n, as_of = collect_prices(store)
         status.ok()
         print(f"[{stamp}] 시세 {n}건 (기준 {as_of})", flush=True)
-        return True
+        ok = True
     except Exception as e:  # 네트워크·차단 등 — 조용히 삼키지 않는다
         status.failed(f"{type(e).__name__}: {e}")
         print(f"[{stamp}] 수집 실패: {type(e).__name__}: {e}", flush=True)
-        return False
+        ok = False
+
+    if candle_every and tick is not None and tick % candle_every == 0:
+        # 일봉은 곁다리다 — 실패해도 시세 수집을 물고 늘어지지 않는다.
+        try:
+            print(f"[{stamp}] 재료 {collect_candles(store)}종의 일봉", flush=True)
+        except Exception as e:
+            print(f"[{stamp}] 일봉 실패: {type(e).__name__}: {e}", flush=True)
+    return ok
 
 
 def price_loop(db_path, interval, status):
@@ -863,8 +952,11 @@ def price_loop(db_path, interval, status):
     페이지 전체가 사라진다. 실패는 화면 상단 띠로 올라간다.
     """
     store = Store(db_path)
+    every = candle_ticks(interval)
+    tick = 0
     while True:
-        collect_once(store, status)
+        collect_once(store, status, tick=tick, candle_every=every)
+        tick += 1
         time.sleep(interval)
 
 

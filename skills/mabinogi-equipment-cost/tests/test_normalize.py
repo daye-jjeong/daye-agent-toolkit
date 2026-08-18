@@ -148,3 +148,25 @@ def test_normalized_recipe_feeds_cost_function():
     assert row["normal"]["total"] == fx.NORMAL_TOTAL
     assert row["recipe"]["total"] == fx.RECIPE_TOTAL
     assert row["market"]["price"] == fx.MARKET_PRICE
+
+
+def test_prices_keep_the_market_kind_id():
+    """시세 캔들 API는 codex_item_id가 아니라 진짜 kind_id를 요구한다.
+
+    둘을 헷갈리면 404가 난다(실측).
+    """
+    out = normalize_prices([
+        {"codex_item_id": 9283, "kind_id": 281479538461834, "name": "망령의 영혼석",
+         "min_price": 100, "total_count": 5210, "last_version": "2026-08-16T04:56:00Z"},
+    ])
+    assert out[9283]["market_kind_id"] == 281479538461834
+
+
+def test_the_winning_row_brings_its_own_market_kind_id():
+    """같은 codex_item_id에 여러 줄이 오면 이긴 줄의 kind_id를 써야 한다."""
+    out = normalize_prices([
+        {"codex_item_id": 1, "kind_id": 111, "min_price": 90, "total_count": 0},
+        {"codex_item_id": 1, "kind_id": 222, "min_price": 100, "total_count": 5},
+    ])
+    assert out[1]["min_price"] == 100          # 매물 있는 줄이 이긴다
+    assert out[1]["market_kind_id"] == 222

@@ -28,6 +28,8 @@ def _base():
         "sort": "saving",
         "desc": True,
         "has_inventory": False,
+        "materials": [],
+        "inventory_value": 0,
         "counts": {"total": 1, "recipe_pending": 0},
         "rows": [
             {
@@ -635,3 +637,76 @@ def test_intro_explains_what_the_minus_number_is_measured_against():
     html_ = render_html(_rep())
     intro = html_.split('<ul class="intro">')[1].split("</ul>")[0]
     assert "해연 구매가" in intro
+
+
+# --- 재료 단가표 ---------------------------------------------------------------
+#
+# 실측: 망령의 영혼석이 하루에 69~108로 움직인다. 표에 뜬 단가가 그 범위의
+# 어디쯤인지 모르면 비싼 때 산다.
+
+
+def _mat(**over):
+    m = {
+        "name": "망령의 영혼석", "kind_id": 9283, "price": 100, "count": 5210,
+        "owned": 76, "value": 7600,
+        "trend": {"days": 14, "closes": [68, 74, 72, 66, 61, 63, 64, 60, 64, 67, 96, 82, 92, 95],
+                  "low": 50, "high": 108, "today_low": 80, "today_high": 104,
+                  "verdict": "expensive"},
+    }
+    m.update(over)
+    return m
+
+
+def _inv(mats, value=7600, owned=None):
+    return render_html(
+        _rep(materials=mats, inventory_value=value), materials=MATS,
+        owned=owned if owned is not None else {9283: 76},
+    ).split('<details class="inv"')[1].split("</details>")[0]
+
+
+def test_the_price_sits_next_to_its_input():
+    body = _inv([_mat()])
+    assert "100" in body
+    assert 'name="qty_9283"' in body
+
+
+def test_a_sparkline_is_drawn_from_the_closes():
+    body = _inv([_mat()])
+    assert "<svg" in body and "polyline" in body
+
+
+def test_todays_range_is_shown():
+    assert "80" in _inv([_mat()]) and "104" in _inv([_mat()])
+
+
+def test_an_expensive_material_is_called_out():
+    assert "비싼 편" in _inv([_mat()])
+
+
+def test_a_cheap_material_is_called_out():
+    body = _inv([_mat(price=52, trend={**_mat()["trend"], "verdict": "cheap"})])
+    assert "싼 편" in body
+
+
+def test_a_flat_material_says_fixed_not_expensive():
+    """특급 목재는 14일 내내 146이다."""
+    body = _inv([_mat(name="특급 목재", price=146,
+                      trend={**_mat()["trend"], "verdict": "flat", "low": 146,
+                             "high": 146, "today_low": 146, "today_high": 146})])
+    assert "고정" in body
+    assert "비싼 편" not in body and "싼 편" not in body
+
+
+def test_a_material_without_candles_still_shows_its_price():
+    body = _inv([_mat(trend=None)])
+    assert "100" in body
+    assert "<svg" not in body
+
+
+def test_inventory_value_is_shown():
+    assert "7,600" in _inv([_mat()])
+
+
+def test_no_value_line_without_inventory():
+    body = _inv([_mat(owned=0, value=0)], value=0, owned={})
+    assert "재고 가치" not in body

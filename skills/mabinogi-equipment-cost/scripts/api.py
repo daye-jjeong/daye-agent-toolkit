@@ -7,6 +7,7 @@
     GET /d/api/v1/market/prices?limit=500&offset=N   시세 목록 (쿼터 없음)
     GET /d/api/v1/items?search=<말머리>&limit=200     아이템 목록 (쿼터 없음)
     GET /d/api/v1/items/<id>                          아이템 상세 (IP 단위 쿼터)
+    GET /d/api/v1/market/prices/history?kind_id=&interval=  일·주·월봉 (쿼터 없음)
 """
 
 import gzip
@@ -84,6 +85,19 @@ def fetch_prices(on_page=None):
 def fetch_items(keyword):
     q = urllib.parse.quote(keyword)
     return get(f"/items?search={q}&limit=200")["items"]
+
+
+def fetch_candles(market_kind_id, interval="day"):
+    """원본이 주는 일·주·월봉. 쿼터 없음.
+
+    `market_kind_id`는 거래소가 쓰는 진짜 kind_id다 — 재료 매칭에 쓰는
+    codex_item_id를 넘기면 404가 난다(실측).
+
+    실측 분량: day 52건(약 2개월) · week 8건 · month 3건.
+    """
+    return get(f"/market/prices/history?kind_id={market_kind_id}&interval={interval}")[
+        "history"
+    ]
 
 
 def fetch_item_detail(item_id):

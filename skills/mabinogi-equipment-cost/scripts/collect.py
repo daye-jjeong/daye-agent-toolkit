@@ -6,6 +6,7 @@
     python3 collect.py recipes    레시피 — 쿼터에 걸리면 멈추고 받은 만큼 유지
     python3 collect.py loop       시세를 주기(기본 180초)로 갱신
     python3 collect.py seed       배포용 씨앗 DB (레시피·아이템만)
+    python3 collect.py candles    재료 일봉 (하루 1회면 충분)
 
 시세 API는 쿼터가 없고 상세 API에만 걸린다. 그래서 둘의 주기가 다르다.
 """
@@ -80,6 +81,27 @@ def collect_recipes(store, limit=None, sleep=0.4):
     return done, 0, None
 
 
+def collect_candles(store, interval="day", sleep=0.2):
+    """재료의 일봉을 받는다. 하루 한 번이면 충분하다 — 일봉이라 더 자주 받아도 같다.
+
+    거래 가능한 재료만 본다(실측 18종). 해연 38종까지 받으면 요청이 세 배로
+    늘지만, 화면에서 추세를 보는 건 재료 단가뿐이다.
+
+    시세를 아직 못 받아 진짜 kind_id를 모르는 재료는 건너뛴다 — 그 상태로
+    부르면 404다.
+    """
+    prices = store.latest_prices()
+    done = 0
+    for _, codex_id in sorted(store.material_index().items()):
+        market_kind_id = (prices.get(codex_id) or {}).get("market_kind_id")
+        if market_kind_id is None:
+            continue
+        store.save_candles(market_kind_id, interval, api.fetch_candles(market_kind_id, interval))
+        done += 1
+        time.sleep(sleep)
+    return done
+
+
 def collect_materials(store):
     """레시피에 등장하는 재료의 거래 가능 여부를 채운다.
 
@@ -134,6 +156,8 @@ def main(argv):
         filled = collect_materials(store)
         if filled:
             print(f"재료 {filled}종의 거래 가능 여부를 채웠다")
+    elif cmd == "candles":
+        print(f"재료 {collect_candles(store)}종의 일봉을 받았다")
     elif cmd == "seed":
         target = argv[3] if len(argv) > 3 else "seed.db"
         store.export_seed(target)
