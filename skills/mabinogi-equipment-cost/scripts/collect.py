@@ -40,9 +40,28 @@ def collect_items(store):
     return len(rows)
 
 
+def tracked_kind_ids(store):
+    """이력을 쌓을 종목 — 화면에 실제로 뜨는 것들.
+
+    원본은 시세를 1,199종 통째로 준다. 그중 우리가 읽는 건 재료 18종과
+    잔영·해연 76종뿐이고, 나머지 92%는 가구·요리·데코다(실측). 전부 쌓았더니
+    하루 71MB씩 늘어 닷새 만에 329MB가 됐고 조회가 4.3초로 늘어졌다.
+
+    비어 있으면(아이템 목록을 아직 안 받은 첫 실행) 걸러낼 근거가 없으므로
+    전부 쌓는다.
+    """
+    return {i["kind_id"] for i in store.items() if i["tier"] in TIERS} | set(
+        store.material_index().values()
+    )
+
+
 def collect_prices(store, on_page=None):
     rows = api.fetch_prices(on_page=on_page)
     prices = normalize.normalize_prices(rows)
+    # 원본이 준 건 다 세되(진행바·건수), 쌓는 건 화면에 쓰는 종목만.
+    tracked = tracked_kind_ids(store)
+    if tracked:
+        prices = {k: v for k, v in prices.items() if k in tracked}
     as_of = max((p["as_of"] for p in prices.values() if p["as_of"]), default=None)
     stamp = as_of or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     store.save_prices([{"kind_id": k, **v} for k, v in prices.items()], as_of=stamp)

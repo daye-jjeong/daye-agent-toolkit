@@ -256,3 +256,64 @@ def test_a_material_without_a_market_kind_id_is_skipped(monkeypatch, tmp_path):
         collect.api, "fetch_candles",
         lambda *a, **k: pytest.fail("market_kind_id가 없으면 부르면 안 된다"))
     assert collect.collect_candles(s, sleep=0) == 0
+
+
+# --- 이력은 화면에 쓰는 종목만 -------------------------------------------------
+
+
+def _prices_api(monkeypatch, rows):
+    monkeypatch.setattr(collect.api, "fetch_prices", lambda on_page=None: rows)
+
+
+ROWS = [
+    {"codex_item_id": 100, "kind_id": 900, "name": "망령의 영혼석",
+     "min_price": 103, "total_count": 5, "last_version": "2026-08-19T06:00:00Z"},
+    {"codex_item_id": 1, "kind_id": 901, "name": "해연의 검ZZ",
+     "min_price": 500, "total_count": 2, "last_version": "2026-08-19T06:00:00Z"},
+    {"codex_item_id": 777, "kind_id": 902, "name": "훌륭한 탁상 램프 데코 상자",
+     "min_price": 9, "total_count": 3, "last_version": "2026-08-19T06:00:00Z"},
+]
+
+
+def _seeded(tmp_path, name):
+    s = Store(str(tmp_path / name))
+    s.init()
+    s.save_items([{"id": 1, "name": "해연의 검ZZ", "kind_id": 1, "tier": "해연",
+                   "base_name": "검ZZ", "can_trade": True}])
+    s.save_recipe(1, "normal",
+                  [{"kind_id": 100, "name": "망령의 영혼석", "qty": 80, "can_trade": True}])
+    return s
+
+
+def test_only_tracked_items_are_stored(monkeypatch, tmp_path):
+    """가구·요리 시세가 92%를 차지했다 — 화면에 한 번도 안 나오는 것들이다."""
+    s = _seeded(tmp_path, "t.db")
+    _prices_api(monkeypatch, ROWS)
+    collect.collect_prices(s)
+
+    stored = set(s.latest_prices())
+    assert stored == {100, 1}          # 재료 + 해연
+    assert 777 not in stored           # 데코 상자는 안 쌓는다
+
+
+def test_an_empty_filter_stores_everything(monkeypatch, tmp_path):
+    """첫 실행 — 아이템 목록을 아직 안 받았으면 걸러낼 근거가 없다."""
+    s = Store(str(tmp_path / "e.db"))
+    s.init()
+    _prices_api(monkeypatch, ROWS)
+    collect.collect_prices(s)
+    assert set(s.latest_prices()) == {100, 1, 777}
+
+
+def test_the_report_still_sees_what_it_needs(monkeypatch, tmp_path):
+    """걸러낸 뒤에도 화면이 쓰는 값은 전부 남아야 한다."""
+    from report import build_report
+
+    s = _seeded(tmp_path, "r.db")
+    _prices_api(monkeypatch, ROWS)
+    collect.collect_prices(s)
+
+    rep = build_report(s, now="2026-08-19T06:05:00Z")
+    assert rep["rows"][0]["market"]["price"] == 500
+    assert rep["rows"][0]["normal"]["total"] == 103 * 80
+    assert [m["price"] for m in rep["materials"]] == [103]
