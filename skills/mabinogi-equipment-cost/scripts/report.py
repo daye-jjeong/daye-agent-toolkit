@@ -5,7 +5,7 @@
 
 from classify import echo_partners
 from cost import DEFAULT_ECHO_MULTIPLIER, DEFAULT_STALE_SEC, build_row, freshness
-from trend import material_trend
+from trend import material_chart, material_trend
 
 EQUIPMENT_TIERS = ("해연", "잔영")
 TARGET_TIER = "해연"  # 표의 행. 잔영은 등가 경로로만 들어온다
@@ -86,11 +86,12 @@ def group_rows(rows, sort=DEFAULT_SORT, desc=None):
     ]
 
 
-def material_prices(store, prices, owned):
+def material_prices(store, prices, owned, now=None):
     """재고 입력칸 옆에 세울 단가표.
 
     거래 가능한 재료만 나온다(실측 18종) — 입력칸과 같은 목록이라 나란히 선다.
-    각 재료에 현재 최저가, 최근 14일 추세, 내 재고의 값어치가 붙는다.
+    각 재료에 현재 최저가, 최근 14일 추세, 펼쳐 볼 30일 차트, 내 재고의
+    값어치가 붙는다.
 
     값어치를 내는 이유는 "만들지 말고 재료를 그냥 팔까"가 실제 선택지라서다.
     """
@@ -100,6 +101,10 @@ def material_prices(store, prices, owned):
         price = p.get("min_price")
         have = owned.get(kind_id, 0)
         mk = p.get("market_kind_id")
+        # 캔들은 한 번만 읽는다 — 작은 줄과 펼침 차트가 같은 목록을 본다.
+        candles = (
+            store.candles(mk, "day") if mk is not None and price is not None else []
+        )
         out.append(
             {
                 "name": name,
@@ -108,11 +113,8 @@ def material_prices(store, prices, owned):
                 "count": p.get("total_count"),
                 "owned": have,
                 "value": price * have if price is not None else None,
-                "trend": (
-                    material_trend(store.candles(mk, "day"), price)
-                    if mk is not None and price is not None
-                    else None
-                ),
+                "trend": material_trend(candles, price) if candles else None,
+                "chart": material_chart(candles, price, now=now) if candles else None,
             }
         )
     return out
@@ -135,7 +137,7 @@ def build_report(
     items = [i for i in store.items() if i["tier"] in EQUIPMENT_TIERS]
     prices = store.latest_prices()
     owned = owned or {}
-    materials = material_prices(store, prices, owned)
+    materials = material_prices(store, prices, owned, now=now)
     partners = echo_partners(items)
 
     # 행은 해연만이다. 잔영은 "잔영을 N개 사거나 만드는 길"로 이 표에 들어간다.

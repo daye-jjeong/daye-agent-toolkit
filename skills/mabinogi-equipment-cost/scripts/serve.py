@@ -113,7 +113,7 @@ details.inv summary { font-weight:600; }
 .matgroup h4 { margin:0 0 6px; font-size:12px; color:var(--dim);
   font-weight:600; letter-spacing:.02em; }
 .matgrid { display:grid; gap:10px 16px;
-  grid-template-columns:repeat(auto-fill,minmax(232px,1fr)); }
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); }
 .matinput { display:grid; grid-template-columns:1fr 76px; align-items:center;
   gap:4px 8px; font-size:13px; }
 .mtrend { grid-column:1 / -1; display:flex; align-items:center; gap:6px;
@@ -123,6 +123,27 @@ details.inv summary { font-weight:600; }
 .spark { color:var(--dim); }
 .spark.up { color:var(--bad); }
 .spark.down { color:var(--good); }
+.mname[data-chart], .spark[data-chart] { cursor:pointer; }
+.mname[data-chart]:hover { text-decoration:underline; }
+.matinput.open .mname { font-weight:600; }
+.mchart { grid-column:1 / -1; margin:2px 0 8px; padding:10px 12px;
+  border:1px solid var(--line); border-radius:8px; background:var(--head);
+  overflow-x:auto; }
+/* 폭에 따라 늘고 줄되 양쪽에 바닥을 둔다. 좁은 화면에서 끝까지 줄이면 날짜
+   라벨이 4~5픽셀이 되어 못 읽고, 넓은 화면에서 끝까지 늘리면 글자만 커진다.
+   좁으면 표처럼 옆으로 민다 — 이 페이지의 큰 표가 이미 그렇게 한다. */
+.mchart svg { display:block; width:100%; min-width:560px; max-width:900px;
+  height:auto; }
+.mchart p { margin:0; font-size:11px; color:var(--dim); }
+.mchart p.key { margin-bottom:6px; }
+.mchart p.asof { margin-top:6px; color:var(--warn); }
+.band { fill:currentColor; opacity:.22; }
+.gridline { stroke:var(--line); stroke-width:1; }
+.axistext { fill:var(--dim); font-size:10px; }
+.nowline { stroke:var(--warn); stroke-width:1; stroke-dasharray:4 3; }
+.nowtext { fill:var(--warn); font-size:10px; font-weight:600; }
+.lowtext { fill:var(--good); font-size:10px; font-weight:600; }
+.hightext { fill:var(--bad); font-size:10px; font-weight:600; }
 .invval { margin:12px 0 0; padding-top:10px; border-top:1px solid var(--line);
   font-size:12px; color:var(--dim); }
 .invval b { color:var(--fg); }
@@ -223,6 +244,20 @@ RELOAD_JS = """
       if (!d) return;
       d.hidden = !d.hidden;
       tr.classList.toggle('open', !d.hidden);
+    });
+  });
+})();
+
+// 재료 이름이나 스파크라인을 누르면 그 줄 아래 30일 차트가 펼쳐진다.
+// 수량 입력칸에는 걸지 않는다 — 값을 넣으려다 차트가 열리면 방해다.
+(function () {
+  document.querySelectorAll('[data-chart]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      var box = document.getElementById(el.dataset.chart);
+      if (!box) return;
+      e.preventDefault();       // label 안이라 그냥 두면 수량칸이 포커스를 가져간다
+      box.hidden = !box.hidden;
+      el.closest('.matinput').classList.toggle('open', !box.hidden);
     });
   });
 })();
@@ -413,11 +448,11 @@ VERDICT_LABELS = {
 }
 
 
-def _sparkline(closes, width=72, height=18):
+def _sparkline(closes, width=120, height=26):
     """종가 몇 개를 선 하나로. 라이브러리 없이 polyline 하나면 된다.
 
-    눈금도 축도 없다 — 여기서 답할 건 "오르는 중인가"뿐이고, 정확한 값은
-    옆에 숫자로 있다.
+    눈금도 축도 없다 — 여기서 답할 건 "오르는 중인가"뿐이고, 절대값은 양 끝에
+    2주 최저·최고로 붙어 있다. 그래서 72×18에서 120×26으로 키웠다.
     """
     if len(closes) < 2:
         return ""
@@ -438,20 +473,162 @@ def _sparkline(closes, width=72, height=18):
     )
 
 
-def _material_trend_row(detail):
-    """입력칸 아래 한 줄 — 현재 단가, 14일 선, 오늘 범위, 지금 사도 되는지."""
+def _material_trend_row(detail, chart_id=None):
+    """입력칸 아래 한 줄 — 현재 단가, 2주 최저 · 선 · 2주 최고, 지금 사도 되는지.
+
+    선 양 끝에 범위 값을 붙여 모양과 절대값을 같이 준다. 선만 있으면 오르는
+    중인지만 알고 "2주 전에는 얼마였나"에 답하지 못한다.
+
+    오늘 고가~저가는 여기서 뺐다 — 펼침 차트의 마지막 띠가 그 값이고, 좁은
+    칸에서는 2주 범위가 더 자주 쓰인다.
+    """
     if not detail or detail.get("price") is None:
         return ""
     bits = [f"<b>{_n(detail['price'])}</b>"]
     t = detail.get("trend")
     if t:
-        bits.append(_sparkline(t["closes"]))
-        if t["today_low"] is not None and t["today_high"] is not None:
-            bits.append(f"오늘 {_n(t['today_low'])}~{_n(t['today_high'])}")
+        spark = _sparkline(t["closes"])
+        if spark and chart_id:
+            spark = spark.replace("<svg ", f'<svg data-chart="{chart_id}" ', 1)
+        if spark and t["low"] == t["high"]:
+            # 같은 숫자를 세 번 적을 이유가 없다. "고정"이 이미 그 말이다.
+            bits.append(spark)
+        elif spark:
+            bits.append(f'<span>{_n(t["low"])}</span>{spark}<span>{_n(t["high"])}</span>')
         label, cls = VERDICT_LABELS.get(t["verdict"], ("", ""))
         if label:
             bits.append(f'<span class="{cls}">{label}</span>')
     return '<span class="mtrend">' + " ".join(bits) + "</span>"
+
+
+# 그림판 바깥 여백. 왼쪽은 눈금값, 오른쪽은 "지금 N", 위는 최고 라벨,
+# 아래는 날짜가 앉는다.
+PAD_L, PAD_R, PAD_T, PAD_B = 44, 54, 20, 24
+
+
+def _day_label(iso):
+    """`2026-08-09` → `8/9`. 연도는 30일 창에서 군더더기다."""
+    _, m, d = iso.split("-")
+    return f"{int(m)}/{int(d)}"
+
+
+def _anchored(x, width):
+    """라벨이 그림판 밖으로 나가지 않게 기준점을 바꾼다."""
+    if x < 44:
+        return "start", x
+    if x > width - 44:
+        return "end", x
+    return "middle", x
+
+
+def _range_band_chart(chart):
+    """30일 범위 띠 차트. 좌표는 전부 `trend.material_chart`가 이미 냈다.
+
+    정통 캔들(몸통+심지)을 쓰지 않는다 — 우리 값은 "그날 거래소 최저가"의
+    OHLC라 몸통 색이 매수·매도 압력을 뜻하지 않는다. 고가~저가를 옅은 띠로
+    깔고 종가를 선으로 얹는다.
+    """
+    if not chart:
+        return '<p class="na">시세 이력 없음 — 그릴 만한 일봉이 아직 없다</p>'
+
+    w, h = chart["width"], chart["height"]
+    W, H = w + PAD_L + PAD_R, h + PAD_T + PAD_B
+    pts = chart["points"]
+    bar = max(min(chart["step"] * 0.62, 14), 2)
+
+    parts = []
+    for t in chart["ticks"]:
+        parts.append(
+            f'<line class="gridline" x1="0" y1="{t["y"]:.1f}"'
+            f' x2="{w}" y2="{t["y"]:.1f}"/>'
+            f'<text class="axistext" x="-6" y="{t["y"] + 3.5:.1f}"'
+            f' text-anchor="end">{_n(t["value"])}</text>'
+        )
+
+    # 하루치 고가~저가. 1픽셀 아래로는 안 줄인다 — 안 흔들린 날도 자국이 남아야 한다.
+    for p in pts:
+        parts.append(
+            f'<rect class="band" x="{p["x"] - bar / 2:.1f}" y="{p["y_high"]:.1f}"'
+            f' width="{bar:.1f}" height="{max(p["y_low"] - p["y_high"], 1):.1f}"'
+            f' rx="1"/>'
+        )
+
+    line = " ".join(f'{p["x"]:.1f},{p["y_close"]:.1f}' for p in pts)
+    parts.append(
+        f'<polyline points="{line}" fill="none" stroke="currentColor"'
+        ' stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
+    )
+
+    # 지금 값이 그 사이 어디인지. 이게 이 차트를 여는 이유다.
+    ny = chart["now_y"]
+    parts.append(
+        f'<line class="nowline" x1="0" y1="{ny:.1f}" x2="{w}" y2="{ny:.1f}"/>'
+        f'<text class="nowtext" x="{w + 6}" y="{ny + 3.5:.1f}">'
+        f'지금 {_n(chart["now_price"])}</text>'
+    )
+
+    # 30일 내내 한 값이면 최고·최저가 같은 점에 겹친다 — 짚을 게 없다.
+    if not chart["flat"]:
+        lo, hi = chart["low"], chart["high"]
+        anchor, x = _anchored(hi["x"], w)
+        parts.append(
+            f'<circle cx="{hi["x"]:.1f}" cy="{hi["y"]:.1f}" r="2.5" fill="var(--bad)"/>'
+            f'<text class="hightext" x="{x:.1f}" y="{hi["y"] - 6:.1f}"'
+            f' text-anchor="{anchor}">{_day_label(hi["date"])} 최고 {_n(hi["value"])}</text>'
+        )
+        anchor, x = _anchored(lo["x"], w)
+        parts.append(
+            f'<circle cx="{lo["x"]:.1f}" cy="{lo["y"]:.1f}" r="2.5" fill="var(--good)"/>'
+            f'<text class="lowtext" x="{x:.1f}" y="{lo["y"] + 13:.1f}"'
+            f' text-anchor="{anchor}">{_day_label(lo["date"])} 최저 {_n(lo["value"])}</text>'
+        )
+
+    parts.append(
+        f'<text class="axistext" x="0" y="{h + 15}">{_day_label(pts[0]["date"])}</text>'
+        f'<text class="axistext" x="{w}" y="{h + 15}" text-anchor="end">'
+        f'{_day_label(pts[-1]["date"])}</text>'
+    )
+
+    svg = (
+        f'<svg viewBox="-{PAD_L} -{PAD_T} {W} {H}" width="{W}" height="{H}"'
+        f' role="img" aria-label="최근 {chart["days"]}일 시세 범위">'
+        + "".join(parts)
+        + "</svg>"
+    )
+    # 일봉 수집은 곁다리라 실패해도 상단 노란 띠를 띄우지 않는다. 대신 차트를
+    # 보는 사람이 언제까지 데이터인지 알아야 한다.
+    stale = (
+        f'<p class="asof">{_day_label(chart["as_of"])} 기준 —'
+        f' 일봉이 {chart["stale_days"]}일 낡았다</p>'
+        if chart["stale_days"] >= 1
+        else ""
+    )
+    key = (
+        f'최근 {chart["days"]}일 · {_n(chart["now_price"])}에 붙박여 움직이지 않았다'
+        if chart["flat"]
+        else f'최근 {chart["days"]}일 · 옅은 띠 = 그날 고가~저가 · 선 = 종가'
+    )
+    return f'<p class="key">{key}</p>' + svg + stale
+
+
+def _material_cell(name, kind_id, owned, details):
+    """재료 한 칸 — 입력칸 한 줄 + 그 아래 접어 둔 30일 차트.
+
+    펼침은 **이름과 스파크라인**에만 건다. 줄 전체를 누르게 하면 수량을
+    넣으려다 차트가 열린다. 차트는 줄 바로 아래 자리에서 폭을 다 쓴다 —
+    별도 화면으로 보내면 재고를 넣던 맥락이 끊긴다.
+    """
+    detail = (details or {}).get(kind_id)
+    chart_id = f"mc{kind_id}"
+    return (
+        f'<label class="matinput">'
+        f'<span class="mname" data-chart="{chart_id}">{html.escape(name)}</span>'
+        f'<input type="number" name="qty_{kind_id}" min="0" step="1"'
+        f' value="{owned.get(kind_id, 0)}">'
+        f"{_material_trend_row(detail, chart_id)}</label>"
+        f'<div class="mchart" id="{chart_id}" hidden>'
+        f'{_range_band_chart((detail or {}).get("chart"))}</div>'
+    )
 
 
 def _inventory_form(materials, owned, rejected=0, details=None, inventory_value=0):
@@ -469,13 +646,7 @@ def _inventory_form(materials, owned, rejected=0, details=None, inventory_value=
     cells = "".join(
         f'<div class="matgroup"><h4>{html.escape(g["label"])}</h4>'
         '<div class="matgrid">'
-        + "".join(
-            f'<label class="matinput"><span>{html.escape(name)}</span>'
-            f'<input type="number" name="qty_{kind_id}" min="0" step="1"'
-            f' value="{owned.get(kind_id, 0)}">'
-            f"{_material_trend_row((details or {}).get(kind_id))}</label>"
-            for name, kind_id in g["items"]
-        )
+        + "".join(_material_cell(name, kind_id, owned, details) for name, kind_id in g["items"])
         + "</div></div>"
         for g in group_materials(materials)
     )
