@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from datetime import date
 from urllib.parse import parse_qs, urlparse
 
 from collect import DEFAULT_INTERVAL, collect_candles, collect_prices
@@ -144,6 +145,16 @@ details.inv summary { font-weight:600; }
 .nowtext { fill:var(--warn); font-size:10px; font-weight:600; }
 .lowtext { fill:var(--good); font-size:10px; font-weight:600; }
 .hightext { fill:var(--bad); font-size:10px; font-weight:600; }
+.guide { stroke:var(--dim); stroke-width:1; stroke-dasharray:2 2; }
+.dot { fill:var(--fg); stroke:var(--head); stroke-width:1.5; }
+.mchart { position:relative; }
+.tip { position:absolute; z-index:2; pointer-events:none; white-space:nowrap;
+  padding:6px 9px; border:1px solid var(--line); border-radius:6px;
+  background:var(--bg); color:var(--fg); font-size:11px; line-height:1.55;
+  box-shadow:0 2px 8px rgba(0,0,0,.14); }
+.tip b { font-weight:600; }
+.tip .row { color:var(--dim); }
+.tip .row i { font-style:normal; color:var(--fg); font-weight:600; }
 .invval { margin:12px 0 0; padding-top:10px; border-top:1px solid var(--line);
   font-size:12px; color:var(--dim); }
 .invval b { color:var(--fg); }
@@ -259,6 +270,55 @@ RELOAD_JS = """
       box.hidden = !box.hidden;
       el.closest('.matinput').classList.toggle('open', !box.hidden);
     });
+  });
+})();
+
+// 차트에 마우스를 올리면 그날 값이 뜬다. 축과 라벨만으로는 최저·최고였던
+// 이틀 말고 나머지 28일을 못 읽는다.
+//
+// 터치 기기에는 안 붙인다 — 폰에서는 차트가 옆으로 스크롤되는 상태라
+// 탭이 스크롤 제스처와 부딪힌다.
+(function () {
+  if (!window.matchMedia || !matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+  document.querySelectorAll('.mchart').forEach(function (box) {
+    var svg = box.querySelector('svg'), tip = box.querySelector('.tip');
+    if (!svg || !tip) return;
+    var guide = svg.querySelector('.guide'), dot = svg.querySelector('.dot');
+    var zones = svg.querySelectorAll('.hit');
+    if (!zones.length) return;
+
+    function hide() {
+      tip.hidden = true;
+      guide.setAttribute('visibility', 'hidden');
+      dot.setAttribute('visibility', 'hidden');
+    }
+
+    zones.forEach(function (z) {
+      z.addEventListener('mouseenter', function () {
+        var d = z.dataset;
+        tip.innerHTML =
+          '<b>' + d.d + '</b>'
+          + '<div class="row">시가 <i>' + d.o + '</i> · 종가 <i>' + d.c + '</i></div>'
+          + '<div class="row">고가 <i>' + d.h + '</i> · 저가 <i>' + d.l + '</i></div>';
+        tip.hidden = false;
+
+        guide.setAttribute('x1', d.x); guide.setAttribute('x2', d.x);
+        guide.setAttribute('visibility', 'visible');
+        dot.setAttribute('cx', d.x); dot.setAttribute('cy', d.y);
+        dot.setAttribute('visibility', 'visible');
+
+        // SVG는 폭에 따라 늘고 주므로 화면 좌표를 직접 잰다.
+        var r = z.getBoundingClientRect(), b = box.getBoundingClientRect();
+        var left = r.left - b.left + r.width / 2 - tip.offsetWidth / 2;
+        // 상자 밖으로 나가면 안쪽으로 민다.
+        left = Math.max(4, Math.min(left, box.clientWidth - tip.offsetWidth - 4));
+        tip.style.left = left + 'px';
+        tip.style.top = (r.top - b.top + box.scrollTop + 6) + 'px';
+      });
+    });
+    svg.addEventListener('mouseleave', hide);
+    box.addEventListener('scroll', hide);
   });
 })();
 
@@ -512,6 +572,15 @@ def _day_label(iso):
     return f"{int(m)}/{int(d)}"
 
 
+WEEKDAYS = "월화수목금토일"
+
+
+def _tip_day(iso):
+    """`2026-08-17` → `8/17 (월)`. 요일이 있어야 "주말이라 쌌나"를 볼 수 있다."""
+    d = date.fromisoformat(iso)
+    return f"{d.month}/{d.day} ({WEEKDAYS[d.weekday()]})"
+
+
 def _anchored(x, width):
     """라벨이 그림판 밖으로 나가지 않게 기준점을 바꾼다."""
     if x < 44:
@@ -603,6 +672,27 @@ def _range_band_chart(chart):
         f'{_day_label(pts[-1]["date"])}</text>'
     )
 
+    # 마우스를 따라다니는 세로선과 점. 처음에는 숨어 있다.
+    parts.append(
+        f'<line class="guide" x1="0" y1="0" x2="0" y2="{h}" visibility="hidden"/>'
+        '<circle class="dot" cx="0" cy="0" r="3.5" visibility="hidden"/>'
+    )
+
+    # 맞히는 자리. 점(반지름 3픽셀)에 정확히 올리게 하면 하루 18픽셀짜리
+    # 차트에서 못 쓴다. 이웃과의 중간까지를 그날 몫으로 잡아 어디에 올려도
+    # 가장 가까운 날이 걸린다. 칠하지 않는다 — 칠하면 띠를 덮는다.
+    for i, p in enumerate(pts):
+        left = 0 if i == 0 else (pts[i - 1]["x"] + p["x"]) / 2
+        right = w if i == len(pts) - 1 else (p["x"] + pts[i + 1]["x"]) / 2
+        parts.append(
+            f'<rect class="hit" x="{left:.1f}" y="0" width="{max(right - left, 1):.1f}"'
+            f' height="{h}" fill="transparent"'
+            f' data-d="{_tip_day(p["date"])}" data-o="{_n(p["open"])}"'
+            f' data-h="{_n(p["high"])}" data-l="{_n(p["low"])}"'
+            f' data-c="{_n(p["close"])}" data-x="{p["x"]:.1f}"'
+            f' data-y="{p["y_close"]:.1f}"/>'
+        )
+
     svg = (
         f'<svg viewBox="-{PAD_L} -{PAD_T} {W} {H}" width="{W}" height="{H}"'
         f' role="img" aria-label="최근 {chart["days"]}일 시세 범위">'
@@ -622,7 +712,9 @@ def _range_band_chart(chart):
         if chart["flat"]
         else f'최근 {chart["days"]}일 · 옅은 띠 = 그날 고가~저가 · 선 = 종가'
     )
-    return f'<p class="key">{key}</p>' + svg + stale
+    # 값을 적을 상자. 위치는 JS가 잡는다.
+    tip = '<div class="tip" hidden></div>'
+    return f'<p class="key">{key}</p>' + svg + tip + stale
 
 
 def _material_cell(name, kind_id, owned, details):

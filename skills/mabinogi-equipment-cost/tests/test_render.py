@@ -728,13 +728,13 @@ def test_no_value_line_without_inventory():
 CHART = {
     "days": 30,
     "points": [
-        {"date": "2026-07-20", "low": 71, "high": 134, "close": 92,
+        {"date": "2026-07-20", "open": 85, "low": 71, "high": 134, "close": 92,
          "x": 0.0, "y_low": 76.4, "y_high": 5.6, "y_close": 52.8},
-        {"date": "2026-08-09", "low": 50, "high": 72, "close": 60,
+        {"date": "2026-08-09", "open": 57, "low": 50, "high": 72, "close": 60,
          "x": 280.0, "y_low": 150.0, "y_high": 75.3, "y_close": 88.8},
-        {"date": "2026-08-17", "low": 89, "high": 139, "close": 117,
+        {"date": "2026-08-17", "open": 118, "low": 89, "high": 139, "close": 117,
          "x": 480.0, "y_low": 56.2, "y_high": 0.0, "y_close": 24.7},
-        {"date": "2026-08-19", "low": 89, "high": 117, "close": 111,
+        {"date": "2026-08-19", "open": 117, "low": 89, "high": 117, "close": 111,
          "x": 560.0, "y_low": 56.2, "y_high": 24.7, "y_close": 31.5},
     ],
     "low": {"date": "2026-08-09", "value": 50, "x": 280.0, "y": 150.0},
@@ -776,7 +776,7 @@ def test_the_band_is_one_filled_area_not_a_row_of_bars():
     """둘 다 그려 비교했다. 막대는 30개를 하나씩 읽게 하고 종가선을 가린다."""
     box = _chart_box(_mat(chart=CHART))
     assert "<polygon" in box
-    assert "<rect" not in box
+    assert 'class="band"' in box and '<rect class="band"' not in box
 
 
 def test_the_band_breaks_where_a_day_is_missing():
@@ -856,3 +856,38 @@ def test_a_flat_chart_drops_the_high_and_low_markers():
     assert "최고" not in box and "최저" not in box
     assert "붙박여 움직이지 않았다" in box
     assert box.count("132") == 3      # 눈금 1 · 지금 1 · 안내문 1
+
+
+# --- 툴팁 ----------------------------------------------------------------------
+#
+# 축과 라벨만으로는 최저·최고였던 이틀 말고 나머지 28일의 값을 못 읽는다.
+
+
+def test_every_day_gets_a_hit_zone():
+    """점(반지름 3픽셀)에 맞추게 하면 하루 18픽셀짜리 차트에서 못 쓴다."""
+    box = _chart_box(_mat(chart=CHART))
+    assert box.count('class="hit"') == len(CHART["points"])
+
+
+def test_a_hit_zone_carries_all_four_prices_and_its_date():
+    box = _chart_box(_mat(chart=CHART))
+    zone = [z for z in box.split("<rect ") if 'class="hit"' in z][0]
+    for attr in ("data-d=", "data-o=", "data-h=", "data-l=", "data-c="):
+        assert attr in zone, attr
+
+
+def test_the_hit_zones_do_not_show_up_as_ink():
+    """맞히는 자리일 뿐 그림이 아니다 — 칠하면 띠를 덮는다."""
+    box = _chart_box(_mat(chart=CHART))
+    zone = [z for z in box.split("<rect ") if 'class="hit"' in z][0]
+    assert 'fill="transparent"' in zone
+
+
+def test_the_chart_carries_a_guide_and_a_tooltip_box():
+    box = _chart_box(_mat(chart=CHART))
+    assert 'class="guide"' in box     # 세로 가이드선
+    assert 'class="tip"' in box       # 값을 적을 상자
+
+
+def test_a_material_without_history_has_no_hit_zones():
+    assert 'class="hit"' not in _chart_box(_mat(chart=None))
