@@ -339,3 +339,20 @@ def test_a_lone_day_between_two_gaps_is_its_own_segment():
     ]
     c = material_chart(sparse, now_price=55, now=NOW)
     assert [len(s) for s in c["segments"]] == [2, 1, 2]
+
+
+# --- 툴팁이 읽을 값 ------------------------------------------------------------
+
+
+def test_each_point_carries_its_open():
+    """툴팁이 시가·고가·저가·종가 넷을 다 보여준다 — 시가도 점에 실려야 한다."""
+    c = material_chart(REAL30, now_price=105, now=NOW)
+    last = c["points"][-1]
+    assert (last["open"], last["high"], last["low"], last["close"]) == (117, 117, 89, 111)
+
+
+def test_a_missing_open_falls_back_to_the_close():
+    """`low`·`high`와 같은 규칙이다 — 없는 값은 종가로 대신하고 그림은 나온다."""
+    broken = [{"time": f"2026-08-{d:02d}T21:00:00Z", "close": 60 + d} for d in range(1, 6)]
+    c = material_chart(broken, now_price=63, now=NOW)
+    assert c["points"][0]["open"] == 61

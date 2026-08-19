@@ -96,9 +96,12 @@ def candle_day(time_str):
 def _usable(candle):
     """그릴 수 있는 하루로 정리한다. 못 그리면 None.
 
-    `close`가 없으면 버린다 — 선을 이을 자리가 없다. `low`·`high`만 없으면
-    종가로 대신해 띠가 선 위로 납작해진다. 원본이 필드 이름을 바꿔도
+    `close`가 없으면 버린다 — 선을 이을 자리가 없다. `open`·`low`·`high`만
+    없으면 종가로 대신해 띠가 선 위로 납작해진다. 원본이 필드 이름을 바꿔도
     남은 값으로 그리는 쪽이 빈 화면보다 낫다.
+
+    `open`은 그림에 안 쓰이고 툴팁에만 뜬다 — 그래도 여기서 같이 정리해
+    화면 쪽이 원본 형태를 다시 다루지 않게 한다.
     """
     close = candle.get("close")
     if close is None:
@@ -107,7 +110,13 @@ def _usable(candle):
     high = candle.get("high")
     low = close if low is None else min(low, close)
     high = close if high is None else max(high, close)
-    return {"date": candle_day(candle["time"]), "low": low, "high": high, "close": close}
+    return {
+        "date": candle_day(candle["time"]),
+        "open": candle.get("open", close) if candle.get("open") is not None else close,
+        "low": low,
+        "high": high,
+        "close": close,
+    }
 
 
 def material_chart(candles, now_price, now=None, width=560, height=150):
