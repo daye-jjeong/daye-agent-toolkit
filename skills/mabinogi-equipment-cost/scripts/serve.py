@@ -10,6 +10,7 @@
 원가는 전부 `최저가 × 수량`이라 하한선이다. 페이지가 그 사실을 숨기지 않는다.
 """
 
+import calendar
 import html
 import json
 import sys
@@ -1189,19 +1190,34 @@ def make_handler(db_path, threshold_sec, state, public=False, collector=None):
     return Handler
 
 
-def candle_ticks(interval=DEFAULT_INTERVAL):
-    """시세를 몇 번 받을 때마다 일봉을 한 번 받을지. 하루에 한 번."""
-    return max(1, 86400 // interval)
+CANDLE_MAX_AGE_SEC = 86400  # 하루. 일봉은 하루 한 칸씩만 늘어난다.
 
 
-def collect_once(store, status, tick=None, candle_every=None):
+def _candles_are_due(store, max_age_sec, now):
+    """일봉을 받을 때가 됐나.
+
+    **주기 번호가 아니라 시각으로 판단한다.** 서버가 재시작하면 주기 번호는
+    0으로 돌아가지만 저장소에 적힌 시각은 안 잊는다 — 예전엔 `tick % 480 == 0`
+    이라 켤 때마다 다시 받았고, 재시작이 잦은 날 하루 1번이 의도인데 7번 긁었다.
+    """
+    last = store.last_candle_collection()
+    if last is None:
+        return True
+    try:
+        was = calendar.timegm(time.strptime(last, "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:
+        return True  # 못 읽는 값이면 받고 새로 적는다
+    return now - was >= max_age_sec
+
+
+def collect_once(store, status, candle_max_age_sec=None, now=None):
     """시세 한 번. 실패해도 예외를 올리지 않고 status에 적는다.
 
     콘솔 로그만 남기면 방문자는 못 본다 — 페이지 상단 띠가 이 status를 읽는다.
 
-    tick/candle_every를 주면 하루에 한 번 일봉도 받는다. 일봉은 하루 한 칸씩만
-    늘어나므로 3분마다 받으면 같은 값을 18종씩 480번 긁는 꼴이다.
+    `candle_max_age_sec`을 주면 그만큼 지났을 때 일봉도 받는다.
     """
+    now = time.time() if now is None else now
     stamp = time.strftime("%H:%M:%S")
     try:
         n, as_of = collect_prices(store)
@@ -1213,7 +1229,13 @@ def collect_once(store, status, tick=None, candle_every=None):
         print(f"[{stamp}] 수집 실패: {type(e).__name__}: {e}", flush=True)
         ok = False
 
-    if candle_every and tick is not None and tick % candle_every == 0:
+    if candle_max_age_sec and _candles_are_due(store, candle_max_age_sec, now):
+        # 성공·실패와 무관하게 받았다고 적는다. 실패했다고 3분 뒤 또 가면
+        # 하루에 18종 × 480번이 된다. 원본이 매번 두 달치를 통째로 주므로
+        # 하루 걸러도 잃는 게 없다 — 다음에 성공할 때 같이 들어온다.
+        store.mark_candles_collected(
+            now=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+        )
         # 일봉은 곁다리다 — 실패해도 시세 수집을 물고 늘어지지 않는다.
         try:
             print(f"[{stamp}] 재료 {collect_candles(store)}종의 일봉", flush=True)
@@ -1229,11 +1251,8 @@ def price_loop(db_path, interval, status):
     페이지 전체가 사라진다. 실패는 화면 상단 띠로 올라간다.
     """
     store = Store(db_path)
-    every = candle_ticks(interval)
-    tick = 0
     while True:
-        collect_once(store, status, tick=tick, candle_every=every)
-        tick += 1
+        collect_once(store, status, candle_max_age_sec=CANDLE_MAX_AGE_SEC)
         time.sleep(interval)
 
 

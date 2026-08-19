@@ -259,3 +259,25 @@ def test_an_old_database_gains_the_new_column(tmp_path):
     )
     assert s.latest_prices()[2]["market_kind_id"] == 999
     assert s.latest_prices()[1]["market_kind_id"] is None  # 옛 행은 비어 있다
+
+
+# --- 일봉을 마지막으로 언제 받았나 ---------------------------------------------
+#
+# 서버는 재시작마다 주기 번호가 0으로 돌아간다. "몇 번째 주기냐"로 판단하면
+# 켤 때마다 일봉을 다시 받는다 — 실측으로 하루 1번이 의도인데 7번 긁었다.
+
+
+def test_a_fresh_store_has_never_collected_candles(db):
+    assert db.last_candle_collection() is None
+
+
+def test_the_candle_collection_time_survives_a_restart(db):
+    db.mark_candles_collected(now="2026-08-19T09:00:00Z")
+    # 새 Store = 서버 재시작. 주기 번호와 달리 이건 안 잊는다.
+    assert Store(db.path).last_candle_collection() == "2026-08-19T09:00:00Z"
+
+
+def test_marking_again_overwrites(db):
+    db.mark_candles_collected(now="2026-08-19T09:00:00Z")
+    db.mark_candles_collected(now="2026-08-20T09:00:00Z")
+    assert db.last_candle_collection() == "2026-08-20T09:00:00Z"
