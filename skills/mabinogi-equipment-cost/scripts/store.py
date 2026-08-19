@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS collect_log (
     count       INTEGER
 );
 
+-- 일봉을 마지막으로 받은 시각. 서버는 재시작마다 주기 번호가 0으로 돌아가서
+-- "몇 번째 주기냐"로 판단하면 켤 때마다 다시 받는다 — 실측에서 하루 1번이
+-- 의도인데 재시작이 잦은 날 7번 긁었다. 시각을 남겨야 재시작을 넘어 기억한다.
+CREATE TABLE IF NOT EXISTS candle_log (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    fetched_at  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS price_history (
     kind_id     INTEGER NOT NULL,   -- 실제로는 codex_item_id (재료 매칭 키)
     -- 거래소가 쓰는 진짜 kind_id. 캔들 API가 이걸 요구한다 —
@@ -349,6 +357,22 @@ class Store:
                 "SELECT fetched_at, as_of, count FROM collect_log WHERE id=1"
             ).fetchone()
         return dict(row) if row else None
+
+    def mark_candles_collected(self, now=None):
+        """일봉을 받은 사실을 남긴다. 다음 실행이 이걸 보고 건너뛴다."""
+        stamp = now or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with self._conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO candle_log (id, fetched_at) VALUES (1,?)",
+                (stamp,),
+            )
+        return stamp
+
+    def last_candle_collection(self):
+        """마지막으로 일봉을 받은 시각. 한 번도 안 받았으면 None."""
+        with self._conn() as c:
+            row = c.execute("SELECT fetched_at FROM candle_log WHERE id=1").fetchone()
+        return row["fetched_at"] if row else None
 
     # --- 캔들 -----------------------------------------------------------------
 

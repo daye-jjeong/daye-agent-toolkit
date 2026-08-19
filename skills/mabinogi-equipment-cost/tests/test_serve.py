@@ -324,23 +324,65 @@ def test_an_absurdly_long_user_agent_is_cut(db_path, capfd):
 # --- 공개판은 일봉도 스스로 받는다 ----------------------------------------------
 
 
+def _counting(monkeypatch, ok=True):
+    import serve
+    n = {"candles": 0}
+
+    def fake(store):
+        n["candles"] += 1
+        if not ok:
+            raise OSError("끊김")
+        return 18
+
+    monkeypatch.setattr(serve, "collect_prices", lambda s, on_page=None: (1, "x"))
+    monkeypatch.setattr(serve, "collect_candles", fake)
+    return n
+
+
 def test_the_loop_fetches_candles_once_a_day(db_path, monkeypatch):
     """일봉은 하루 한 번이면 충분하다 — 3분마다 받으면 같은 값을 18번씩 긁는다."""
     import serve
 
-    ticks = {"prices": 0, "candles": 0}
-    monkeypatch.setattr(serve, "collect_prices", lambda s, on_page=None: (1, "x"))
-    monkeypatch.setattr(serve, "collect_candles",
-                        lambda s: ticks.__setitem__("candles", ticks["candles"] + 1))
+    n = _counting(monkeypatch)
+    store, status = Store(db_path), CollectorStatus()
 
-    store = Store(db_path)
+    # 3분 주기로 하루 반을 돈다
+    for i in range(0, 129600, 180):
+        serve.collect_once(store, status, candle_max_age_sec=86400,
+                           now=1755000000 + i)
+    assert n["candles"] == 2   # 첫 바퀴 + 하루 뒤
+
+
+def test_restarting_does_not_re_fetch_the_candles(db_path, monkeypatch):
+    """주기 번호는 재시작마다 0으로 돌아간다 — 그걸로 판단하면 켤 때마다 다시 받는다.
+
+    실측: 하루 1번이 의도인데 재시작이 잦은 날 7번 긁었다.
+    """
+    import serve
+
+    n = _counting(monkeypatch)
     status = CollectorStatus()
-    per_day = serve.candle_ticks(interval=180)
-    assert per_day == 480
+    for _ in range(5):
+        # 매번 새 Store + 새 상태 = 서버를 다섯 번 껐다 켠 것
+        serve.collect_once(Store(db_path), CollectorStatus(),
+                           candle_max_age_sec=86400, now=1755000000)
+    assert n["candles"] == 1
 
-    for tick in range(per_day + 2):
-        serve.collect_once(store, status, tick=tick, candle_every=per_day)
-    assert ticks["candles"] == 2  # 첫 바퀴 + 하루 뒤
+
+def test_a_failed_candle_fetch_still_waits_a_day(db_path, monkeypatch):
+    """실패했다고 3분마다 다시 긁으면 하루 18종 × 480번이 된다.
+
+    원본이 매번 55일치를 통째로 주므로 하루 걸러도 잃는 게 없다 —
+    다음에 성공할 때 놓친 날까지 같이 들어온다.
+    """
+    import serve
+
+    n = _counting(monkeypatch, ok=False)
+    store, status = Store(db_path), CollectorStatus()
+    for i in range(0, 3600, 180):
+        serve.collect_once(store, status, candle_max_age_sec=86400,
+                           now=1755000000 + i)
+    assert n["candles"] == 1
 
 
 def test_a_candle_failure_does_not_stop_the_price_loop(db_path, monkeypatch):
@@ -351,5 +393,6 @@ def test_a_candle_failure_does_not_stop_the_price_loop(db_path, monkeypatch):
     monkeypatch.setattr(serve, "collect_candles",
                         lambda s: (_ for _ in ()).throw(OSError("끊김")))
     status = CollectorStatus()
-    assert serve.collect_once(Store(db_path), status, tick=0, candle_every=480) is True
+    assert serve.collect_once(Store(db_path), status, candle_max_age_sec=86400,
+                              now=1755000000) is True
     assert status.snapshot()["error"] is None  # 시세는 성공했다
