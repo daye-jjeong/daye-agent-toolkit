@@ -675,8 +675,17 @@ def test_a_sparkline_is_drawn_from_the_closes():
     assert "<svg" in body and "polyline" in body
 
 
-def test_todays_range_is_shown():
-    assert "80" in _inv([_mat()]) and "104" in _inv([_mat()])
+def test_the_two_week_range_brackets_the_sparkline():
+    """선만 있으면 오르는 중인지만 알고 "2주 전엔 얼마였나"에 답하지 못한다."""
+    body = _inv([_mat()])
+    line = body.split('<span class="mtrend">')[1].split("</span></label>")[0]
+    assert "50" in line and "108" in line          # 2주 최저·최고
+    assert line.index("50") < line.index("<svg") < line.index("108")
+
+
+def test_todays_range_moved_into_the_chart():
+    """좁은 칸에 다 못 넣는다. 오늘 폭은 펼침 차트의 마지막 띠가 준다."""
+    assert "오늘" not in _inv([_mat()])
 
 
 def test_an_expensive_material_is_called_out():
@@ -710,3 +719,116 @@ def test_inventory_value_is_shown():
 def test_no_value_line_without_inventory():
     body = _inv([_mat(owned=0, value=0)], value=0, owned={})
     assert "재고 가치" not in body
+
+
+# --- 30일 범위 띠 차트 ---------------------------------------------------------
+#
+# 실측 30일: 최저 50(8/9), 최고 139(8/17), 현재가 105.
+
+CHART = {
+    "days": 30,
+    "points": [
+        {"date": "2026-07-20", "low": 71, "high": 134, "close": 92,
+         "x": 0.0, "y_low": 76.4, "y_high": 5.6, "y_close": 52.8},
+        {"date": "2026-08-09", "low": 50, "high": 72, "close": 60,
+         "x": 280.0, "y_low": 150.0, "y_high": 75.3, "y_close": 88.8},
+        {"date": "2026-08-17", "low": 89, "high": 139, "close": 117,
+         "x": 480.0, "y_low": 56.2, "y_high": 0.0, "y_close": 24.7},
+        {"date": "2026-08-19", "low": 89, "high": 117, "close": 111,
+         "x": 560.0, "y_low": 56.2, "y_high": 24.7, "y_close": 31.5},
+    ],
+    "low": {"date": "2026-08-09", "value": 50, "x": 280.0, "y": 150.0},
+    "high": {"date": "2026-08-17", "value": 139, "x": 480.0, "y": 0.0},
+    "y_min": 50, "y_max": 139, "flat": False,
+    "now_price": 105, "now_y": 57.3,
+    "ticks": [{"value": 139, "y": 0.0}, {"value": 94, "y": 75.0},
+              {"value": 50, "y": 150.0}],
+    "step": 19.3, "width": 560, "height": 150,
+    "as_of": "2026-08-19", "stale_days": 0,
+}
+
+
+def _chart_box(mat):
+    return _inv([mat]).split('<div class="mchart"')[1].split("</div>")[0]
+
+
+def test_the_name_and_the_sparkline_open_the_chart():
+    body = _inv([_mat(chart=CHART)])
+    assert 'class="mname" data-chart="mc9283"' in body
+    assert '<svg data-chart="mc9283"' in body
+    assert 'id="mc9283"' in body
+
+
+def test_the_quantity_box_does_not_open_the_chart():
+    """값을 넣으려다 차트가 열리면 방해다."""
+    body = _inv([_mat(chart=CHART)])
+    box = body.split('<input type="number"')[1].split(">")[0]
+    assert "data-chart" not in box
+
+
+def test_the_chart_starts_folded():
+    assert 'class="mchart" id="mc9283" hidden' in _inv([_mat(chart=CHART)])
+
+
+def test_each_day_gets_a_high_low_band():
+    assert _chart_box(_mat(chart=CHART)).count('class="band"') == 4
+
+
+def test_the_closes_are_drawn_as_one_line():
+    assert "<polyline" in _chart_box(_mat(chart=CHART))
+
+
+def test_the_low_and_high_days_are_labelled():
+    box = _chart_box(_mat(chart=CHART))
+    assert "8/9 최저 50" in box
+    assert "8/17 최고 139" in box
+
+
+def test_the_current_price_crosses_the_chart():
+    box = _chart_box(_mat(chart=CHART))
+    assert "지금 105" in box
+    assert 'class="nowline"' in box
+
+
+def test_a_material_without_history_says_so_instead_of_drawing_zero():
+    """빈 차트를 그리면 데이터가 있는데 값이 0인 줄 안다."""
+    box = _chart_box(_mat(chart=None))
+    assert "시세 이력 없음" in box
+    assert "<polyline" not in box
+
+
+def test_a_fresh_chart_does_not_nag_about_its_date():
+    assert "기준" not in _chart_box(_mat(chart=CHART))
+
+
+def test_a_stale_chart_carries_its_date_without_the_yellow_bar():
+    """곁다리 실패로 전체를 경고 상태로 만들지 않는다."""
+    stale = dict(CHART, as_of="2026-08-17", stale_days=2)
+    html_ = render_html(_rep(materials=[_mat(chart=stale)]), materials=MATS,
+                        owned={9283: 76})
+    assert "8/17 기준" in html_
+    assert 'class="bar stale"' not in html_
+
+
+def test_a_material_stuck_at_one_price_does_not_repeat_it_three_times():
+    """백금강괴는 30일 내내 132다. `132 132 132`는 읽을 게 없다."""
+    fixed = {**_mat()["trend"], "verdict": "flat", "low": 132, "high": 132,
+             "closes": [132] * 14}
+    line = _inv([_mat(name="백금강괴", price=132, trend=fixed)])
+    line = line.split('<span class="mtrend">')[1].split("</span></label>")[0]
+    assert line.count("132") == 1
+    assert "고정" in line
+
+
+def test_a_flat_chart_drops_the_high_and_low_markers():
+    """같은 점에 "최고 132"와 "최저 132"가 겹쳐 봐야 읽을 게 없다."""
+    flat = dict(
+        CHART, flat=True, y_min=131.5, y_max=132.5, now_price=132, now_y=75.0,
+        ticks=[{"value": 132, "y": 75.0}],
+        low={"date": "2026-07-20", "value": 132, "x": 0.0, "y": 75.0},
+        high={"date": "2026-07-20", "value": 132, "x": 0.0, "y": 75.0},
+    )
+    box = _chart_box(_mat(name="백금강괴", price=132, chart=flat))
+    assert "최고" not in box and "최저" not in box
+    assert "붙박여 움직이지 않았다" in box
+    assert box.count("132") == 3      # 눈금 1 · 지금 1 · 안내문 1
