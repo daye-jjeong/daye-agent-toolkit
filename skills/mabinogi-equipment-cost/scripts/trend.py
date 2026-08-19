@@ -142,16 +142,31 @@ def material_chart(candles, now_price, now=None, width=560, height=150):
         y_min, y_max = y_min - 0.5, y_max + 0.5
 
     span = y_max - y_min
-    step = width / (len(pts) - 1)
 
     def y(v):
         return (y_max - v) / span * height
 
-    for i, p in enumerate(pts):
-        p["x"] = i * step
+    # 가로는 **순서가 아니라 날짜**로 놓는다. 원본에 빠진 날이 있어서다 —
+    # 실측에서 18종 전부 8/12(KST)가 없다. 순서대로 놓으면 8/11과 8/13이
+    # 붙어 그날이 있었던 것처럼 보인다.
+    days = [date.fromisoformat(p["date"]) for p in pts]
+    total = (days[-1] - days[0]).days or 1
+
+    for p, d in zip(pts, days):
+        p["x"] = (d - days[0]).days / total * width
         p["y_low"] = y(p["low"])
         p["y_high"] = y(p["high"])
         p["y_close"] = y(p["close"])
+
+    # 하루씩 이어진 구간으로 자른다. 그리는 쪽은 구간마다 면과 선을 따로
+    # 그어 빈 날을 메우지 않는다 — 없는 값을 직선으로 이으면 그 구간에
+    # 값이 있었다고 말하는 것이다.
+    segments = [[pts[0]]]
+    for prev, cur, p in zip(days, days[1:], pts[1:]):
+        if (cur - prev).days == 1:
+            segments[-1].append(p)
+        else:
+            segments.append([p])
 
     # 같은 값이 여러 날 나오면 **먼저 온 날**을 짚는다. 언제부터 그 수준이었는지가
     # 알고 싶은 것이다.
@@ -176,6 +191,7 @@ def material_chart(candles, now_price, now=None, width=560, height=150):
     return {
         "days": len(pts),
         "points": pts,
+        "segments": segments,
         "low": {"date": low_at["date"], "value": low_at["low"],
                 "x": low_at["x"], "y": low_at["y_low"]},
         "high": {"date": high_at["date"], "value": high_at["high"],
@@ -186,7 +202,6 @@ def material_chart(candles, now_price, now=None, width=560, height=150):
         "now_price": now_price,
         "now_y": y(now_price),
         "ticks": ticks,
-        "step": step,
         "width": width,
         "height": height,
         "as_of": as_of,

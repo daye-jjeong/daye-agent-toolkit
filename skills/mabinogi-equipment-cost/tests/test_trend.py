@@ -287,3 +287,55 @@ def test_now_may_arrive_as_a_datetime():
     c = material_chart(REAL30, now_price=105,
                        now=datetime(2026, 8, 19, 7, 17, tzinfo=timezone.utc))
     assert c["stale_days"] == 0
+
+
+# --- 날짜 비례 배치 + 빠진 날 끊기 ------------------------------------------
+#
+# 원본에 8/12(KST)가 없다 — 18종 전부. 순서대로 놓으면 8/11과 8/13이 붙어
+# 그날이 있었던 것처럼 보인다.
+
+
+def test_points_sit_where_their_date_falls_not_where_their_turn_is():
+    c = material_chart(REAL30, now_price=105, now=NOW, width=300)
+    by_date = {p["date"]: p["x"] for p in c["points"]}
+    # 7/20이 0, 8/19가 300. 그 사이 30일을 균등하게 나눠 하루가 10픽셀.
+    assert by_date["2026-07-20"] == 0
+    assert by_date["2026-08-19"] == 300
+    assert round(by_date["2026-07-21"], 6) == 10
+    # 8/12이 없으므로 8/11과 8/13 사이가 하루가 아니라 이틀만큼 벌어진다.
+    assert round(by_date["2026-08-13"] - by_date["2026-08-11"], 6) == 20
+
+
+def test_a_missing_day_splits_the_run_in_two():
+    c = material_chart(REAL30, now_price=105, now=NOW)
+    assert len(c["segments"]) == 2
+    first, second = c["segments"]
+    assert first[0]["date"] == "2026-07-20" and first[-1]["date"] == "2026-08-11"
+    assert second[0]["date"] == "2026-08-13" and second[-1]["date"] == "2026-08-19"
+
+
+def test_an_unbroken_run_stays_one_segment():
+    whole = [{"time": f"2026-08-{d:02d}T21:00:00Z", "low": 50, "high": 60, "close": 55}
+             for d in range(1, 11)]
+    c = material_chart(whole, now_price=55, now=NOW)
+    assert len(c["segments"]) == 1
+    assert len(c["segments"][0]) == 10
+
+
+def test_every_point_belongs_to_exactly_one_segment():
+    c = material_chart(REAL30, now_price=105, now=NOW)
+    flat = [p for seg in c["segments"] for p in seg]
+    assert [p["date"] for p in flat] == [p["date"] for p in c["points"]]
+
+
+def test_a_lone_day_between_two_gaps_is_its_own_segment():
+    """앞뒤가 다 비면 혼자 남는다 — 그려도 면이 안 나오니 렌더가 알아야 한다."""
+    sparse = [
+        {"time": "2026-08-01T21:00:00Z", "low": 50, "high": 60, "close": 55},
+        {"time": "2026-08-02T21:00:00Z", "low": 50, "high": 60, "close": 55},
+        {"time": "2026-08-06T21:00:00Z", "low": 70, "high": 80, "close": 75},
+        {"time": "2026-08-10T21:00:00Z", "low": 50, "high": 60, "close": 55},
+        {"time": "2026-08-11T21:00:00Z", "low": 50, "high": 60, "close": 55},
+    ]
+    c = material_chart(sparse, now_price=55, now=NOW)
+    assert [len(s) for s in c["segments"]] == [2, 1, 2]

@@ -527,6 +527,10 @@ def _range_band_chart(chart):
     정통 캔들(몸통+심지)을 쓰지 않는다 — 우리 값은 "그날 거래소 최저가"의
     OHLC라 몸통 색이 매수·매도 압력을 뜻하지 않는다. 고가~저가를 옅은 띠로
     깔고 종가를 선으로 얹는다.
+
+    띠는 하루씩 끊긴 막대가 아니라 **이어 붙인 면**이다. 둘 다 그려 비교했다 —
+    막대는 30개를 하나씩 읽게 하고 종가선을 가리는 반면, 면은 폭이 좁아지고
+    넓어지는 게 형태로 들어온다. 다만 빠진 날에서는 면도 선도 끊는다.
     """
     if not chart:
         return '<p class="na">시세 이력 없음 — 그릴 만한 일봉이 아직 없다</p>'
@@ -534,7 +538,6 @@ def _range_band_chart(chart):
     w, h = chart["width"], chart["height"]
     W, H = w + PAD_L + PAD_R, h + PAD_T + PAD_B
     pts = chart["points"]
-    bar = max(min(chart["step"] * 0.62, 14), 2)
 
     parts = []
     for t in chart["ticks"]:
@@ -545,19 +548,30 @@ def _range_band_chart(chart):
             f' text-anchor="end">{_n(t["value"])}</text>'
         )
 
-    # 하루치 고가~저가. 1픽셀 아래로는 안 줄인다 — 안 흔들린 날도 자국이 남아야 한다.
-    for p in pts:
-        parts.append(
-            f'<rect class="band" x="{p["x"] - bar / 2:.1f}" y="{p["y_high"]:.1f}"'
-            f' width="{bar:.1f}" height="{max(p["y_low"] - p["y_high"], 1):.1f}"'
-            f' rx="1"/>'
-        )
+    # 고가~저가 면. 위 테두리는 왼쪽에서 오른쪽으로 고가를, 아래 테두리는
+    # 돌아오면서 저가를 훑는다. 빠진 날에서 구간이 갈리므로 면이 여러 개다.
+    for seg in chart["segments"]:
+        if len(seg) < 2:
+            continue  # 혼자 남은 하루는 면이 안 된다 — 아래에서 점으로 찍는다
+        top = " ".join(f'{p["x"]:.1f},{p["y_high"]:.1f}' for p in seg)
+        bottom = " ".join(f'{p["x"]:.1f},{p["y_low"]:.1f}' for p in reversed(seg))
+        parts.append(f'<polygon class="band" points="{top} {bottom}"/>')
 
-    line = " ".join(f'{p["x"]:.1f},{p["y_close"]:.1f}' for p in pts)
-    parts.append(
-        f'<polyline points="{line}" fill="none" stroke="currentColor"'
-        ' stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
-    )
+    for seg in chart["segments"]:
+        if len(seg) < 2:
+            # 앞뒤가 다 빈 하루. 선을 못 그으니 점이라도 남긴다 — 안 그리면
+            # 그날 값이 아예 없었던 것처럼 보인다.
+            p = seg[0]
+            parts.append(
+                f'<circle cx="{p["x"]:.1f}" cy="{p["y_close"]:.1f}" r="1.8"'
+                ' fill="currentColor"/>'
+            )
+            continue
+        line = " ".join(f'{p["x"]:.1f},{p["y_close"]:.1f}' for p in seg)
+        parts.append(
+            f'<polyline points="{line}" fill="none" stroke="currentColor"'
+            ' stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
+        )
 
     # 지금 값이 그 사이 어디인지. 이게 이 차트를 여는 이유다.
     ny = chart["now_y"]
