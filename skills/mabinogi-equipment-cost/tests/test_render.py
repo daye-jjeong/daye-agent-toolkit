@@ -743,9 +743,11 @@ CHART = {
     "now_price": 105, "now_y": 57.3,
     "ticks": [{"value": 139, "y": 0.0}, {"value": 94, "y": 75.0},
               {"value": 50, "y": 150.0}],
-    "step": 19.3, "width": 560, "height": 150,
+    "width": 560, "height": 150,
     "as_of": "2026-08-19", "stale_days": 0,
 }
+# 8/9와 8/17 사이가 비어 있다 — 이어 그리면 없는 값을 직선으로 메우게 된다.
+CHART["segments"] = [CHART["points"][:2], CHART["points"][2:]]
 
 
 def _chart_box(mat):
@@ -770,12 +772,33 @@ def test_the_chart_starts_folded():
     assert 'class="mchart" id="mc9283" hidden' in _inv([_mat(chart=CHART)])
 
 
-def test_each_day_gets_a_high_low_band():
-    assert _chart_box(_mat(chart=CHART)).count('class="band"') == 4
+def test_the_band_is_one_filled_area_not_a_row_of_bars():
+    """둘 다 그려 비교했다. 막대는 30개를 하나씩 읽게 하고 종가선을 가린다."""
+    box = _chart_box(_mat(chart=CHART))
+    assert "<polygon" in box
+    assert "<rect" not in box
 
 
-def test_the_closes_are_drawn_as_one_line():
-    assert "<polyline" in _chart_box(_mat(chart=CHART))
+def test_the_band_breaks_where_a_day_is_missing():
+    """없는 데이터를 직선으로 메우면 그 구간에 값이 있었다고 말하는 것이다."""
+    box = _chart_box(_mat(chart=CHART))
+    assert box.count("<polygon") == 2      # 구간 2개
+    assert box.count("<polyline") == 2     # 종가선도 같이 끊긴다
+
+
+def test_an_unbroken_history_draws_one_band():
+    whole = dict(CHART, segments=[CHART["points"]])
+    box = _chart_box(_mat(chart=whole))
+    assert box.count("<polygon") == 1 and box.count("<polyline") == 1
+
+
+def test_a_lone_day_is_marked_even_though_it_makes_no_area():
+    """앞뒤가 다 빈 하루는 면도 선도 안 나온다 — 점이라도 남겨야 사라지지 않는다."""
+    lone = dict(CHART, segments=[CHART["points"][:2], CHART["points"][2:3],
+                                 CHART["points"][3:]])
+    box = _chart_box(_mat(chart=lone))
+    assert box.count("<polygon") == 1      # 2점짜리 구간 하나만 면이 된다
+    assert "<circle" in box
 
 
 def test_the_low_and_high_days_are_labelled():
@@ -824,6 +847,7 @@ def test_a_flat_chart_drops_the_high_and_low_markers():
     """같은 점에 "최고 132"와 "최저 132"가 겹쳐 봐야 읽을 게 없다."""
     flat = dict(
         CHART, flat=True, y_min=131.5, y_max=132.5, now_price=132, now_y=75.0,
+        segments=[CHART["points"]],
         ticks=[{"value": 132, "y": 75.0}],
         low={"date": "2026-07-20", "value": 132, "x": 0.0, "y": 75.0},
         high={"date": "2026-07-20", "value": 132, "x": 0.0, "y": 75.0},
