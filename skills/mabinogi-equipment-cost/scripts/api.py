@@ -1,7 +1,26 @@
 """mabimobi.life 비공식 API 클라이언트.
 
-**urllib을 쓴다. curl이나 외부 HTTP 라이브러리로 바꾸면 403으로 차단된다**
-(같은 요청을 curl로 보내면 403, urllib로 보내면 200 — 실측. TLS 지문 차이로 보인다).
+**원본은 Cloudflare 뒤에 있고, 낡은 TLS 라이브러리로 붙으면 403으로 막는다.**
+차단은 요청 횟수와 무관하다 — 손으로 딱 한 번 보내도 막힌다. 403 본문이
+Cloudflare 차단 페이지다("Sorry, you have been blocked").
+
+갈리는 건 **파이썬이 어떤 ssl 라이브러리로 빌드됐느냐**다(2026-08-19 실측):
+
+    /usr/bin/python3 3.9.6   LibreSSL 2.8.3   -> 403
+    /opt/homebrew/.. 3.14.3  OpenSSL 3.6.3    -> 200
+    macOS curl 8.7.1         SecureTransport  -> 403
+
+TLS 버전 문제가 아니다. OpenSSL 쪽을 일부러 TLS 1.2로 낮춰 붙여도 200이다.
+HTTP 요청 바이트도 두 인터프리터가 완전히 같다(로컬 소켓으로 받아 비교).
+남는 차이는 핸드셰이크 첫 인사(ClientHello)의 생김새뿐이고, Cloudflare가
+그걸 지문처럼 써서 구식 클라이언트를 거른다.
+
+그래서 **OpenSSL 3.x로 빌드된 파이썬으로 돌려야 한다**(`deploy/keepalive.sh`가
+경로를 박아 둔다). urllib을 쓰는 것 자체는 그대로 두되, 이유는 위와 같다.
+
+**원본 `robots.txt`는 `User-agent: * / Disallow: /`다.** 검색엔진과 광고
+크롤러만 허용한다. 이 클라이언트는 그 방침에 어긋난다 — `references/deploy.md`의
+"원본 사이트의 방침"을 읽고 쓸지 정할 것.
 
 엔드포인트 3종:
     GET /d/api/v1/market/prices?limit=500&offset=N   시세 목록 (쿼터 없음)

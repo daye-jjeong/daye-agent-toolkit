@@ -139,7 +139,8 @@ python3 scripts/serve.py 8765 --public
 
 지켜야 할 것 셋:
 
-- **urllib을 쓴다.** 같은 요청을 curl로 보내면 403, urllib로 보내면 200이다(실측). 외부 HTTP 라이브러리로 바꾸면 차단된다.
+- **원본이 `robots.txt`로 자동 접근을 거절한다.** `User-agent: * / Disallow: /`이고 검색엔진·광고 크롤러만 허용한다. 공개로 돌리기 전에 [배포 문서](references/deploy.md)의 "원본 사이트의 방침"을 읽을 것.
+- **OpenSSL 3.x로 빌드된 파이썬으로 돌린다.** 원본은 Cloudflare 뒤에 있고 낡은 TLS 라이브러리를 막는다 — macOS 기본 `/usr/bin/python3`(LibreSSL 2.8.3)은 403, homebrew·conda 파이썬(OpenSSL 3.x)은 200이다(2026-08-19 실측). 요청 횟수와 무관하고 한 번만 보내도 막힌다. `ssl.OPENSSL_VERSION`으로 확인한다.
 - **레시피는 1회만 받는다.** 상세 API에만 쿼터가 걸리고, 레시피는 게임 패치 전까지 바뀌지 않는다. 실측에서 한 번에 39종을 받고 끊겼다. `collect.py recipes`는 받은 만큼 유지하고 다음 실행에서 못 받은 것부터 잇는다 — 76종을 39 + 37로 나눠 받았다.
 - **끊기면 바로 재시도하지 마라.** 429 본문이 `Expected available in N seconds`를 주지만 그 시간이 지나도 안 풀린다. 5분 간격 8회(약 40분) 재시도에서 한 건도 더 받지 못했고, 몇 시간 뒤에야 풀렸다. 끊기면 그날은 두고 나중에 `collect.py recipes`를 다시 부르는 게 빠르다.
 - **게임 클라이언트 패킷은 쓰지 않는다.** 약관 위반이고, 필요한 데이터가 이미 API에 있다.
@@ -201,7 +202,7 @@ api.py → normalize.py → store.py → report.py → serve.py
 
 `store.py`에는 재고가 없다. 방문자가 가진 재료는 `inventory.py`가 쿠키로 읽고 쓰며, `serve.py`가 요청마다 `build_report(owned=...)`로 넘긴다.
 
-테스트는 `python3 -m pytest tests/ -q` (261개). 픽스처는 2026-08-14T16:17Z 실측 스냅샷이라 시세가 움직여도 흔들리지 않는다. `test_serve.py`만 실제 서버를 띄운다 — 쿠키가 방문자 사이에 안 새는지는 렌더링만 봐서는 확인할 수 없다.
+테스트는 `python3 -m pytest tests/ -q` (310개). 픽스처는 2026-08-14T16:17Z 실측 스냅샷이라 시세가 움직여도 흔들리지 않는다. `test_serve.py`만 실제 서버를 띄운다 — 쿠키가 방문자 사이에 안 새는지는 렌더링만 봐서는 확인할 수 없다.
 
 ### 이 구조가 서 있는 전제
 
