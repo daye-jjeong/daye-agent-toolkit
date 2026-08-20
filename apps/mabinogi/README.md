@@ -77,9 +77,17 @@ store는 **생산자 소유 서브디렉터리**에 산다 — 쓰는 프로그�
 | 0 | 플랫폼 뼈대 + README 계약 + `shared/mabi/data.py`(구 경로 fallback) | ✅ |
 | 1 | farming 한 단위 이동 + `shared/mabi` 사용 + `mabinogi-farming` 스킬 | ✅ |
 | 3 | automator(Swift) 데이터 전부 `~/.mabi/automator/`로 (로그 5종+진단) | ✅ |
-| 2 | equipment-cost 이동 → 시세 DB `~/.mabi/equipment-cost/`로 (그 브랜치 머지 후) | 대기 |
+| 2 | equipment-cost 코드 → `apps/mabinogi/equipment-cost/` + 얇은 스킬 | ✅ (코드) |
 
-구 경로 fallback 제거는 각 writer 전환·검증을 마친 **뒤 별도 단계**로 뺀다.
+**DB 경로 전환은 cutover로 유보** — equipment-cost는 아직 `~/.mabi-equipment-cost/data.db`에
+쓴다. farming은 fallback으로 이미 읽는다. `~/.mabi/equipment-cost/prices.db`로 옮기는
+건 수집기·배포 재시작이 필요한 별도 cutover(automator 로그 이사와 같은 성격). 구 경로
+fallback 제거는 그 뒤.
+
+2단계는 다른 브랜치(`mabi-material-price-chart`)가 equipment-cost를 활발히 고치는 중에
+진행했다 — 그 브랜치가 머지될 때 `skills/mabinogi-equipment-cost/scripts/` →
+`apps/mabinogi/equipment-cost/scripts/` 이동에 맞춰 재적용해야 한다(git rename 감지가
+대부분 자동 처리).
 
 ## 알려진 계약 공백 (확장 전에 채운다)
 

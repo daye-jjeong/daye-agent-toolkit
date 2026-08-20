@@ -105,7 +105,10 @@ python3 scripts/collect.py seed ~/.mabi-equipment-cost/data.db deploy/seed.db
 
 ## Docker
 
-`deploy/Dockerfile`이 있다. 스킬 루트에서 빌드한다.
+`deploy/Dockerfile`이 있다. 프로그램 루트(`apps/mabinogi/equipment-cost/`,
+예전 `skills/mabinogi-equipment-cost/`)에서 빌드한다. 돌고 있는 배포는 코드
+경로가 바뀌었으니, 재시작할 때 이 새 경로에서 `serve.py`·`keepalive.sh`를
+띄운다 — DB(`~/.mabi-equipment-cost/data.db`)는 그대로다.
 
 ```bash
 docker build -f deploy/Dockerfile -t mabi-cost .
