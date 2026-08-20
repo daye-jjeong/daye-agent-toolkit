@@ -26,19 +26,27 @@ public struct RuleSafetyMinimums: Sendable {
 }
 
 public enum BackgroundAutomatorPaths {
-    public static let supportDirectoryName = "BackgroundAutomator"
     public static let overrideRulesFileName = "rules.json"
 
+    /// 앱이 로그·진단·규칙을 두는 디렉터리. 마비노기 데이터 플랫폼의
+    /// 데이터 홈(`~/.mabi/`) 아래 생산자 소유 서브디렉터리 `automator/`다.
+    /// 계약: apps/mabinogi/README.md. `MABI_HOME` 환경변수로 홈을 덮어쓴다
+    /// (Python `shared/mabi/data.py`와 parity — 테스트·임시 실행용).
     public static func supportDirectory(
         fileManager: FileManager = .default
     ) -> URL? {
-        fileManager.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first?.appendingPathComponent(
-            supportDirectoryName,
-            isDirectory: true
-        )
+        mabiHome(fileManager: fileManager)
+            .appendingPathComponent("automator", isDirectory: true)
+    }
+
+    static func mabiHome(fileManager: FileManager = .default) -> URL {
+        let env = ProcessInfo.processInfo.environment["MABI_HOME"]
+        if let env, !env.isEmpty {
+            let expanded = (env as NSString).expandingTildeInPath
+            return URL(fileURLWithPath: expanded, isDirectory: true)
+        }
+        return fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent(".mabi", isDirectory: true)
     }
 
     public static func overrideRulesURL(

@@ -732,17 +732,21 @@ func malformedOverrideFailsInsteadOfSilentlyFallingBack() throws {
     }
 }
 
+// 계약: apps/mabinogi/README.md — 앱 데이터는 ~/.mabi/automator/,
+// MABI_HOME으로 홈을 덮어쓴다(Python shared/mabi/data.py와 parity).
+// MABI_HOME은 프로세스 전역이라 두 경우를 한 테스트에서 순차로 본다
+// (병렬 테스트가 env를 두고 레이스하지 않게).
 @Test
-func supportDirectoryEndsWithBackgroundAutomator() throws {
-    let directory = try #require(
-        BackgroundAutomatorPaths.supportDirectory()
-    )
+func supportDirectoryContract() throws {
+    unsetenv("MABI_HOME")
+    let byDefault = try #require(BackgroundAutomatorPaths.supportDirectory())
+    #expect(byDefault.lastPathComponent == "automator")
+    #expect(byDefault.deletingLastPathComponent().lastPathComponent == ".mabi")
 
-    #expect(directory.lastPathComponent == "BackgroundAutomator")
-    #expect(
-        directory.deletingLastPathComponent().lastPathComponent
-            == "Application Support"
-    )
+    setenv("MABI_HOME", "/tmp/mabi-swift-test", 1)
+    defer { unsetenv("MABI_HOME") }
+    let overridden = try #require(BackgroundAutomatorPaths.supportDirectory())
+    #expect(overridden.path == "/tmp/mabi-swift-test/automator")
 }
 
 private func validRegion() -> [String: Any] {

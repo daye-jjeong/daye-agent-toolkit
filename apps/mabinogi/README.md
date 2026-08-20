@@ -37,11 +37,25 @@ apps/mabinogi/
 ## 데이터 계약 (버전 1)
 
 데이터 홈은 `~/.mabi/`. `MABI_HOME` 환경변수로 덮어쓴다(테스트·임시 실행).
+store는 **생산자 소유 서브디렉터리**에 산다 — 쓰는 프로그램의 이름을 딴다.
+
+```
+~/.mabi/
+├── automator/          background-automator(Swift)가 쓰는 전부
+│   ├── cycle-log.jsonl     [store] 파밍 로그 — reader: farming
+│   ├── rules.json          앱 규칙 오버라이드
+│   └── status.json · activity-log.jsonl · builds.jsonl · stall-log.jsonl · stall-*.png
+│                           앱 운영 진단 (공유 데이터셋 아님, 앱 전용)
+└── equipment-cost/     시세 수집기가 쓰는 것 (2단계에 이동)
+    └── prices.db           [store] 시세 — reader: farming, equipment-cost
+```
 
 | store | 경로 | 포맷 | writer | reader |
 |---|---|---|---|---|
-| 파밍 로그 | `~/.mabi/farming/cycle-log.jsonl` | JSONL(판당 1줄) | automator(Swift) | farming |
-| 시세 | `~/.mabi/prices.db` | SQLite | equipment-cost 수집기 | farming, equipment-cost |
+| 파밍 로그 | `~/.mabi/automator/cycle-log.jsonl` | JSONL(판당 1줄) | automator(Swift) | farming |
+| 시세 | `~/.mabi/equipment-cost/prices.db` | SQLite | equipment-cost 수집기 | farming, equipment-cost |
+
+분석기(farming)는 store를 만들지 않는다 — 읽기만. store는 수집기·앱만 만든다.
 
 **파밍 로그 레코드** — 한 판: `{at(ISO UTC), dungeon, entry?, items[], quantities{}, mode?}`.
 `items`는 전리품 슬롯 문자열, `quantities`는 수량 뱃지, `mode`는 재화/무료 오버라이드.
@@ -52,19 +66,18 @@ apps/mabinogi/
 ### 경로 해석 (구 경로 호환)
 
 `shared/mabi/data.py`는 "새 경로에 파일이 있으면 그것, 없으면 구 경로"로 푼다.
-1단계 현재 writer는 아직 구 위치에 쓴다 — 파밍 로그는
-`~/Library/Application Support/BackgroundAutomator/`, 시세는
-`~/.mabi-equipment-cost/data.db`. 그래서 지금은 구 경로로 풀리고, 데이터가 새 홈으로
-옮겨가면(2·3단계) 소비자 코드를 안 고쳐도 자동으로 새 경로를 쓴다.
+구 위치 — 파밍 로그는 `~/Library/Application Support/BackgroundAutomator/`, 시세는
+`~/.mabi-equipment-cost/data.db`. 데이터가 새 홈으로 옮겨가면 소비자 코드를 안
+고쳐도 자동으로 새 경로를 쓴다. Swift도 `MABI_HOME`을 따른다(Python과 parity).
 
 ## 이관 단계
 
 | 단계 | 범위 | 상태 |
 |---|---|---|
 | 0 | 플랫폼 뼈대 + README 계약 + `shared/mabi/data.py`(구 경로 fallback) | ✅ |
-| 1 | farming 한 단위 이동 + `shared/mabi` 사용 + `mabinogi-farming` 스킬 | 진행 |
-| 2 | equipment-cost 이동 → 시세 DB `~/.mabi/prices.db`로 (그 브랜치 머지 후) | 대기 |
-| 3 | automator(Swift) 로그 경로 `~/.mabi/farming/`로 | 대기 |
+| 1 | farming 한 단위 이동 + `shared/mabi` 사용 + `mabinogi-farming` 스킬 | ✅ |
+| 3 | automator(Swift) 데이터 전부 `~/.mabi/automator/`로 (로그 5종+진단) | ✅ |
+| 2 | equipment-cost 이동 → 시세 DB `~/.mabi/equipment-cost/`로 (그 브랜치 머지 후) | 대기 |
 
 구 경로 fallback 제거는 각 writer 전환·검증을 마친 **뒤 별도 단계**로 뺀다.
 

@@ -44,8 +44,11 @@ def _resolve(new, legacy):
 
 
 def farming_log():
-    """파밍 사이클 로그 파일 (JSONL). automator가 매 판 append."""
-    return _resolve(home() / "farming" / "cycle-log.jsonl", _LEGACY_FARMING_LOG)
+    """파밍 사이클 로그 파일 (JSONL). automator가 매 판 append.
+
+    store는 생산자(automator) 소유 디렉터리에 산다 — ~/.mabi/automator/.
+    """
+    return _resolve(home() / "automator" / "cycle-log.jsonl", _LEGACY_FARMING_LOG)
 
 
 def farming_log_dir():
@@ -55,4 +58,4 @@ def farming_log_dir():
 
 def prices_db():
     """거래소 시세 DB. equipment-cost 수집기가 쓰고, 분석기가 읽기 전용으로 본다."""
-    return _resolve(home() / "prices.db", _LEGACY_PRICES_DB)
+    return _resolve(home() / "equipment-cost" / "prices.db", _LEGACY_PRICES_DB)

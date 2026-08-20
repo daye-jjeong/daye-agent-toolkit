@@ -41,11 +41,11 @@ open "dist/Background Automator.app"
 
 ## 규칙 오버라이드 (재빌드 없이 보정)
 
-`~/Library/Application Support/BackgroundAutomator/rules.json`을 만들면 앱이 패키지 기본 규칙 대신 이 파일을 사용합니다. 색상 임계값·OCR 영역·요구 텍스트를 이 파일에서 조정하고 앱만 재시작하면 됩니다 — 재빌드가 없으므로 권한 재등록도 필요 없습니다. 파일 포맷은 패키지 `default-rules.json`과 동일(schemaVersion 1)하며, 손상된 파일은 조용히 기본값으로 되돌리지 않고 시작을 막아 오작동을 예방합니다. 파일이 없으면 패키지 기본값을 씁니다.
+`~/.mabi/automator/rules.json`을 만들면 앱이 패키지 기본 규칙 대신 이 파일을 사용합니다. 색상 임계값·OCR 영역·요구 텍스트를 이 파일에서 조정하고 앱만 재시작하면 됩니다 — 재빌드가 없으므로 권한 재등록도 필요 없습니다. 파일 포맷은 패키지 `default-rules.json`과 동일(schemaVersion 1)하며, 손상된 파일은 조용히 기본값으로 되돌리지 않고 시작을 막아 오작동을 예방합니다. 파일이 없으면 패키지 기본값을 씁니다.
 
 ## 진단 상태 파일
 
-앱은 진단 파일 다섯 가지를 `~/Library/Application Support/BackgroundAutomator/`에 남깁니다 — 현재 상태 `status.json`, 클릭 단위 `activity-log.jsonl`, 던전 1판 단위 `cycle-log.jsonl`, 빌드별 첫 실행과 변경 내역 `builds.jsonl`, 멈춤 기록 `stall-log.jsonl`과 그때 화면 `stall-*.png`(최근 20장). 메뉴의 `진단 폴더 열기`가 여는 폴더와 같습니다. 내용은 현재 상태 문구, 마지막 preflight 결과(실패 사유, 측정된 창 크기·비율), 마지막 동작, 마지막 관찰 요약(레이아웃, OCR 텍스트 최대 24개, 후보 버튼, 버튼 주변 색상 중앙값 통계)이며, 내용이 실제로 바뀔 때만 다시 씁니다. "시작이 안 된다"고 느껴지면 `status.json`의 `preflight.outcome`부터 확인하세요.
+앱은 진단 파일 다섯 가지를 `~/.mabi/automator/`에 남깁니다(마비노기 데이터 플랫폼의 데이터 홈 — `apps/mabinogi/README.md` 계약 참조. `MABI_HOME`으로 덮어씀) — 현재 상태 `status.json`, 클릭 단위 `activity-log.jsonl`, 던전 1판 단위 `cycle-log.jsonl`, 빌드별 첫 실행과 변경 내역 `builds.jsonl`, 멈춤 기록 `stall-log.jsonl`과 그때 화면 `stall-*.png`(최근 20장). 메뉴의 `진단 폴더 열기`가 여는 폴더와 같습니다. 내용은 현재 상태 문구, 마지막 preflight 결과(실패 사유, 측정된 창 크기·비율), 마지막 동작, 마지막 관찰 요약(레이아웃, OCR 텍스트 최대 24개, 후보 버튼, 버튼 주변 색상 중앙값 통계)이며, 내용이 실제로 바뀔 때만 다시 씁니다. "시작이 안 된다"고 느껴지면 `status.json`의 `preflight.outcome`부터 확인하세요.
 
 150초 동안 누를 버튼을 하나도 못 찾으면 메뉴 막대가 `확인 필요`로 바뀌고 그때 화면이 PNG로 저장됩니다. 정상 파밍에도 던전 입장부터 보스 컷신까지 최대 77초는 조용하므로 그 두 배를 기준으로 삼았습니다.
 
