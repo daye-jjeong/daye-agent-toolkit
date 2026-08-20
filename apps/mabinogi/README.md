@@ -47,7 +47,8 @@ store는 **생산자 소유 서브디렉터리**에 산다 — 쓰는 프로그�
 │   └── status.json · activity-log.jsonl · builds.jsonl · stall-log.jsonl · stall-*.png
 │                           앱 운영 진단 (공유 데이터셋 아님, 앱 전용)
 └── equipment-cost/     시세 수집기가 쓰는 것
-    └── prices.db           [store] 시세 — reader: farming, equipment-cost
+    ├── prices.db              [store] 시세 — reader: farming, equipment-cost
+    └── collector-status.json  수집기 heartbeat(상태·신선도) — reader: m-agent 메뉴
 ```
 
 | store | 경로 | 포맷 | writer | reader |
