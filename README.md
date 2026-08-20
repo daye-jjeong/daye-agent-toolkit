@@ -6,7 +6,7 @@
 
 ```
 skills/     — standalone 스킬 (mabinogi-mml, mabinogi-equipment-cost, mabinogi-farming)
-apps/       — 우리가 만든 프로그램 (background-automator, mabinogi 데이터 플랫폼)
+apps/       — 우리가 만든 프로그램 (mabinogi 데이터 플랫폼: m-agent·equipment-cost·farming)
 plugins/    — 레거시 CC 플러그인 4개 (life-management, finance, dev-tools, media-fetch)
 rules/      — 글로벌 규칙 (~/.claude/rules/에 심링크)
 commands/   — 범용 슬래시 커맨드
@@ -15,7 +15,7 @@ mcp/        — MCP 서버 (life-dashboard)
 codex/      — Codex CLI 전용
 ```
 
-`apps/mabinogi/`는 마비노기 데이터 플랫폼 — 수집(automator)·저장(`~/.mabi/`)·분석
+`apps/mabinogi/`는 마비노기 데이터 플랫폼 — 수집(m-agent)·저장(`~/.mabi/`)·분석
 (farming, equipment-cost)을 나눈 프로그램 묶음. 계약은 `apps/mabinogi/README.md`.
 
 ## Setup

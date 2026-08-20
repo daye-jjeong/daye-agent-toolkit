@@ -212,6 +212,6 @@ done 기준:
 폴더의 대시보드 스크립트를 영혼석 전용으로 바꾼다. 시세는 해연 원가 도구의 시세
 저장소를 읽기 전용으로 가져온다.
 
-(2026-08-20 이관: 이 파일들은 `apps/background-automator/scripts/`에서
-`apps/mabinogi/farming/`으로 옮겼다. 경로 해석은 `apps/mabinogi/shared/mabi/data.py`,
-데이터 계약은 `apps/mabinogi/README.md`.)
+(2026-08-20 이관: 이 파일들은 옛 `apps/background-automator/scripts/`에서
+`apps/mabinogi/farming/`으로 옮겼다. 그 앱 자체는 `apps/mabinogi/m-agent/`로 개명됐다.
+경로 해석은 `apps/mabinogi/shared/mabi/data.py`, 데이터 계약은 `apps/mabinogi/README.md`.)

@@ -46,9 +46,9 @@ def _resolve(new, legacy):
 def farming_log():
     """파밍 사이클 로그 파일 (JSONL). automator가 매 판 append.
 
-    store는 생산자(automator) 소유 디렉터리에 산다 — ~/.mabi/automator/.
+    store는 생산자(m-agent) 소유 디렉터리에 산다 — ~/.mabi/m-agent/.
     """
-    return _resolve(home() / "automator" / "cycle-log.jsonl", _LEGACY_FARMING_LOG)
+    return _resolve(home() / "m-agent" / "cycle-log.jsonl", _LEGACY_FARMING_LOG)
 
 
 def farming_log_dir():

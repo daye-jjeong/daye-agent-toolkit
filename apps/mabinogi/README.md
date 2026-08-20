@@ -22,8 +22,8 @@
 apps/mabinogi/
 ├── README.md            이 문서 — 데이터 계약(단일 진실)
 ├── shared/mabi/data.py  store 경로 해석 + MABI_HOME override
-├── automator/           [수집·Swift]  게임 자동화 → 파밍 로그      (3단계에 이동)
-├── equipment-cost/      [제품]        시세 수집 + 원가 분석        (2단계에 이동)
+├── m-agent/            [수집·Swift]  게임 자동화 + 플랫폼 메뉴바 → 파밍 로그
+├── equipment-cost/      [제품]        시세 수집 + 원가 분석
 └── farming/             [제품]        파밍 로그 분석 + 대시보드
 ```
 
@@ -41,18 +41,18 @@ store는 **생산자 소유 서브디렉터리**에 산다 — 쓰는 프로그�
 
 ```
 ~/.mabi/
-├── automator/          background-automator(Swift)가 쓰는 전부
+├── m-agent/            m-agent(Swift)가 쓰는 전부
 │   ├── cycle-log.jsonl     [store] 파밍 로그 — reader: farming
 │   ├── rules.json          앱 규칙 오버라이드
 │   └── status.json · activity-log.jsonl · builds.jsonl · stall-log.jsonl · stall-*.png
 │                           앱 운영 진단 (공유 데이터셋 아님, 앱 전용)
-└── equipment-cost/     시세 수집기가 쓰는 것 (2단계에 이동)
+└── equipment-cost/     시세 수집기가 쓰는 것
     └── prices.db           [store] 시세 — reader: farming, equipment-cost
 ```
 
 | store | 경로 | 포맷 | writer | reader |
 |---|---|---|---|---|
-| 파밍 로그 | `~/.mabi/automator/cycle-log.jsonl` | JSONL(판당 1줄) | automator(Swift) | farming |
+| 파밍 로그 | `~/.mabi/m-agent/cycle-log.jsonl` | JSONL(판당 1줄) | m-agent(Swift) | farming |
 | 시세 | `~/.mabi/equipment-cost/prices.db` | SQLite | equipment-cost 수집기 | farming, equipment-cost |
 
 분석기(farming)는 store를 만들지 않는다 — 읽기만. store는 수집기·앱만 만든다.
@@ -76,13 +76,18 @@ store는 **생산자 소유 서브디렉터리**에 산다 — 쓰는 프로그�
 |---|---|---|
 | 0 | 플랫폼 뼈대 + README 계약 + `shared/mabi/data.py`(구 경로 fallback) | ✅ |
 | 1 | farming 한 단위 이동 + `shared/mabi` 사용 + `mabinogi-farming` 스킬 | ✅ |
-| 3 | automator(Swift) 데이터 전부 `~/.mabi/automator/`로 (로그 5종+진단) | ✅ |
+| 3 | `background-automator` → `m-agent`로 개명(폴더·패키지·번들ID·표시명) + 데이터 `~/.mabi/m-agent/`로 | ✅ (코드) |
 | 2 | equipment-cost 코드 → `apps/mabinogi/equipment-cost/` + 얇은 스킬 | ✅ (코드) |
 
-**DB 경로 전환은 cutover로 유보** — equipment-cost는 아직 `~/.mabi-equipment-cost/data.db`에
-쓴다. farming은 fallback으로 이미 읽는다. `~/.mabi/equipment-cost/prices.db`로 옮기는
-건 수집기·배포 재시작이 필요한 별도 cutover(automator 로그 이사와 같은 성격). 구 경로
-fallback 제거는 그 뒤.
+**데이터 이사(cutover)는 런타임 단계로 남는다.** 코드는 새 경로를 쓰지만, 실제 데이터를
+옮기고 프로그램을 재시작해야 완결된다. `shared/mabi/data.py`가 새 경로 없으면 구 경로로
+읽어(fallback) 그 사이에도 안 깨진다.
+- **m-agent**: 새 앱(개명·번들ID 변경)을 설치·실행하면 `~/.mabi/m-agent/`에 쓴다. 구
+  `~/Library/Application Support/BackgroundAutomator/` 데이터를 복사해 오는 게 이사.
+  번들ID가 바뀌어 macOS 권한(화면기록·손쉬운사용·입력모니터링) 재등록이 필요하다.
+- **equipment-cost 시세**: 수집기를 `~/.mabi/equipment-cost/prices.db`로 돌리면 이사 완료
+  (2026-08-20 그렇게 세팅함). 구 `~/.mabi-equipment-cost/data.db`는 다른 세션이 아직 씀.
+- 구 경로 fallback 제거는 각 writer 전환·검증을 마친 **뒤 별도 단계**.
 
 2단계는 다른 브랜치(`mabi-material-price-chart`)가 equipment-cost를 활발히 고치는 중에
 진행했다 — 그 브랜치가 머지될 때 `skills/mabinogi-equipment-cost/scripts/` →
