@@ -14,7 +14,7 @@ open "dist/m-agent.app"
 
 산출물은 `dist/m-agent.app`입니다. 앱의 로컬 번들 ID는 게임과 무관한 `com.dayejeong.m-agent`입니다. `/Applications`에는 자동으로 설치하지 않습니다.
 
-빌드 스크립트는 완성된 앱 전체를 로컬 ad-hoc 방식으로 서명하고 리소스 봉인을 검증합니다. 이는 Apple Developer ID 서명이나 Apple 공증(notarization)이 아니므로 다른 Mac에 배포하기 위한 서명이 아니며, macOS가 최초 실행 시 별도 확인을 요구할 수 있습니다.
+빌드 스크립트는 완성된 앱 전체를 서명하고 리소스 봉인을 검증합니다. 자체 서명 인증서 "m-agent Local Signing"이 키체인에 있으면 그것으로(신원 고정 — 권한 유지), 없으면 ad-hoc으로 서명합니다 → **[코드 서명과 권한](#코드-서명과-권한-중요)** 참조. 어느 쪽이든 Apple Developer ID 서명·공증은 아니라 다른 Mac 배포용은 아니고, macOS가 최초 실행 시 별도 확인을 요구할 수 있습니다.
 
 ## 처음 설정
 
@@ -79,9 +79,29 @@ python3 ../mabinogi/farming/farming-dashboard.py
 open "dist/m-agent.app" --args --start-on-launch
 ```
 
-## 재빌드 후 권한 재허용
+## 코드 서명과 권한 (중요)
 
-ad-hoc 서명은 빌드마다 코드 해시가 바뀌므로, 재빌드하면 macOS가 기존 화면 기록·손쉬운 사용·입력 모니터링 허용을 새 바이너리에 적용하지 않을 수 있습니다. 시스템 설정 → 개인정보 보호 및 보안에서 세 항목의 m-agent 스위치를 끄고 다시 켠 뒤 앱을 재실행하세요. 어떤 권한이 막혔는지는 status.json의 `preflight.outcome`으로 확인할 수 있습니다.
+macOS 권한(TCC — 화면 기록·손쉬운 사용·입력 모니터링)은 앱의 **코드 신원**에 묶입니다. ad-hoc 서명은 빌드마다 해시가 바뀌어 신원이 달라지므로, **재빌드할 때마다 권한이 깨집니다.** 설정에서 스위치를 껐다 켜도 옛 신원을 가리켜 잘 안 풀립니다(실측).
+
+**근본 해결 — 안정 자체 서명 인증서를 한 번 만든다:**
+
+```bash
+bash scripts/make-signing-cert.sh
+```
+
+CN "m-agent Local Signing" 인증서를 로그인 키체인에 등록합니다. 그 뒤 `build-app.sh`가 이 인증서로 서명하므로 신원이 고정되고, **재빌드해도 권한이 유지됩니다.** 인증서가 없으면 ad-hoc으로 떨어집니다.
+
+인증서를 처음 만든 뒤(또는 ad-hoc 빌드에서 넘어올 때)는 신원이 바뀌므로 **딱 한 번** 권한을 새로 받습니다:
+
+```bash
+# 이미 설치된 앱을 새 인증서로 재서명 (재빌드 대신)
+codesign -s "m-agent Local Signing" --force --deep /Applications/m-agent.app
+# 옛 권한 기록 정리 후 새로 허용
+tccutil reset All com.dayejeong.m-agent
+# → 앱 재실행 → 시작 → 화면기록·손쉬운사용·입력모니터링 허용
+```
+
+어떤 권한이 막혔는지는 `~/.mabi/m-agent/status.json`의 `preflight.outcome`으로 확인합니다(`screenRecordingDenied` 등).
 
 ## 패키징 검사
 
