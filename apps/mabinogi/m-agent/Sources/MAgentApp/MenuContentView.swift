@@ -146,11 +146,29 @@ struct MenuContentView: View {
 
             Divider()
 
+            Text("플랫폼 상태")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            if let row = model.collectorStatus {
+                LabeledContent("\(row.symbol) \(row.label)") {
+                    Text(row.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("불러오는 중…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
             Button("종료") {
                 model.quit()
             }
         }
         .padding(14)
         .frame(width: 360)
+        .onAppear { model.refreshPlatformStatus() }
     }
 }

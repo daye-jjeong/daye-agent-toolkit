@@ -11,6 +11,7 @@
 시세 API는 쿼터가 없고 상세 API에만 걸린다. 그래서 둘의 주기가 다르다.
 """
 
+import json
 import os
 import sys
 import time
@@ -115,7 +116,9 @@ def collect_candles(store, interval="day", sleep=0.2):
         market_kind_id = (prices.get(codex_id) or {}).get("market_kind_id")
         if market_kind_id is None:
             continue
-        store.save_candles(market_kind_id, interval, api.fetch_candles(market_kind_id, interval))
+        store.save_candles(
+            market_kind_id, interval, api.fetch_candles(market_kind_id, interval)
+        )
         done += 1
         time.sleep(sleep)
     return done
@@ -152,6 +155,24 @@ def collect_materials(store):
     return len(filled)
 
 
+def write_heartbeat(db, ok, count, as_of, error):
+    """수집기 상태를 <db 폴더>/collector-status.json에 남긴다.
+    m-agent 메뉴 '플랫폼 상태'가 읽어 🟢/🔴로 보인다. 계약: apps/mabinogi/README.md."""
+    path = os.path.join(os.path.dirname(os.path.abspath(db)), "collector-status.json")
+    payload = {
+        "last_run": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ok": ok,
+        "count": count,
+        "as_of": as_of,
+        "error": error,
+    }
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False)
+    except OSError:
+        pass
+
+
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else "loop"
     db = argv[2] if len(argv) > 2 else DEFAULT_DB
@@ -184,11 +205,19 @@ def main(argv):
         print(f"씨앗 {target} ({kb}KB) — 레시피·아이템만. 시세는 배포처가 직접 받는다")
     elif cmd == "loop":
         interval = int(argv[3]) if len(argv) > 3 else DEFAULT_INTERVAL
+        # 실패해도 루프를 죽이지 않는다 — 다음 주기에 다시 시도하고, 상태는
+        # heartbeat로 남겨 m-agent 메뉴가 멈춤/오류를 보이게 한다.
         while True:
-            n, as_of = collect_prices(store)
-            print(
-                f"[{time.strftime('%H:%M:%S')}] 시세 {n}건 (기준 {as_of})", flush=True
-            )
+            try:
+                n, as_of = collect_prices(store)
+                write_heartbeat(db, ok=True, count=n, as_of=as_of, error=None)
+                print(
+                    f"[{time.strftime('%H:%M:%S')}] 시세 {n}건 (기준 {as_of})",
+                    flush=True,
+                )
+            except Exception as exc:  # noqa: BLE001 — 어떤 실패든 살아남아 기록
+                write_heartbeat(db, ok=False, count=0, as_of=None, error=str(exc))
+                print(f"[{time.strftime('%H:%M:%S')}] 실패: {exc}", flush=True)
             time.sleep(interval)
     else:
         print(__doc__)

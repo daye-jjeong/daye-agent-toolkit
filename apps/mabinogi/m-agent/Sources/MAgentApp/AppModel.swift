@@ -38,6 +38,8 @@ final class AppModel: ObservableObject {
         totalCycles: 0,
         byDungeon: [:]
     )
+    /// 플랫폼 상태 — 시세 수집기(launchd) heartbeat. 메뉴 열 때 갱신한다.
+    @Published private(set) var collectorStatus: PlatformStatusRow?
 
     /// 결과 화면이 떠 있는 5~8초 동안 전리품이 차례로 채워진다. 2초로
     /// 보면 3~4번뿐이라 그 사이에 들어온 항목을 놓쳤다 — 실측 248판에서
@@ -198,6 +200,11 @@ final class AppModel: ObservableObject {
         isRunning
             || startPending
             || AutomationTargetFieldPolicy.isLocked(status: status)
+    }
+
+    /// 메뉴가 열릴 때 시세 수집기 heartbeat를 다시 읽는다.
+    func refreshPlatformStatus() {
+        collectorStatus = PlatformStatus.collectorRow()
     }
 
     func toggleAutomation() {
