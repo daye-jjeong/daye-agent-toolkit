@@ -71,6 +71,50 @@ store는 **생산자 소유 서브디렉터리**에 산다 — 쓰는 프로그�
 `~/.mabi-equipment-cost/data.db`. 데이터가 새 홈으로 옮겨가면 소비자 코드를 안
 고쳐도 자동으로 새 경로를 쓴다. Swift도 `MABI_HOME`을 따른다(Python과 parity).
 
+## 확장하는 법
+
+새 컴포넌트는 **제품 하나**(`apps/mabinogi/<name>/`)로 시작한다. 역할에 따라 아래를
+따른다. 기존 셋이 견본이다 — farming(분석기), equipment-cost(수집+분석), m-agent(Swift 앱).
+
+### 새 분석기 (Python — 파밍 대시보드류, store를 읽기만)
+
+1. `apps/mabinogi/<name>/`에 프로그램(stdlib만, 웹이면 `http.server`). 집계는 새로
+   짜지 말고 기존 함수를 재사용(터미널·웹 숫자가 갈리지 않게).
+2. store를 읽을 땐 경로를 하드코딩하지 말고 `shared/mabi/data.py`를 import해서 쓴다.
+3. 얇은 스킬: `skills/mabinogi-<name>/SKILL.md`(≤150줄) + `scripts/run.py`
+   (`pathlib.Path(__file__).resolve().parents[3]`로 레포 루트 찾아 프로그램 실행,
+   대상 부재 시 명확히 실패). farming 스킬을 복사하면 된다.
+4. **`Makefile`의 `STANDALONE_SKILLS`에 `mabinogi-<name>` 추가** → 메인 레포에서
+   `make install`. 이걸 빠뜨리면 스킬이 `~/.claude/skills`에 심링크 안 된다.
+
+### 새 수집기 (데이터를 모아 store에 쓰는 것)
+
+1. `~/.mabi/<생산자>/`에 쓴다(생산자 소유 서브디렉터리). 경로는 `shared/mabi/data.py`에
+   함수를 하나 더한다(구 경로 fallback 패턴 그대로).
+2. **이 README 계약 표에 store 한 줄**(경로·포맷·writer·reader) + 스키마를 적는다.
+3. 백그라운드로 **상시** 돌 거면: launchd LaunchAgent(`RunAtLoad`+`KeepAlive`,
+   `~/Library/LaunchAgents/`) + heartbeat 파일(`collector-status.json` 형식:
+   `{last_run, ok, count, as_of, error}`). 그러면 m-agent 메뉴 '플랫폼 상태'가 자동으로
+   읽어 🟢/🔴로 보인다. equipment-cost 수집기가 견본.
+
+### 새 Swift 앱 (m-agent류 네이티브)
+
+1. 번들ID `com.dayejeong.<name>`, 데이터 디렉터리 `~/.mabi/<name>/`
+   (`MABI_HOME` 대응 — m-agent `MAgentPaths.mabiHome()` 참조).
+2. **안정 서명 필수**: `m-agent/scripts/make-signing-cert.sh` 패턴으로 자체 서명
+   인증서를 만들고 빌드가 그걸로 서명한다. 안 하면 ad-hoc이라 **재빌드마다 권한이
+   깨진다** → m-agent README "코드 서명과 권한".
+3. store를 쓰면 계약 표 갱신 + Swift(`mabiHome`)와 Python(`home()`) 경로가 갈리지
+   않게(둘 다 `MABI_HOME`을 따른다).
+
+### 공통
+
+- **코드 ≠ 스킬.** 코드는 `apps/mabinogi/`, 스킬은 얇은 진입점(`skills/mabinogi-*`).
+  부를 가치가 있을 때만 스킬을 씌운다.
+- **수집기는 쓰고, 분석기는 읽는다.** 분석기가 남의 store 내부를 하드코딩으로 뒤지지
+  않는다 — `shared/mabi/data.py`를 거친다.
+- **데이터는 `~/.mabi/`**(git 밖), 경로는 `shared/mabi/data.py` 한 곳에서만 정한다.
+
 ## 이관 단계
 
 | 단계 | 범위 | 상태 |
