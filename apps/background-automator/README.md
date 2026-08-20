@@ -49,10 +49,16 @@ open "dist/Background Automator.app"
 
 150초 동안 누를 버튼을 하나도 못 찾으면 메뉴 막대가 `확인 필요`로 바뀌고 그때 화면이 PNG로 저장됩니다. 정상 파밍에도 던전 입장부터 보스 컷신까지 최대 77초는 조용하므로 그 두 배를 기준으로 삼았습니다.
 
-기록 분석은 다음 명령으로 합니다 — 판당 소요, 빌드별 비교, 드랍률, 구간별 지연, 날짜별 집계를 출력합니다.
+기록 분석은 이 앱이 아니라 **마비노기 데이터 플랫폼**의 farming 제품이 맡습니다
+(`apps/mabinogi/farming/`). 이 앱은 `cycle-log.jsonl`을 남기고, 분석·대시보드는
+그 로그를 읽습니다. 데이터 계약은 `apps/mabinogi/README.md`.
 
 ```bash
-python3 scripts/analyze-logs.py
+# 터미널 분석 — 판당 소요·드랍률·빌드별 비교·날짜별 집계
+python3 ../mabinogi/farming/analyze-logs.py
+
+# 웹 대시보드 — 영혼석 시간당 데카 순위(기본 8765)
+python3 ../mabinogi/farming/farming-dashboard.py
 ```
 
 ### 빌드별 비교

@@ -22,7 +22,13 @@ import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
-LOG_DIR = pathlib.Path.home() / "Library/Application Support/BackgroundAutomator"
+# 마비노기 데이터 플랫폼 공유 모듈 — store 경로는 여기서만 해석한다.
+_SHARED = pathlib.Path(__file__).resolve().parent.parent / "shared"
+if str(_SHARED) not in sys.path:
+    sys.path.insert(0, str(_SHARED))
+from mabi import data as mabi_data
+
+LOG_DIR = mabi_data.farming_log_dir()
 KST = timezone(timedelta(hours=9))
 
 # 전리품이 아닌 것: 결과 화면의 버튼·안내문·메타 텍스트.
@@ -553,8 +559,6 @@ SOUL_UNKNOWN = "종류 불명"
 # 아이템의 수량이 새어 붙은 오염이라 개수를 못 믿는다 → 1개로 센다. (실측:
 # '마물 퇴치 증표 망령의 영혼석'에 증표 수량 10·180이 붙어 통계를 부풀렸다.)
 SOUL_BADGE_MAX = 2
-# 해연 원가 도구가 거래소 시세를 받아 두는 저장소. 읽기만 한다.
-PRICE_DB = pathlib.Path.home() / ".mabi-equipment-cost/data.db"
 
 
 # 5개 대상 던전의 area 루트 → 표준 표기. OCR 변종은 루트 2글자 근사로 잡는다
@@ -704,7 +708,7 @@ def read_soul_prices(whitelist, db_path=None):
     DB가 없거나 비면 ({}, None) — 데카 열을 지어내지 않는다. 최신 as_of의
     행만, 화이트리스트에 있는 캐논 이름만 남긴다.
     """
-    path = pathlib.Path(db_path) if db_path else PRICE_DB
+    path = pathlib.Path(db_path) if db_path else mabi_data.prices_db()
     if not path.exists():
         return {}, None
     names = set(whitelist.values())

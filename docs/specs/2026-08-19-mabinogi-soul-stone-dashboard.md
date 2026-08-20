@@ -208,6 +208,10 @@ done 기준:
 뒤집기만이 아니라 늘어난 것·줄어든 것·자리를 옮긴 것도 포함한다.
 끝나면 각 섹션을 산출물과 한 번 대조한다.
 
-구현자에게: 집계는 기존 `apps/background-automator/scripts/analyze-logs.py`에
-얹는다. 새로 짜지 마라. 웹은 같은 폴더의 대시보드 스크립트를 영혼석 전용으로
-바꾼다. 시세는 해연 원가 도구의 시세 저장소를 읽기 전용으로 가져온다.
+구현자에게: 집계는 기존 `analyze-logs.py`에 얹는다. 새로 짜지 마라. 웹은 같은
+폴더의 대시보드 스크립트를 영혼석 전용으로 바꾼다. 시세는 해연 원가 도구의 시세
+저장소를 읽기 전용으로 가져온다.
+
+(2026-08-20 이관: 이 파일들은 `apps/background-automator/scripts/`에서
+`apps/mabinogi/farming/`으로 옮겼다. 경로 해석은 `apps/mabinogi/shared/mabi/data.py`,
+데이터 계약은 `apps/mabinogi/README.md`.)

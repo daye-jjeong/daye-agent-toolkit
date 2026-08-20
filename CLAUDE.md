@@ -74,6 +74,10 @@ frontmatter(`name`/`description`)는 CC·Codex 공통. `make install`이 `~/.cla
 
 레거시 플러그인 스킬은 `plugins/<plugin>/skills/...` 구조 그대로 유지(변경 안 함).
 
+### 얇은 스킬 (앱/플랫폼 진입점)
+
+standalone = **이식 가능한 프로그램**이 아니라 **CC·Codex 공통 발견·호출 단위**다. 코드 본체가 `apps/` 밑 프로그램이면, 스킬은 `SKILL.md` + `scripts/run.py`(stdlib) 얇은 래퍼만 둔다. `run.py`는 `pathlib.Path(__file__).resolve().parents[N]`으로 레포 루트를 찾아 그 프로그램을 실행한다 — 심링크(`~/.claude/skills/…`)를 `resolve()`가 따라 레포 원본으로 풀린다. 대상 부재 시 명확히 실패하게. 예: `skills/mabinogi-farming` → `apps/mabinogi/farming/`. `make install`은 스킬 디렉토리만 심링크하니 `STANDALONE_SKILLS`(Makefile)에 이름을 더해야 한다.
+
 ### frontmatter 선택 필드
 
 | 필드 | 설명 |

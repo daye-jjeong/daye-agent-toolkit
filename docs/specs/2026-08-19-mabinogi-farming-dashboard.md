@@ -149,8 +149,9 @@ done 기준:
 - **집계 함수 = `analyze-logs.py`의 `aggregate_farming`**. 웹은
   `farming-dashboard.py`(stdlib `http.server`)가 이 함수를 불러 JSON으로
   낸다. 날짜별은 `daily_summary`로 터미널·웹이 같은 숫자를 쓴다.
-- **진입점**: `python3 apps/background-automator/scripts/farming-dashboard.py`
-  → 서버가 뜨고 브라우저가 열린다.
+- **진입점**: `python3 apps/mabinogi/farming/farming-dashboard.py` (또는 스킬
+  `mabinogi-farming`의 `scripts/run.py`) → 서버가 뜨고 브라우저가 열린다.
+  (2026-08-20 이관: `apps/background-automator/scripts/`에서 마비노기 플랫폼으로.)
 
 ---
 구현 중 이 문서와 달라지면 **문서를 먼저 고치고 간다.**
